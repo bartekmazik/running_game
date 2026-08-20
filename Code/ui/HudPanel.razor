@@ -1,0 +1,287 @@
+@using System;
+@using System.Linq;
+@using System.Collections.Generic;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+
+<root>
+	<div class="hud @StateClass @UrgentClass">
+		@* Ambient framing. Purely decorative, no data — depth at the screen edges and four
+		   angular brackets so the play area reads as a framed instrument. *@
+		<div class="vignette"></div>
+		<div class="corner tl"></div>
+		<div class="corner tr"></div>
+		<div class="corner bl"></div>
+		<div class="corner br"></div>
+
+		<div class="roundstate">
+			<label class="headline @HeadlineFont">@Headline</label>
+			<div class="rule"></div>
+			<label class="subline">@Subline</label>
+
+			@* Countdown drains as a bar. Same number as the headline, read as a quantity rather
+			   than a digit — you see "almost out" without reading. *@
+			@if ( IsCountingDown )
+			{
+				<div class="drain">
+					<div class="fill" style="width: @(CountdownPercent)%"></div>
+				</div>
+			}
+		</div>
+
+		<div class="alive">
+			<div class="head">
+				<i>person</i>
+				<label class="value">@AliveValue</label>
+			</div>
+
+			@* One pip per player, lit while they are still standing. *@
+			<div class="pips">
+				@foreach ( var index in PlayerSlots )
+				{
+					<div class="pip @PipClass( index )"></div>
+				}
+			</div>
+		</div>
+
+		<div class="ladder">
+			<label class="cap">DEPTH</label>
+
+			@foreach ( var index in FloorIndices )
+			{
+				<div class="rung @FloorClass( index )">
+					<div class="mark"></div>
+					<div class="bar"></div>
+				</div>
+			}
+		</div>
+
+		@if ( IsEliminated )
+		{
+			<div class="notice strike">
+				<label>ELIMINATED</label>
+			</div>
+		}
+
+		@if ( !string.IsNullOrEmpty( WinnerText ) )
+		{
+			<div class="notice win">
+				<label>@WinnerText</label>
+			</div>
+		}
+	</div>
+</root>
+
+@code
+{
+	RoundManager Round => Scene.Get<RoundManager>();
+
+	/// <summary>
+	/// The player this client controls, resolved once per frame in <see cref="BuildHash"/>
+	/// rather than on every read. A proxy is somebody else's player; solo, IsProxy is false,
+	/// so this works with or without a session.
+	/// </summary>
+	TntPlayer LocalPlayer => _localPlayer;
+
+	TntPlayer _localPlayer;
+
+	/// <summary>True while the pre-round countdown is running.</summary>
+	bool IsCountingDown => Round?.IsCountingDown == true;
+
+	/// <summary>
+	/// How much of the countdown is left, 0–100. Drives the drain bar's width directly, so the
+	/// bar shows the same number the headline does — read as a quantity instead of a digit.
+	/// </summary>
+	float CountdownPercent
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return 0f;
+			if ( round.CountdownDuration <= 0f ) return 0f;
+
+			return (round.CountdownRemaining / round.CountdownDuration * 100f).Clamp( 0f, 100f );
+		}
+	}
+
+	/// <summary>Flashes the countdown once it is nearly out.</summary>
+	string UrgentClass => IsCountingDown && Round.CountdownRemaining <= 3f ? "urgent" : "";
+
+	/// <summary>One pip per connected player.</summary>
+	IEnumerable<int> PlayerSlots => Enumerable.Range( 0, Round?.PlayerCount ?? 0 );
+
+	/// <summary>Pips fill from the left, one per survivor.</summary>
+	string PipClass( int index ) => index < (Round?.AliveCount ?? 0) ? "lit" : "";
+
+	/// <summary>One rung per floor, top floor first — the same order they stack in the world.</summary>
+	IEnumerable<int> FloorIndices => Enumerable.Range( 0, Arena.FloorCount );
+
+	/// <summary>Floor under the player, or -1 when they're outside the arena or gone.</summary>
+	int CurrentFloor
+	{
+		get
+		{
+			var player = LocalPlayer;
+			if ( player is null ) return -1;
+
+			return player.CurrentFloor;
+		}
+	}
+
+	/// <summary>Drives the whole panel's look from one place, rather than per-element checks.</summary>
+	string StateClass
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return "";
+
+			if ( IsEliminated ) return "dead";
+
+			return round.State switch
+			{
+				RoundManager.RoundState.Waiting when round.IsCountingDown => "counting",
+				RoundManager.RoundState.Playing => "playing",
+				RoundManager.RoundState.Ended => "ended",
+				_ => "waiting"
+			};
+		}
+	}
+
+	/// <summary>
+	/// Monospace only while the headline is a ticking number. Prose set in mono looks like a
+	/// terminal; digits set in proportional type wobble as they change width.
+	/// </summary>
+	string HeadlineFont
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return "";
+
+			var ticking = round.State == RoundManager.RoundState.Playing
+				|| (round.State == RoundManager.RoundState.Waiting && round.IsCountingDown);
+
+			return ticking ? "mono" : "";
+		}
+	}
+
+	/// <summary>
+	/// Segment state, read top-down: floors already dropped past, the one you're on, and the
+	/// ones still under you.
+	/// </summary>
+	string FloorClass( int index )
+	{
+		var floor = CurrentFloor;
+		if ( floor < 0 ) return "below";
+
+		if ( index == floor ) return "here";
+		if ( index < floor ) return "passed";
+
+		return "below";
+	}
+
+	bool IsEliminated
+	{
+		get
+		{
+			var player = LocalPlayer;
+			if ( player is null ) return false;
+
+			return !player.IsAlive;
+		}
+	}
+
+	/// <summary>The one number that matters right now — countdown, clock, or nothing.</summary>
+	string Headline
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return "-";
+
+			return round.State switch
+			{
+				RoundManager.RoundState.Waiting when round.IsCountingDown
+					=> MathF.Ceiling( round.CountdownRemaining ).ToString( "0" ),
+				RoundManager.RoundState.Waiting
+					=> $"{round.PlayerCount} / {round.MinPlayers}",
+				RoundManager.RoundState.Playing
+					=> FormatTime( round.RoundElapsed ),
+				RoundManager.RoundState.Ended
+					=> "ROUND OVER",
+				_ => "-"
+			};
+		}
+	}
+
+	/// <summary>
+	/// What the headline means. Upper case is written here, not applied in CSS — s&box has no
+	/// text-transform.
+	/// </summary>
+	string Subline
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return "";
+
+			return round.State switch
+			{
+				RoundManager.RoundState.Waiting when round.IsCountingDown => "STARTING",
+				RoundManager.RoundState.Waiting => "WAITING FOR PLAYERS",
+				RoundManager.RoundState.Playing => "RUNNING",
+				_ => ""
+			};
+		}
+	}
+
+	string AliveValue
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return "-";
+
+			return $"{round.AliveCount}/{round.PlayerCount}";
+		}
+	}
+
+	/// <summary>Only shown during Ended, so a stale winner doesn't linger into the next round.</summary>
+	string WinnerText
+	{
+		get
+		{
+			var round = Round;
+			if ( round is null ) return "";
+			if ( round.State != RoundManager.RoundState.Ended ) return "";
+
+			return string.IsNullOrEmpty( round.LastWinner )
+				? "NO SURVIVORS"
+				: $"{round.LastWinner} WINS";
+		}
+	}
+
+	static string FormatTime( float seconds )
+	{
+		var total = (int)seconds;
+		return $"{total / 60:0}:{total % 60:00}";
+	}
+
+	// Countdown and elapsed time change every frame, so they're deliberately in the hash —
+	// this panel is a handful of labels, so rebuilding each second costs nothing.
+	//
+	// Resolving the player here, rather than in the LocalPlayer getter, is deliberate: BuildHash
+	// runs once per frame and always before the tree is built, so the field is fresh by the time
+	// anything reads it, while the getter would otherwise run Scene.GetAll<TntPlayer>() several
+	// times per rebuild.
+	protected override int BuildHash()
+	{
+		_localPlayer = Scene.GetAll<TntPlayer>().FirstOrDefault( p => !p.IsProxy );
+
+		return System.HashCode.Combine(
+			System.HashCode.Combine( Headline, Subline, AliveValue, CurrentFloor, WinnerText ),
+			StateClass, HeadlineFont, UrgentClass, (int)CountdownPercent, Round?.PlayerCount ?? 0 );
+	}
+}

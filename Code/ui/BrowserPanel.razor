@@ -1,0 +1,105 @@
+@using System;
+@using Sandbox;
+@using Sandbox.UI;
+@using Sandbox.Network;
+@namespace Sandbox
+
+<root>
+	@if ( Browser is null || Networking.IsActive )
+	{
+		return;
+	}
+
+	<div class="browser">
+		<div class="titlebar">
+			<label class="title">Lobbies</label>
+			<label class="status">@StatusText</label>
+			<div class="button refresh @BusyClass" onclick=@Refresh>
+				<i>refresh</i>
+			</div>
+		</div>
+
+		<div class="list">
+			@if ( Browser.Lobbies.Count == 0 )
+			{
+				<div class="empty">
+					<i>wifi_off</i>
+					<label>Nothing here yet</label>
+				</div>
+			}
+
+			@foreach ( var lobby in Browser.Lobbies )
+			{
+				<div class="row">
+					<div class="cell name">
+						<label class="primary">@lobby.Name</label>
+						<label class="secondary">@Subtitle( lobby )</label>
+					</div>
+					<label class="cell players">@Headcount( lobby )</label>
+					<label class="cell state">@( lobby.Get( "state", "?" ) )</label>
+					<label class="cell alive">@Alive( lobby )</label>
+					<div class="button join @FullClass( lobby )" onclick=@( () => Browser.Join( lobby ) )>
+						<i>@JoinIcon( lobby )</i>
+					</div>
+				</div>
+			}
+		</div>
+
+		<label class="footnote">Your own lobby never appears here — the platform filters it out.</label>
+	</div>
+</root>
+
+@code
+{
+	LobbyBrowser Browser => Scene.Get<LobbyBrowser>();
+
+	/// <summary>Whole seconds since the last result, so the readout ticks once a second.</summary>
+	int SecondsAgo => (int)Browser.SinceResult;
+
+	string BusyClass => Browser.IsQuerying ? "busy" : "";
+
+	string StatusText
+	{
+		get
+		{
+			var browser = Browser;
+			if ( browser.IsQuerying ) return "searching…";
+
+			var count = browser.Lobbies.Count;
+			var age = $"checked {SecondsAgo}s ago";
+
+			return count == 0 ? age : $"{count} found · {age}";
+		}
+	}
+
+	void Refresh() => Browser.Refresh();
+
+	/// <summary>
+	/// Host name and map. Host comes from Networking.SetData on the hosting machine, so it is
+	/// "?" whenever a lobby is up but has not published yet.
+	/// </summary>
+	string Subtitle( LobbyInformation lobby ) => $"{lobby.Get( "host", "?" )} · {lobby.Map}";
+
+	string Headcount( LobbyInformation lobby ) => $"{lobby.Members}/{lobby.MaxMembers}";
+
+	string Alive( LobbyInformation lobby ) => $"{lobby.Get( "alive", "?" )} alive";
+
+	string FullClass( LobbyInformation lobby ) => lobby.IsFull ? "full" : "";
+
+	/// <summary>
+	/// Core Material Icons only — `arrow_forward` and `block` both date from the original
+	/// 2014 set. `login` would read better but was added in 2020, and a ligature that does not
+	/// resolve renders as the literal word.
+	/// </summary>
+	string JoinIcon( LobbyInformation lobby ) => lobby.IsFull ? "block" : "arrow_forward";
+
+	// Revision covers every content change — a lobby whose alive-count moved bumps it without
+	// the list length changing. SecondsAgo alone would tick the staleness readout.
+	//
+	// The guard matches the markup's early-return exactly. Without it the hash kept moving after
+	// joining, because SinceResult goes on counting once queries stop — so this panel rebuilt
+	// itself once a second, forever, to render nothing.
+	protected override int BuildHash() => Browser is null || Networking.IsActive
+		? 0
+		: System.HashCode.Combine( Browser.Revision, SecondsAgo );
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Screen-corner bracket. Drawn once, rotated per corner in CSS. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path d="M2,26 L2,10 L10,2 L26,2" fill="none" stroke="#FFB020" stroke-opacity="0.55" stroke-width="3"/>
+  <path d="M2,40 L2,34" fill="none" stroke="#FFB020" stroke-opacity="0.25" stroke-width="3"/>
+  <path d="M34,2 L40,2" fill="none" stroke="#FFB020" stroke-opacity="0.25" stroke-width="3"/>
+</svg>

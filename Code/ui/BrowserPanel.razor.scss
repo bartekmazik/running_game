@@ -1,0 +1,178 @@
+@import "_ui.scss";
+
+// Same restrained system as the HUD: opaque plates, thick amber edges,
+// hard offset shadows. No masks, no gradient wedges — an angled gradient across a small box
+// renders as a triangle over the corner, not a sliver down the edge. Thick borders instead.
+// No probes here: both moved to the HUD, since this panel never renders while hosting.
+
+.browser {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	font-family: $font-display;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	pointer-events: none;
+	background-color: rgba(18, 20, 28, 0.6);
+
+	.titlebar {
+		width: 780px;
+		align-items: center;
+		padding: $s3 $s4 $s3 $s5;
+		margin-left: $s6; // deliberately off the list's axis
+
+		background-color: $fill;
+		border-left: 5px solid $amber;
+		box-shadow: $drop;
+
+		.title {
+			font-size: 20px;
+			font-weight: 700;
+			letter-spacing: $track-tight;
+			color: $chalk;
+		}
+
+		.status {
+			flex-grow: 1;
+			margin-left: $s4;
+			font-size: 11px;
+			letter-spacing: $track-label;
+			color: rgba(242, 245, 248, 0.42);
+		}
+	}
+
+	.list {
+		width: 740px;
+		height: 430px;
+		margin-top: $s2;
+		flex-direction: column;
+		overflow: scroll;
+		padding: $s3;
+
+		background-color: $fill;
+		box-shadow: $drop;
+
+		.empty {
+			flex-direction: column;
+			align-items: center;
+			padding: $s6;
+			align-self: center;
+
+			i {
+				font-size: 32px;
+				color: rgba(242, 245, 248, 0.2);
+				margin-bottom: $s3;
+			}
+
+			label {
+				font-size: 13px;
+				font-weight: 500;
+				letter-spacing: $track-label;
+				color: rgba(242, 245, 248, 0.35);
+			}
+		}
+
+		.row {
+			align-items: center;
+			padding: $s3 $s4;
+			margin-bottom: $s2;
+			background-color: $steel;
+			border-left: 3px solid rgba(255, 176, 32, 0.4);
+			transition: background-color 0.12s ease-out;
+
+			&:hover {
+				background-color: #2A3044;
+				border-left-color: $amber;
+			}
+
+			.cell {
+				font-size: 13px;
+				color: rgba(242, 245, 248, 0.55);
+				margin-right: $s4;
+			}
+
+			.name {
+				flex-grow: 1;
+				flex-direction: column;
+				margin-right: $s4;
+
+				.primary {
+					font-size: 16px;
+					font-weight: 700;
+					letter-spacing: $track-tight;
+					color: $chalk;
+				}
+
+				.secondary {
+					margin-top: 2px;
+					font-size: 11px;
+					letter-spacing: $track-label;
+					color: rgba(242, 245, 248, 0.3);
+				}
+			}
+
+			.players {
+				font-family: $font-mono;
+				width: 58px;
+			}
+
+			.state {
+				width: 84px;
+			}
+
+			.alive {
+				font-family: $font-mono;
+				width: 84px;
+			}
+		}
+	}
+
+	// Icon-only, square, solid. No pills anywhere in this system.
+	.button {
+		pointer-events: all;
+		cursor: pointer;
+		width: 34px;
+		height: 34px;
+		justify-content: center;
+		align-items: center;
+		flex-shrink: 0;
+		background-color: $amber;
+		transition: background-color 0.12s ease-out;
+
+		i {
+			font-size: 17px;
+			color: $void;
+		}
+
+		&:hover {
+			background-color: $chalk;
+		}
+
+		&.busy {
+			pointer-events: none;
+			background-color: $steel;
+
+			i {
+				color: rgba(242, 245, 248, 0.25);
+			}
+		}
+
+		&.full {
+			pointer-events: none;
+			background-color: $strike;
+
+			i {
+				color: rgba(242, 245, 248, 0.6);
+			}
+		}
+	}
+
+	.footnote {
+		width: 740px;
+		margin-top: $s3;
+		font-size: 11px;
+		letter-spacing: $track-label;
+		color: rgba(242, 245, 248, 0.3);
+	}
+}

@@ -1,0 +1,98 @@
+// Shared design tokens — angular, high-contrast, competitive-HUD language.
+//
+// Engine facts baked in here, all verified against shipped s&box content. Do not re-litigate:
+//   * `clip-path` and `transform: skew()` appear NOWHERE in addons/. Angles come from
+//     `mask: linear-gradient(...)`, which Facepunch's own menu uses in a dozen places.
+//   * In an s&box mask, WHITE shows and BLACK hides — see Carousel.razor.scss:97.
+//   * `var(--x)` does not exist. Use these SCSS variables.
+//   * CORRECTION (official docs): `text-transform` IS supported (none/capitalize/lowercase/
+//     uppercase). It was banned here because it appears in no shipped stylesheet — absence of
+//     use is not absence of support, and that inference was wrong. Casing is still written into
+//     the markup this round only because the brief says to use nothing unproven end-to-end in
+//     this project; switching to text-transform is a safe cleanup once anything else proves it.
+//   * Also newly available per the docs, all unproven here and therefore NOT used yet:
+//     `font-variant-numeric: tabular-nums` (would remove the need for a separate mono family on
+//     counters), `text-stroke: <len> <color>` (better than text-shadow over a busy scene),
+//     `text-decoration: underline` with offset/thickness, `filter`, `aspect-ratio`, `gap`,
+//     `min()/max()/clamp()`, `mask-angle`, `mask-mode: luminance|alpha`.
+//   * `font-family` takes a single name. No fallback chains.
+//   * A shipped .ttf does not mean the family resolves — 'Roboto Condensed' ships and fails.
+//   * Black/ExtraBold/Light are SEPARATE families ('Roboto Black'), not weights. Only Bold is
+//     reachable as `font-weight: 700` on the base family.
+
+// --- Type ---------------------------------------------------------------------------------
+
+// The proven family. 700 is reachable here because Roboto-Bold.ttf keeps Family='Roboto'.
+$font-display: "Roboto";
+$font-mono: "Roboto Mono";
+
+// PROBES — one run resolves both. Each is on exactly one non-critical element, so a miss costs
+// nothing but a fallback on that element. Afterwards grep the log:
+//   FontManager: Font 'Poppins' not found
+//   FontManager: Font 'Roboto Black' not found
+// No line means it resolves, and $font-display can move up to it.
+// Both now sit on HUD elements. They were on BrowserPanel, which never renders while hosting —
+// so the last run exercised neither, and the absence of a failure line proved nothing.
+$font-probe: "Poppins";       // on the round notice label
+$font-probe-black: "Roboto Black"; // on the subline
+
+// Condensed is unavailable in this install, so density comes from negative tracking instead.
+$track-tight: -0.02em;
+$track-label: 0.16em;
+
+// --- Space --------------------------------------------------------------------------------
+
+$s1: 4px;
+$s2: 8px;
+$s3: 12px;
+$s4: 16px;
+$s5: 24px;
+$s6: 32px;
+
+// --- Geometry -----------------------------------------------------------------------------
+// GRADIENT STOPS MUST BE PERCENTAGES. The parser rejects lengths outright:
+//   "Only percent stop values are supported: 'black 18px'"
+// A rejected mask does not degrade to "no mask" — it hides the element completely. Every masked
+// element in the HUD vanished at once because of this. Never write a px stop in a gradient.
+//
+// Diagonal colour blocking already used % and was never affected, so the angular language
+// survives through backgrounds even where silhouette cuts cannot be used.
+
+$angle-cut: 135deg; // corner slice — the gradient line starts top-left
+$angle-block: 112deg; // diagonal colour split across a fill
+
+// Corner masks are gone for good. The percentage form parses and renders, but a mask over an
+// element that also has a border wipes diagonally through that border and smears it — that was
+// the orange artefact on the alive pill. The wedge below is the only geometric device now.
+// The wedge idea is dead, and the reason is worth keeping: a gradient at $angle-block across a
+// ~250px panel has a short gradient line, so a 5% stop lands as a fat TRIANGLE over one corner
+// instead of a sliver down the edge. On screen it read as a rendering fault. Angled gradients
+// only behave on large surfaces — the notice scrim, a full-width band, is the one place left
+// using one. Everywhere else, angles come from `transform: rotate` (crisp at any size) and edges
+// come from thick borders (cannot distort).
+
+// --- Colour -------------------------------------------------------------------------------
+// Saturated and blocky, not grounded in the arena's greys — with one deliberate exception:
+// the "you / alive" accent stays warm. The scene's lava is Color(0.90, 0.24, 0.05), hue ~15°;
+// $amber sits at hue ~38°, same family, pushed bright and fully saturated. So the accent is
+// still of this world without being muted by it.
+//
+// No third "win" colour: with an amber accent, a gold would collide with it. The winner state
+// is the amber block at full bleed instead. One accent, one danger.
+
+$void: #12141C; // panel base — blue-black, never flat black
+$steel: #1E2230; // secondary fills, rows, inactive slabs
+$chalk: #F2F5F8; // primary text
+$amber: #FFB020; // you, alive, active, winner
+$strike: #E01B24; // danger, eliminated, full
+
+// --- Depth --------------------------------------------------------------------------------
+// Solid shapes and a hard offset shadow. No frosted glass: depth comes from stacked opaque
+// forms and one strong edge, not from transparency.
+
+// FULLY OPAQUE, deliberately. At 0.92 the arena bled through by 8% — and the arena is a
+// checkerboard, so that 8% landed under the text as an interlaced pattern. That was the
+// "jagged/dithered" glyph rendering, not compression and not font hinting.
+$fill: #12141C;
+$drop: 0px 6px 0px rgba(0, 0, 0, 0.35);
+$keyline: 3px;

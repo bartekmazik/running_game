@@ -1,0 +1,371 @@
+@import "_ui.scss";
+
+// border-image with a generated SVG is CONFIRMED working — the chamfered corner showed up on
+// screen. So panel silhouettes are drawable now, and the angular language finally has a
+// technique that neither hides elements (px mask stops) nor distorts into triangles (angled
+// gradients on small boxes).
+//
+// Layout: ambient frame, round state top centre, headcount top left, depth ladder right.
+
+// --- motion ------------------------------------------------------------------------------
+// @keyframes are used in shipped s&box stylesheets, so animation is proven here.
+
+@keyframes rung-pulse {
+	0% { opacity: 1; }
+	50% { opacity: 0.55; }
+	100% { opacity: 1; }
+}
+
+@keyframes urgent-flash {
+	0% { opacity: 1; }
+	50% { opacity: 0.35; }
+	100% { opacity: 1; }
+}
+
+@keyframes sweep-in {
+	0% { opacity: 0; transform: translateX(-14px); }
+	100% { opacity: 1; transform: translateX(0px); }
+}
+
+.hud {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	font-family: $font-display;
+	pointer-events: none;
+
+	// --- ambient frame ---------------------------------------------------------------------
+	// Pure decoration, no data. Darkens the screen edges so the play area sits in a pool of
+	// light, and marks the four corners so the frame reads as an instrument.
+	.vignette {
+		position: absolute;
+		left: 0px;
+		top: 0px;
+		right: 0px;
+		bottom: 0px;
+		background-image: radial-gradient(rgba(9, 10, 14, 0) 52%, rgba(9, 10, 14, 0.5) 100%);
+	}
+
+	.corner {
+		position: absolute;
+		width: 64px;
+		height: 64px;
+		background-image: url( "/ui/corner-bracket.svg" );
+		background-size: 64px 64px;
+		background-repeat: no-repeat;
+		opacity: 0.85;
+
+		&.tl { top: 18px; left: 18px; }
+		&.tr { top: 18px; right: 18px; transform: rotate(90deg); }
+		&.br { bottom: 18px; right: 18px; transform: rotate(180deg); }
+		&.bl { bottom: 18px; left: 18px; transform: rotate(270deg); }
+	}
+
+	// --- round state: top centre, no panel ---------------------------------------------------
+	.roundstate {
+		position: absolute;
+		top: 34px;
+		left: 0px;
+		right: 0px;
+		flex-direction: column;
+		align-items: center;
+
+		.headline {
+			font-size: 58px;
+			font-weight: 700;
+			letter-spacing: $track-tight;
+			line-height: 1;
+			color: $chalk;
+			text-shadow: 0px 3px 18px rgba(0, 0, 0, 0.85);
+			transition: color 0.15s ease-out;
+
+			&.mono {
+				font-family: $font-mono;
+				font-weight: 700;
+			}
+		}
+
+		.rule {
+			width: 86px;
+			height: 3px;
+			margin-top: $s3;
+			background-color: $amber;
+			transition: width 0.2s ease-out, background-color 0.2s ease-out;
+		}
+
+		// Was nearly invisible against the sky. Darker plate behind it, brighter ink, real
+		// shadow — a label has to survive whatever is behind it.
+		.subline {
+			margin-top: $s3;
+			padding: $s1 $s3;
+			font-family: $font-probe-black;
+			font-size: 13px;
+			font-weight: 500;
+			letter-spacing: 0.3em;
+			color: rgba(242, 245, 248, 0.92);
+			background-color: rgba(18, 20, 28, 0.75);
+			text-shadow: 0px 2px 8px rgba(0, 0, 0, 0.95);
+		}
+
+		// Countdown as a draining bar.
+		.drain {
+			width: 260px;
+			height: 5px;
+			margin-top: $s3;
+			background-color: rgba(18, 20, 28, 0.8);
+			box-shadow: $drop;
+
+			.fill {
+				height: 100%;
+				background-color: $amber;
+				transition: width 0.12s linear;
+			}
+		}
+	}
+
+	// --- headcount: top left ------------------------------------------------------------------
+	.alive {
+		position: absolute;
+		top: 38px;
+		left: 38px;
+		flex-direction: column;
+		padding: $s3 $s5 $s3 $s4;
+
+		background-color: $fill;
+		border-left: 5px solid $amber;
+		box-shadow: $drop;
+
+		// Generated SVG as a 9-sliced frame — confirmed working.
+		border-image: url( "/ui/panel-chamfer.svg" );
+		border-image-width-top: 20px;
+		border-image-width-right: 20px;
+		border-image-width-bottom: 20px;
+		border-image-width-left: 20px;
+
+		animation-name: sweep-in;
+		animation-duration: 0.35s;
+		animation-timing-function: ease-out;
+		animation-fill-mode: backwards;
+
+		.head {
+			flex-direction: row;
+			align-items: center;
+
+			i {
+				font-size: 20px;
+				color: rgba(242, 245, 248, 0.45);
+				margin-right: $s3;
+			}
+
+			.value {
+				font-family: $font-mono;
+				font-size: 24px;
+				font-weight: 700;
+				color: $chalk;
+				transition: color 0.15s ease-out;
+			}
+		}
+
+		// One pip per player, lit while they are standing.
+		.pips {
+			flex-direction: row;
+			margin-top: $s2;
+
+			.pip {
+				width: 10px;
+				height: 4px;
+				margin-right: 3px;
+				background-color: rgba(242, 245, 248, 0.16);
+				transition: background-color 0.2s ease-out;
+
+				&.lit {
+					background-color: $amber;
+				}
+			}
+		}
+	}
+
+	// --- depth ladder: right edge --------------------------------------------------------------
+	.ladder {
+		position: absolute;
+		top: 50%;
+		right: 46px;
+		margin-top: -118px;
+		flex-direction: column;
+		align-items: flex-end;
+		padding: $s3 $s3 $s3 $s4;
+
+		// Its own chamfered frame, so it is anchored chrome rather than marks floating in space.
+		border-image: url( "/ui/ladder-frame.svg" );
+		border-image-width-top: 18px;
+		border-image-width-right: 18px;
+		border-image-width-bottom: 18px;
+		border-image-width-left: 18px;
+
+		.cap {
+			margin-bottom: $s2;
+			font-size: 10px;
+			font-weight: 500;
+			letter-spacing: 0.34em;
+			color: rgba(255, 176, 32, 0.65);
+		}
+
+		.rung {
+			flex-direction: row;
+			align-items: center;
+			height: 28px;
+			justify-content: flex-end;
+
+			.mark {
+				width: 9px;
+				height: 9px;
+				margin-right: $s3;
+				transform: rotate(45deg);
+				background-color: rgba(0, 0, 0, 0);
+				transition: background-color 0.12s ease-out;
+			}
+
+			.bar {
+				width: 34px;
+				height: 5px;
+				background-color: $steel;
+				transition: width 0.15s ease-out, background-color 0.15s ease-out, height 0.15s ease-out;
+			}
+
+			&.passed .bar {
+				width: 20px;
+				height: 2px;
+				background-color: rgba(30, 34, 48, 0.75);
+			}
+
+			&.below .bar {
+				width: 34px;
+			}
+
+			&.here {
+				.mark {
+					background-color: $amber;
+				}
+
+				.bar {
+					width: 62px;
+					height: 8px;
+					background-color: $amber;
+
+					// Breathes, so your own floor is the one thing on screen that moves.
+					animation-name: rung-pulse;
+					animation-duration: 1.6s;
+					animation-iteration-count: infinite;
+					animation-timing-function: ease-in-out;
+				}
+			}
+		}
+	}
+
+	// --- transient notices ----------------------------------------------------------------------
+	.notice {
+		position: absolute;
+		top: 32%;
+		left: 0px;
+		right: 0px;
+		padding: $s6 0px;
+		justify-content: center;
+		align-items: center;
+
+		background-image: linear-gradient(rgba(18, 20, 28, 0) 0%, rgba(18, 20, 28, 0.66) 28%, rgba(18, 20, 28, 0.66) 72%, rgba(18, 20, 28, 0) 100%);
+
+		transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+		opacity: 1;
+		transform: scale(1);
+
+		&:intro {
+			opacity: 0;
+			transform: scale(0.96);
+		}
+
+		&:outro {
+			opacity: 0;
+		}
+
+		label {
+			font-family: $font-probe;
+			padding-bottom: $s3;
+			font-weight: 700;
+			color: $chalk;
+			text-shadow: 0px 3px 16px rgba(0, 0, 0, 0.95);
+		}
+	}
+
+	.notice.strike label {
+		font-size: 30px;
+		letter-spacing: 0.36em;
+		border-bottom: 4px solid $strike;
+	}
+
+	.notice.win label {
+		font-size: 48px;
+		letter-spacing: 0.1em;
+		border-bottom: 4px solid $amber;
+	}
+
+	// --- states -----------------------------------------------------------------------------------
+
+	&.counting .roundstate {
+		.headline {
+			color: $amber;
+		}
+
+		.rule {
+			width: 190px;
+		}
+	}
+
+	// Last three seconds: the whole round-state block flashes.
+	&.urgent .roundstate {
+		animation-name: urgent-flash;
+		animation-duration: 0.5s;
+		animation-iteration-count: infinite;
+		animation-timing-function: ease-in-out;
+
+		.rule {
+			background-color: $strike;
+		}
+
+		.drain .fill {
+			background-color: $strike;
+		}
+	}
+
+	&.ended .roundstate {
+		.headline {
+			color: rgba(242, 245, 248, 0.55);
+		}
+
+		.rule {
+			width: 40px;
+			background-color: rgba(242, 245, 248, 0.3);
+		}
+	}
+
+	&.dead {
+		.roundstate .rule {
+			background-color: $strike;
+		}
+
+		.corner {
+			opacity: 0.35;
+		}
+
+		.alive {
+			border-left-color: $strike;
+
+			.head .value {
+				color: rgba(242, 245, 248, 0.4);
+			}
+		}
+
+		.ladder .cap {
+			color: rgba(224, 27, 36, 0.7);
+		}
+	}
+}

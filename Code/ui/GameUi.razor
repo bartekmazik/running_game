@@ -1,0 +1,41 @@
+@using System;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+@inherits PanelComponent
+
+@*
+	The single root panel. Everything the player sees hangs off this one ScreenPanel.
+
+	It exists because a PanelComponent cannot be nested inside another panel — only Panel
+	subclasses can. So this is the only PanelComponent in the project, and every screen below it
+	is a plain Panel.
+
+	Its whole job is deciding which screens are on. The screens own their own content and their
+	own BuildHash, so this rebuilds only when visibility changes, not when a timer ticks.
+*@
+
+<root>
+	<div class="gameui">
+		<HudPanel />
+
+		@if ( ShowBrowser )
+		{
+			<BrowserPanel />
+		}
+	</div>
+</root>
+
+@code
+{
+	LobbyBrowser Browser => Scene.Get<LobbyBrowser>();
+
+	/// <summary>
+	/// Matches what LobbyBrowser used to decide for itself when it created its own panel: only a
+	/// machine that stood down from hosting browses. The not-connected half of the condition
+	/// stays inside BrowserPanel, exactly where it was before.
+	/// </summary>
+	bool ShowBrowser => Browser?.IsBrowsing == true;
+
+	protected override int BuildHash() => System.HashCode.Combine( ShowBrowser );
+}

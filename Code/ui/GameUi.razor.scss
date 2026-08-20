@@ -1,0 +1,11 @@
+// The root has to fill the screen explicitly. Its children size themselves with width: 100% /
+// height: 100%, and percentages resolve against the parent — with the screens now one level
+// deeper than they used to be, a zero-sized root would collapse every one of them to nothing.
+
+.gameui {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	right: 0px;
+	bottom: 0px;
+}
