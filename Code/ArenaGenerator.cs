@@ -23,15 +23,15 @@ public sealed class ArenaGenerator : Component
 	/// it asks for materials/default/default_mask_tga_3a4f4d17.generated.vtex, and core ships
 	/// only the default_mask.tga source, never the compiled .vtex_c — so every renderer using it
 	/// logs "Texture manager doesn't know about texture ... returning error texture". Harmless as
-	/// one line, but arena-wide it fired once per tile, 4500 times.
+	/// one line, but arena-wide it fired once per tile, thousands of times.
 	///
 	/// This material's dependency set is complete on disk: dev_nonmetal_rough30.vmat_c plus its
 	/// generated tcolor, tnormal and tambientocclusion.
 	/// </summary>
 	public const string SurfaceMaterialPath = "materials/dev/dev_nonmetal_rough30.vmat";
 
-	/// <summary>Dark brushed metal for the non-solid frame around each floor.</summary>
-	const string FrameMaterialPath = "materials/dev/dev_metal_rough40.vmat";
+	/// <summary>Matte surface for the non-solid cream frame around each floor.</summary>
+	const string FrameMaterialPath = SurfaceMaterialPath;
 
 	/// <summary>
 	/// Unlit-looking emissive white. Tint carries the colour, and with bloom on the camera it
@@ -53,49 +53,61 @@ public sealed class ArenaGenerator : Component
 	const float PillarRise = 90f;
 
 	/// <summary>
-	/// One identity colour per floor, top to bottom: a light floor up top, sinking through cooler
-	/// and darker hues to a scorched floor just above the lava. Depth reads from colour alone, and
-	/// the HUD's depth ladder uses the same values, so the two can't disagree.
+	/// One identity colour per floor, top to bottom: a walk around the pastel colour wheel from warm
+	/// butter on top to cool mint just above the lava, so depth reads from hue alone. The HUD's depth
+	/// ladder and the menu use the same values (_ui.scss $floor0..$floor7), so they can't disagree.
 	///
 	/// A switch rather than a static array: editor hotload keeps static arrays alive across code
 	/// reloads, so edited colours never showed up until the editor restarted.
+	///
+	/// Every channel stays at or below 1 — ModelRenderer.Tint is 8-bit and wraps above it.
 	/// </summary>
 	public static Color FloorColor( int floor ) => floor switch
 	{
-		0 => new Color( 0.98f, 0.84f, 0.52f ), // sand
-		1 => new Color( 0.30f, 0.76f, 0.74f ), // teal
-		2 => new Color( 0.48f, 0.50f, 0.92f ), // periwinkle
-		3 => new Color( 0.90f, 0.42f, 0.64f ), // rose
-		_ => new Color( 0.76f, 0.36f, 0.22f ), // scorched
+		0 => new Color( 1.00f, 0.80f, 0.38f ), // butter
+		1 => new Color( 1.00f, 0.64f, 0.46f ), // peach
+		2 => new Color( 0.98f, 0.56f, 0.70f ), // bubblegum
+		3 => new Color( 0.82f, 0.54f, 0.92f ), // lilac
+		4 => new Color( 0.62f, 0.58f, 0.98f ), // lavender
+		5 => new Color( 0.46f, 0.72f, 0.98f ), // sky
+		6 => new Color( 0.38f, 0.82f, 0.82f ), // aqua
+		_ => new Color( 0.48f, 0.86f, 0.58f ), // mint
 	};
 
 	/// <summary>
-	/// Outermost ring of every floor — reads as "edge" before you reach it. Tints the hazard-stripe
-	/// texture, so the ring comes out as amber-and-black warning stripes.
+	/// Outermost ring of every floor — reads as "edge" before you reach it. Tints the candy-stripe
+	/// texture, so the ring comes out as cream-and-coral stripes.
 	/// </summary>
-	static readonly Color EdgeColor = new Color( 0.95f, 0.66f, 0.16f );
+	static readonly Color EdgeColor = new Color( 1.00f, 0.52f, 0.50f );
 
-	/// <summary>What a stepped-on tile fades towards during its <see cref="Arena.DecayDelay"/>.</summary>
-	public static readonly Color WarnColor = new Color( 1.0f, 0.40f, 0.06f );
+	/// <summary>What a stepped-on tile heats towards during its <see cref="Arena.DecayDelay"/>.</summary>
+	public static readonly Color WarnColor = new Color( 1.0f, 0.36f, 0.20f );
 
-	static readonly Color FrameColor = new Color( 0.20f, 0.21f, 0.25f );
+	/// <summary>Cream rails and posts — the "toy" frame the floors sit in.</summary>
+	static readonly Color FrameColor = new Color( 0.98f, 0.94f, 0.86f );
 
-	static readonly Color LavaColor = new Color( 0.70f, 0.10f, 0.01f );
+	/// <summary>Candy lava: hot coral-pink rather than volcanic orange, so it belongs to the palette.</summary>
+	static readonly Color LavaColor = new Color( 0.92f, 0.22f, 0.38f );
 
 	/// <summary>The hot end of the lava's slow pulse.</summary>
-	static readonly Color LavaHotColor = new Color( 0.95f, 0.26f, 0.02f );
+	static readonly Color LavaHotColor = new Color( 1.00f, 0.46f, 0.42f );
 
 	/// <summary>
 	/// Above 1.0 on purpose — Light.LightColor carries intensity in its magnitude, so an HDR
-	/// value is how you get a bright light rather than a merely orange one.
+	/// value is how you get a bright light rather than a merely pink one.
 	/// </summary>
-	static readonly Color LavaGlowColor = new Color( 2.4f, 0.70f, 0.15f );
+	static readonly Color LavaGlowColor = new Color( 2.4f, 0.80f, 1.00f );
 
-	static readonly Color SunColor = new Color( 1.00f, 0.92f, 0.80f );
-	static readonly Color SunSkyColor = new Color( 0.30f, 0.33f, 0.42f );
+	const float ExposureCompensation = 0f;
 
-	/// <summary>Haze colour for the drop. Warm, so the bottom of the shaft reads as heat.</summary>
-	static readonly Color FogColor = new Color( 0.38f, 0.22f, 0.16f );
+	/// <summary>Flat pastel sky behind everything — the camera's clear colour.</summary>
+	public static readonly Color SkyColor = new Color( 0.60f, 0.82f, 1.00f );
+
+	static readonly Color SunColor = new Color( 1.00f, 0.95f, 0.88f );
+	static readonly Color SunSkyColor = new Color( 0.74f, 0.80f, 0.94f );
+
+	/// <summary>Lilac haze for the drop, so the bottom of the shaft is soft rather than black.</summary>
+	static readonly Color FogColor = new Color( 0.80f, 0.66f, 0.86f );
 
 	GameObject[,,] _tiles;
 	ModelRenderer[,,] _renderers;
@@ -214,7 +226,7 @@ public sealed class ArenaGenerator : Component
 	public static Color TileColor( int floor, int x, int y )
 	{
 		if ( IsEdge( x, y ) )
-			return EdgeColor.Darken( floor * 0.08f );
+			return EdgeColor.Darken( floor * 0.03f );
 
 		// Chebyshev distance from the centre, in tiles. GridSize is even, so the centre is a
 		// four-tile junction and the innermost band is the 2x2 around it.
@@ -226,7 +238,8 @@ public sealed class ArenaGenerator : Component
 		var band = (ring / 3) % 2 == 0;
 		var check = (x + y) % 2 == 0;
 
-		var shade = (band ? 0f : 0.20f) + (check ? 0f : 0.05f);
+		// Pastel needs a lighter hand than the old palette: deep darkening turned butter into mud.
+		var shade = (band ? 0f : 0.10f) + (check ? 0f : 0.04f);
 		return FloorColor( floor ).Darken( shade );
 	}
 
@@ -278,16 +291,19 @@ public sealed class ArenaGenerator : Component
 		sun.SkyColor = SunSkyColor;
 		sun.Shadows = true;
 
+		// No photographic sky: every shipped skybox is a real-world photo (clouds, a studio, a sunrise)
+		// and each one dragged the palette towards grey. A flat pastel backdrop on the camera reads as
+		// a toy world instead; the sun's SkyColor carries the ambient fill the sky used to provide.
 		var sky = Scene.Get<SkyBox2D>();
 		if ( sky is not null )
-			sky.SkyMaterial = Material.Load( "materials/skybox/skybox_sunrise_01.vmat" );
+			sky.Enabled = false;
 
 		// Haze that thickens with depth below floor 0, so the lower floors and the lava sit in a
-		// warm murk instead of hard-edged void. Height is measured from this object's origin.
+		// soft lilac haze instead of hard-edged void. Height is measured from this object's origin.
 		var fog = GameObject.AddComponent<GradientFog>();
 		fog.Color = FogColor;
-		fog.StartDistance = 1400f;
-		fog.EndDistance = 11000f;
+		fog.StartDistance = 4500f;
+		fog.EndDistance = 20000f;
 		fog.FalloffExponent = 2f;
 		fog.Height = 400f;
 		fog.VerticalFalloffExponent = 1f;
@@ -304,17 +320,26 @@ public sealed class ArenaGenerator : Component
 		if ( !camera.IsValid() ) return;
 
 		camera.FieldOfView = 75f;
+		camera.BackgroundColor = SkyColor;
 
 		var bloom = camera.GameObject.GetOrAddComponent<Bloom>();
 		bloom.Strength = 0.35f;
 		bloom.Threshold = 0.9f;
 
 		var ao = camera.GameObject.GetOrAddComponent<AmbientOcclusion>();
-		ao.Intensity = 0.7f;
+		ao.Intensity = 0.5f;
+
+		// Pastel needs exact colours: auto exposure saw a bright sky and pulled the whole frame down a
+		// stop, and the filmic curve then greyed what was left — the palette read as dusk, not candy.
+		// Fixed exposure and a neutral curve put the floor and sky colours on screen as authored.
+		var tonemap = camera.GameObject.GetOrAddComponent<Tonemapping>();
+		tonemap.AutoExposureEnabled = false;
+		tonemap.Mode = Tonemapping.TonemappingMode.ACES;
+		tonemap.ExposureCompensation = ExposureCompensation;
 	}
 
 	/// <summary>
-	/// The boundary treatment: a dark beam around each floor's perimeter and a post at every
+	/// The boundary treatment: a cream beam around each floor's perimeter and a post at every
 	/// corner running from above the top floor down into the lava. All of it sits outside the
 	/// grid and below tile tops, and none of it has a collider — CLAUDE.md keeps the play grid's
 	/// collision untouched, so this is something you see, never something you stand on.
@@ -431,7 +456,7 @@ public sealed class ArenaGenerator : Component
 		_lavaLight.LightColor = LavaGlowColor;
 		_lavaLight.Radius = span * 0.8f;
 
-		// 4500 tiles between this light and the camera. Shadow-casting it would be the single
+		// Thousands of tiles between this light and the camera. Shadow-casting it would be the single
 		// most expensive thing in the scene, and it lights an area nobody stands in.
 		_lavaLight.Shadows = false;
 	}

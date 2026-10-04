@@ -549,12 +549,12 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 		_overviewYaw += Time.Delta * 6f;
 		var orbit = new Angles( 38f, _overviewYaw, 0f ).ToRotation();
-		var centre = _arena.WorldPosition + Vector3.Down * (Arena.FloorGap * 1.5f);
+		var centre = _arena.WorldPosition + Vector3.Down * ((Arena.FloorCount - 1) * Arena.FloorGap * 0.5f);
 
 		var camera = Scene.Camera;
 		if ( !camera.IsValid() ) return;
 
-		camera.WorldPosition = centre - orbit.Forward * 2400f;
+		camera.WorldPosition = centre - orbit.Forward * 3000f;
 		camera.WorldRotation = orbit;
 	}
 

@@ -40,6 +40,8 @@ I cannot ask you to click in the s&box editor, and you cannot open it. Therefore
   - `run` (bound to **shift**) was added to this list deliberately on 2026-08-17, for sprint.
     No new action was created — `Run` was already present in `ProjectSettings/Input.config`
     as an s&box default, so this widened the restriction rather than adding a binding.
+  - `attack1` (left mouse) and `attack2` (right mouse) opened 2026-10-05 for the two ability
+    slots, by the same reasoning: both are s&box defaults already in `Input.config`.
   - `Walk` (alt) and `Duck` (ctrl) also already exist in that config but remain off-limits.
     Adding either requires the same deliberate exception as above.
 - **Use built-in assets only.** `models/dev/box.vmdl` for tiles, the Citizen model for
@@ -71,7 +73,7 @@ public static class Arena
     public const int   GridSize      = 30;    // tiles per side, per floor
     public const float TileSize      = 56f;   // world units (s&box unit ≈ 1 inch)
     public const float TileThickness = 12f;
-    public const int   FloorCount    = 5;
+    public const int   FloorCount    = 8;   // 5 until 2026-10-05; KONTEKST.md asks for eight
     public const float FloorGap      = 220f;  // vertical spacing between floors
     public const float DecayDelay    = 0.6f;  // seconds from step-on to disappear
     public const float LavaOffset    = 250f;  // below the lowest floor
@@ -79,7 +81,7 @@ public static class Arena
 ```
 
 Scale: Citizen is ~72 units tall, so a 56-unit tile is roughly a Minecraft block relative
-to the player. 30×30×5 = 4500 tiles.
+to the player. 30×30×8 = 7200 tiles.
 
 ---
 
@@ -193,6 +195,30 @@ over its MCP server — see memory `sbox-editor-mcp`):
   there. Store screenshots rendered in-engine are in `Media/` (not under `Assets/`, not shipped).
 
 ---
+
+## Scope after KONTEKST.md (2026-10-05) — this section wins over older scope text above
+
+`KONTEKST.md` is the game design brief and is newer than everything above. The user confirmed it
+**overrides** the old "explicitly out of scope" list. Now in scope:
+
+- **8 floors** (`Arena.FloorCount = 8`).
+- **Ragdoll rule from the brief:** in a player-player collision, the one who delivered the
+  *smaller* impact force goes down. Ragdoll feel is called out as key to the game.
+- **Abilities:** each player takes **2 of 30** into a match (Curve Fever style), cast with
+  `attack1` / `attack2`. Loadout chosen by the player in the menu, remembered locally, with a
+  random button. Host-authoritative like everything else.
+- **Match points** (e.g. for knocking an opponent down) and **ranks Bronze → Master**, persisted
+  locally in `FileSystem.Data` and mirrored to `Sandbox.Services.Stats` (which only starts working
+  once the game is published under a real organisation). Higher ranks unlock **visual** perks only.
+- **Pastel arcade look** matching the user's Kenney assets (`Assets/my_assets/*.zip`) and the
+  screenshots in `Assets/gui reference/`. Pieces actually used are extracted into
+  `Assets/ui/kenney/` (rank emblems, medals, key prompts, emotes — sliced from Kenney's vector
+  sheets so they stay sharp). Kenney's interface sounds already ship with the engine as
+  `sounds/kenney/ui/*.vsnd`, identical files, so those are used instead of shipping copies.
+
+Still out: matchmaking, custom models, particle systems (effects are built from dev models with
+emissive tints), purchasable or player-selectable cosmetics (rank perks are earned, not picked),
+external downloads.
 
 ## Working style
 

@@ -8,7 +8,7 @@
 /// </summary>
 public sealed class MenuCamera : Component
 {
-	const float OrbitDistance = 2600f;
+	const float OrbitDistance = 3300f;
 	const float OrbitPitch = 24f;
 
 	/// <summary>Degrees per second. Slow enough to read as ambience rather than motion.</summary>
@@ -25,9 +25,10 @@ public sealed class MenuCamera : Component
 
 		_yaw += OrbitSpeed * Time.Delta;
 
-		// Aimed a floor and a half down, so the shaft and the lava glow sit in frame below the
-		// top floor rather than the camera skimming across it.
-		var focus = WorldPosition + Vector3.Down * (Arena.FloorGap * 2.4f);
+		// Aimed a little above the tower's middle, so the whole stack and the lava glow sit in frame
+		// below the top floor rather than the camera skimming across it. Derived from FloorCount,
+		// so a taller or shorter tower stays framed.
+		var focus = WorldPosition + Vector3.Down * ((Arena.FloorCount - 1) * Arena.FloorGap * 0.42f);
 		var rotation = new Angles( OrbitPitch, _yaw, 0f ).ToRotation();
 
 		camera.WorldPosition = focus - rotation.Forward * OrbitDistance;

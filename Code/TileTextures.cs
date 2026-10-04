@@ -6,11 +6,11 @@ using System;
 /// kind of thing as the arena itself, just in pixels.
 ///
 /// Every texture is greyscale (or near it) on purpose: the floor's identity colour still comes
-/// from ModelRenderer.Tint, so one block texture serves all five floors.
+/// from ModelRenderer.Tint, so one block texture serves every floor.
 ///
-/// The look is a 16x16 "pixel" block, upscaled with hard edges, in the spirit of the game this
-/// is modelled on: grainy fill, a light bevel on the top-left rim and a dark one bottom-right, so
-/// every tile reads as a separate block even on a single-colour floor.
+/// The look is a 16x16 "pixel" block, upscaled with hard edges: a soft candy block in the spirit
+/// of a toy set — smooth fill, rounded corners, a pillowy light rim top-left and a gentle shadow
+/// bottom-right, so every tile reads as a separate block even on a single-colour pastel floor.
 /// </summary>
 public static class TileTextures
 {
@@ -85,29 +85,33 @@ public static class TileTextures
 	}
 
 	/// <summary>
-	/// Grainy block fill with a bevelled rim. Deterministic: the same seed gives the same block on
-	/// every machine, so every player sees the same floor.
+	/// Soft candy block: near-flat fill with the faintest grain, corners knocked off so the tile
+	/// reads as rounded, a light rim top-left and a soft shadow bottom-right, plus a small specular
+	/// "shine" in the top-left quarter. Deterministic: the same seed gives the same block everywhere.
 	/// </summary>
 	static float[,] BlockPixels( int seed )
 	{
 		var random = new System.Random( seed );
 		var art = new float[ArtSize, ArtSize];
+		var last = ArtSize - 1;
 
 		for ( var y = 0; y < ArtSize; y++ )
 		{
 			for ( var x = 0; x < ArtSize; x++ )
 			{
-				// Mostly fine grain, with the odd darker fleck — sand, not static.
-				var grain = (float)random.NextDouble() * 0.10f;
-				var fleck = random.Next( 9 ) == 0 ? -0.12f : 0f;
-				var v = 0.80f + grain + fleck;
+				var v = 0.93f + (float)random.NextDouble() * 0.03f;
 
-				// Bevel: a light rim top and left, a dark rim bottom and right, two pixels deep at
-				// the outer edge and one inner step, like a pressed block.
 				if ( x == 0 || y == 0 ) v = 1.0f;
-				else if ( x == ArtSize - 1 || y == ArtSize - 1 ) v = 0.50f;
-				else if ( x == 1 || y == 1 ) v += 0.06f;
-				else if ( x == ArtSize - 2 || y == ArtSize - 2 ) v -= 0.10f;
+				else if ( x == last || y == last ) v = 0.70f;
+				else if ( x == last - 1 || y == last - 1 ) v = 0.82f;
+
+				// Rounded corners: the four corner pixels and their diagonal neighbours sink into the seam.
+				var cornerX = x == 0 || x == last;
+				var cornerY = y == 0 || y == last;
+				if ( cornerX && cornerY ) v = 0.62f;
+
+				// Shine: a small L of highlight near the top-left, like light on a glossy toy brick.
+				if ( (y == 2 && x >= 2 && x <= 5) || (x == 2 && y >= 3 && y <= 4) ) v = 1.0f;
 
 				art[x, y] = v;
 			}
@@ -117,7 +121,7 @@ public static class TileTextures
 	}
 
 	/// <summary>
-	/// Steel plate: a seam across the middle, a rivet in each quarter, faint vertical brushing.
+	/// Cream plank: soft horizontal grooves and two round studs, for the frame and posts.
 	/// </summary>
 	static float[,] PlatePixels()
 	{
@@ -127,13 +131,15 @@ public static class TileTextures
 		{
 			for ( var x = 0; x < ArtSize; x++ )
 			{
-				var v = 0.62f + (x % 3 == 0 ? 0.04f : 0f);
+				var v = 0.92f;
 
-				if ( y == ArtSize / 2 || y == 0 ) v = 0.34f;
-				else if ( y == ArtSize / 2 + 1 || y == 1 ) v = 0.78f;
+				if ( y == 0 ) v = 1.0f;
+				else if ( y == ArtSize / 2 ) v = 0.78f;
+				else if ( y == ArtSize - 1 ) v = 0.74f;
 
-				var rivet = (x == 3 || x == 12) && (y == 4 || y == 12);
-				if ( rivet ) v = 0.95f;
+				var dx = (x % 8) - 3.5f;
+				var dy = (y % 8) - 3.5f;
+				if ( dx * dx + dy * dy < 3.2f ) v = dy < 0 ? 1.0f : 0.84f;
 
 				art[x, y] = v;
 			}
@@ -187,20 +193,25 @@ public static class TileTextures
 		return art;
 	}
 
-	/// <summary>Bold diagonal stripes, four art pixels wide, with the same bevelled rim.</summary>
+	/// <summary>Soft candy stripes, four art pixels wide, with the same rounded rim as the block.</summary>
 	static float[,] HazardPixels()
 	{
 		var art = new float[ArtSize, ArtSize];
+		var last = ArtSize - 1;
 
 		for ( var y = 0; y < ArtSize; y++ )
 		{
 			for ( var x = 0; x < ArtSize; x++ )
 			{
 				var stripe = ((x + y) / 4) % 2 == 0;
-				var v = stripe ? 1.0f : 0.14f;
 
-				if ( x == ArtSize - 1 || y == ArtSize - 1 ) v *= 0.55f;
-				else if ( x == 0 || y == 0 ) v = v * 0.8f + 0.2f;
+				// The light stripe is near-white so the tint shows as cream, the dark one carries the colour.
+				var v = stripe ? 1.0f : 0.80f;
+
+				if ( x == last || y == last ) v *= 0.72f;
+				else if ( x == 0 || y == 0 ) v = 1.0f;
+
+				if ( (x == 0 || x == last) && (y == 0 || y == last) ) v = 0.62f;
 
 				art[x, y] = v;
 			}

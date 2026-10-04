@@ -85,12 +85,15 @@ $faint: rgba(242, 245, 248, 0.38); // tertiary labels only, never sentences
 
 // Floor identity colours — the same values as ArenaGenerator.FloorColor(), top floor first, so the
 // menu's stack, the depth ladder and the arena itself all agree.
-$floor0: #FAD685;
-$floor1: #4DC2BD;
-$floor2: #7A80EB;
-$floor3: #E66BA3;
-$floor4: #C25C38;
-$lava: #FF570F;
+$floor0: #FFCC61;
+$floor1: #FFA375;
+$floor2: #FA8FB2;
+$floor3: #D18AEB;
+$floor4: #9E94FA;
+$floor5: #75B8FA;
+$floor6: #61D1D1;
+$floor7: #7ADB94;
+$lava: #EB3861;
 
 // --- Depth --------------------------------------------------------------------------------
 // Solid shapes and a hard offset shadow. No frosted glass: depth comes from stacked opaque

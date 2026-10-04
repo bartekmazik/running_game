@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="448 320 64 64">
+<path stroke="none" fill="#CCE4FA" d="M480 376 L512 368 512 376 480 384 480 376"/>
+<path stroke="none" fill="#B2CFE9" d="M480 376 L480 384 448 376 448 368 480 376"/>
+<path stroke="none" fill="#E0F0FF" d="M448 368 L448 366 480 374 512 366 512 368 480 376 448 368"/>
+<path stroke="none" fill="#CCE4FA" d="M480 322 L512 330 512 338 480 330 480 322"/>
+<path stroke="none" fill="#B2CFE9" d="M480 322 L480 330 448 338 448 330 480 322"/>
+<path stroke="none" fill="#E0F0FF" d="M480 322 L448 330 448 328 480 320 512 328 512 330 480 322"/>
+<path stroke="none" fill="#E0F0FF" d="M468 348 L468 346 476 338 480 342 484 338 492 346 492 348 484 340 480 344 476 340 468 348 M489 351 L492 354 492 356 488 352 489 351 M468 356 L468 354 471 351 472 352 468 356"/>
+<path stroke="none" fill="#B2CFE9" d="M468 356 L472 352 471 351 468 348 476 340 480 344 480 360 476 364 468 356"/>
+<path stroke="none" fill="#CCE4FA" d="M492 348 L489 351 488 352 492 356 484 364 480 360 480 344 484 340 492 348"/>
+</svg>
