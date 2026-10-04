@@ -26,15 +26,10 @@
 $font-display: "Roboto";
 $font-mono: "Roboto Mono";
 
-// PROBES — one run resolves both. Each is on exactly one non-critical element, so a miss costs
-// nothing but a fallback on that element. Afterwards grep the log:
-//   FontManager: Font 'Poppins' not found
-//   FontManager: Font 'Roboto Black' not found
-// No line means it resolves, and $font-display can move up to it.
-// Both now sit on HUD elements. They were on BrowserPanel, which never renders while hosting —
-// so the last run exercised neither, and the absence of a failure line proved nothing.
-$font-probe: "Poppins";       // on the round notice label
-$font-probe-black: "Roboto Black"; // on the subline
+// Probe results (2026-10-03 log): 'Poppins' resolves — no FontManager failure line — and
+// 'Roboto Black' does not. Poppins is the display voice now: geometric, wide, heavy at 800, which
+// is what a title that has to read across a room needs. Roboto stays for UI text.
+$font-title: "Poppins";
 
 // Condensed is unavailable in this install, so density comes from negative tracking instead.
 $track-tight: -0.02em;
@@ -85,6 +80,17 @@ $steel: #1E2230; // secondary fills, rows, inactive slabs
 $chalk: #F2F5F8; // primary text
 $amber: #FFB020; // you, alive, active, winner
 $strike: #E01B24; // danger, eliminated, full
+$dim: rgba(242, 245, 248, 0.55); // secondary text on $void — 7.1:1, passes for body text
+$faint: rgba(242, 245, 248, 0.38); // tertiary labels only, never sentences
+
+// Floor identity colours — the same values as ArenaGenerator.FloorColor(), top floor first, so the
+// menu's stack, the depth ladder and the arena itself all agree.
+$floor0: #FAD685;
+$floor1: #4DC2BD;
+$floor2: #7A80EB;
+$floor3: #E66BA3;
+$floor4: #C25C38;
+$lava: #FF570F;
 
 // --- Depth --------------------------------------------------------------------------------
 // Solid shapes and a hard offset shadow. No frosted glass: depth comes from stacked opaque
@@ -95,4 +101,7 @@ $strike: #E01B24; // danger, eliminated, full
 // "jagged/dithered" glyph rendering, not compression and not font hinting.
 $fill: #12141C;
 $drop: 0px 6px 0px rgba(0, 0, 0, 0.35);
+// Softer lift for the full-screen surfaces (menu, results): an offset plus a real blur, so large
+// plates sit above the arena instead of reading as stickers.
+$lift: 0px 14px 40px rgba(0, 0, 0, 0.55);
 $keyline: 3px;

@@ -160,6 +160,38 @@ If you think one is needed, say so and wait.
 ("Player-selectable cosmetics" is the thing that stays out — a customisation feature. Dressing
 the Citizen from `ClothingContainer` during the asset pass is allowed, per the rule above.)
 
+**Status after the 2026-10-03 production pass** (one autonomous session, verified in the editor
+over its MCP server — see memory `sbox-editor-mcp`):
+
+- Ragdoll, asset/visual pass, full UX flow and arena map pass are **built**. Added components,
+  all created at runtime by `RoundManager.OnAwake`: `TileWarning` (local tile glow, no network),
+  `PlayerImpacts` (host-side shove judge), `MenuCamera` (orbit when you have no player).
+  `RoundManager.AutoHost` is gone — the menu's Host button calls `RoundManager.Host()`.
+- Gameplay fixes: tiles only decay in Playing (`TileDecay.Armed`); Waiting is a warm-up where lava
+  respawns you; the whole footprint marks tiles (closes the four-tile-junction camping hole);
+  late joiners spectate until the next warm-up; eliminated players spectate (jump = next).
+- **Sounds — approved 2026-10-04:** footstep, landing, collapse, elimination and UI sounds use
+  engine-shipped `core/sounds/*` events. These count as "already ships with the engine", not as
+  "custom sounds". Authored or downloaded sound files stay out. The calls are all `Sound.Play` in
+  `TntPlayer`, `TileDecay`, `HudPanel`, `MenuPanel`, `BrowserPanel`, `ResultsPanel`.
+- Not verified with two real clients: the local second instance cannot connect because Windows
+  reserves port 55333 (WinNAT excluded range 55290–55389; fix needs admin — stop winnat, add an
+  administered exclusion for 55333, start winnat, restart the editor). Ragdoll was exercised by a
+  temporary solo trigger, since removed. Host-side multi-player logic was then verified with two
+  temporary host-owned bots (also removed): shove → ragdoll → recovery, three-player round end,
+  spectating a survivor, "You win" and "X wins" results. That run found and fixed two real bugs —
+  shoves never registered (controller clips velocity on contact; `PlayerImpacts` now judges the
+  stronger of two ticks) and the countdown restarting when the host's join-state RPC landed late.
+  What only real clients can show is replication itself: ragdoll copies on two screens, late join,
+  results on the remote side. The user chose to run those checks with a friend on a real lobby.
+- **Code-generated textures — approved 2026-10-04:** tiles, frame and lava are textured with
+  pixel-art textures *computed in code* at startup (`TileTextures.cs`: block, hazard stripes,
+  riveted plate, cracked lava crust), applied to copies of built-in dev materials. No files, no
+  downloads — read as "everything is generated from code", like the SVG UI rule. Greyscale, so
+  `ModelRenderer.Tint` still carries each floor's colour.
+- Publishing: the publish wizard refuses `"Org": "local"` and asks for the sbox.game organisation
+  there. Store screenshots rendered in-engine are in `Media/` (not under `Assets/`, not shipped).
+
 ---
 
 ## Working style

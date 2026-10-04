@@ -18,7 +18,10 @@
 		<div class="roundstate">
 			<label class="headline @HeadlineFont">@Headline</label>
 			<div class="rule"></div>
-			<label class="subline">@Subline</label>
+			@if ( !string.IsNullOrEmpty( Subline ) )
+			{
+				<label class="subline">@Subline</label>
+			}
 
 			@* Countdown drains as a bar. Same number as the headline, read as a quantity rather
 			   than a digit — you see "almost out" without reading. *@
@@ -27,6 +30,11 @@
 				<div class="drain">
 					<div class="fill" style="width: @(CountdownPercent)%"></div>
 				</div>
+			}
+
+			@if ( IsWarmup )
+			{
+				<label class="warmup">Warm-up. The floor holds until the round starts.</label>
 			}
 		</div>
 
@@ -45,29 +53,52 @@
 			</div>
 		</div>
 
+		<div class="feed">
+			@foreach ( var entry in VisibleFeed )
+			{
+				<div class="line">
+					<label class="who">@entry.Name</label>
+					<label class="what">@FeedText( entry )</label>
+				</div>
+			}
+		</div>
+
 		<div class="ladder">
 			<label class="cap">DEPTH</label>
 
 			@foreach ( var index in FloorIndices )
 			{
-				<div class="rung @FloorClass( index )">
+				<div class="rung f@(index) @FloorClass( index )">
 					<div class="mark"></div>
 					<div class="bar"></div>
 				</div>
 			}
 		</div>
 
-		@if ( IsEliminated )
+		@if ( ShowGo )
+		{
+			<div class="go">
+				<label>RUN!</label>
+			</div>
+		}
+
+		@if ( ShowEliminated )
 		{
 			<div class="notice strike">
 				<label>ELIMINATED</label>
 			</div>
 		}
 
-		@if ( !string.IsNullOrEmpty( WinnerText ) )
+		@if ( IsSpectating )
 		{
-			<div class="notice win">
-				<label>@WinnerText</label>
+			<div class="spectate">
+				<label class="tag">Spectating</label>
+				<label class="target">@SpectateName</label>
+				@if ( HasSpectateTarget )
+				{
+					<div class="key">Space</div>
+					<label class="hint">Next player</label>
+				}
 			</div>
 		}
 	</div>
@@ -86,8 +117,27 @@
 
 	TntPlayer _localPlayer;
 
+	/// <summary>Feed lines stay up this long.</summary>
+	const float FeedLifetime = 6f;
+
+	/// <summary>How long the big ELIMINATED card holds before the spectator bar takes over.</summary>
+	const float EliminatedCardTime = 2.5f;
+
+	const float GoCardTime = 1.2f;
+
+	/// <summary>Local clock since this client last saw its player die — drives the card.</summary>
+	TimeSince _sinceDeath;
+
+	bool _wasAlive = true;
+
+	int _lastCountdownSecond = -1;
+
+	RoundManager.RoundState _lastState = RoundManager.RoundState.Waiting;
+
 	/// <summary>True while the pre-round countdown is running.</summary>
 	bool IsCountingDown => Round?.IsCountingDown == true;
+
+	bool IsWarmup => Round?.State == RoundManager.RoundState.Waiting;
 
 	/// <summary>
 	/// How much of the countdown is left, 0–100. Drives the drain bar's width directly, so the
@@ -117,17 +167,46 @@
 	/// <summary>One rung per floor, top floor first — the same order they stack in the world.</summary>
 	IEnumerable<int> FloorIndices => Enumerable.Range( 0, Arena.FloorCount );
 
+	IEnumerable<RoundManager.FeedEntry> VisibleFeed => Round is null
+		? Enumerable.Empty<RoundManager.FeedEntry>()
+		: Round.Feed.Where( e => Time.Now - e.Time < FeedLifetime );
+
+	int VisibleFeedCount => VisibleFeed.Count();
+
+	/// <summary>One expression per label — mixing literal text and @expressions in a label drops the literal.</summary>
+	static string FeedText( RoundManager.FeedEntry entry ) => entry.Remaining == 1
+		? "fell · 1 left"
+		: $"fell · {entry.Remaining} left";
+
 	/// <summary>Floor under the player, or -1 when they're outside the arena or gone.</summary>
 	int CurrentFloor
 	{
 		get
 		{
 			var player = LocalPlayer;
-			if ( player is null ) return -1;
+			if ( player is null || !player.IsAlive ) return -1;
 
 			return player.CurrentFloor;
 		}
 	}
+
+	bool IsEliminated => LocalPlayer is not null && !LocalPlayer.IsAlive;
+
+	bool ShowEliminated => IsEliminated
+		&& Round?.State == RoundManager.RoundState.Playing
+		&& _sinceDeath < EliminatedCardTime;
+
+	bool IsSpectating => IsEliminated
+		&& Round?.State == RoundManager.RoundState.Playing
+		&& !ShowEliminated;
+
+	bool HasSpectateTarget => LocalPlayer?.SpectateTarget is not null;
+
+	string SpectateName => LocalPlayer?.SpectateTarget?.DisplayName ?? "Nobody left standing";
+
+	bool ShowGo => Round?.State == RoundManager.RoundState.Playing
+		&& Round.RoundElapsed < GoCardTime
+		&& !IsEliminated;
 
 	/// <summary>Drives the whole panel's look from one place, rather than per-element checks.</summary>
 	string StateClass
@@ -137,7 +216,7 @@
 			var round = Round;
 			if ( round is null ) return "";
 
-			if ( IsEliminated ) return "dead";
+			if ( IsEliminated && round.State == RoundManager.RoundState.Playing ) return "dead";
 
 			return round.State switch
 			{
@@ -182,17 +261,6 @@
 		return "below";
 	}
 
-	bool IsEliminated
-	{
-		get
-		{
-			var player = LocalPlayer;
-			if ( player is null ) return false;
-
-			return !player.IsAlive;
-		}
-	}
-
 	/// <summary>The one number that matters right now — countdown, clock, or nothing.</summary>
 	string Headline
 	{
@@ -229,9 +297,9 @@
 
 			return round.State switch
 			{
-				RoundManager.RoundState.Waiting when round.IsCountingDown => "STARTING",
+				RoundManager.RoundState.Waiting when round.IsCountingDown => "GET READY",
 				RoundManager.RoundState.Waiting => "WAITING FOR PLAYERS",
-				RoundManager.RoundState.Playing => "RUNNING",
+				RoundManager.RoundState.Playing => "KEEP MOVING",
 				_ => ""
 			};
 		}
@@ -248,25 +316,42 @@
 		}
 	}
 
-	/// <summary>Only shown during Ended, so a stale winner doesn't linger into the next round.</summary>
-	string WinnerText
-	{
-		get
-		{
-			var round = Round;
-			if ( round is null ) return "";
-			if ( round.State != RoundManager.RoundState.Ended ) return "";
-
-			return string.IsNullOrEmpty( round.LastWinner )
-				? "NO SURVIVORS"
-				: $"{round.LastWinner} WINS";
-		}
-	}
-
 	static string FormatTime( float seconds )
 	{
 		var total = (int)seconds;
 		return $"{total / 60:0}:{total % 60:00}";
+	}
+
+	/// <summary>
+	/// The HUD's audio cues, kept with the visuals they belong to: a tick on each of the last
+	/// three countdown seconds, a cue when the round goes live, and the death moment's clock.
+	/// </summary>
+	public override void Tick()
+	{
+		var round = Round;
+		if ( round is null ) return;
+
+		if ( round.IsCountingDown )
+		{
+			var second = (int)MathF.Ceiling( round.CountdownRemaining );
+			if ( second != _lastCountdownSecond && second <= 3 && second > 0 )
+				Sound.Play( "sounds/kenney/ui/ui.button.over.sound" );
+
+			_lastCountdownSecond = second;
+		}
+		else
+		{
+			_lastCountdownSecond = -1;
+		}
+
+		if ( round.State != _lastState && round.State == RoundManager.RoundState.Playing )
+			Sound.Play( "sounds/kenney/ui/ui.popup.message.open.sound" );
+
+		_lastState = round.State;
+
+		var alive = LocalPlayer?.IsAlive ?? true;
+		if ( _wasAlive && !alive ) _sinceDeath = 0f;
+		_wasAlive = alive;
 	}
 
 	// Countdown and elapsed time change every frame, so they're deliberately in the hash —
@@ -281,7 +366,8 @@
 		_localPlayer = Scene.GetAll<TntPlayer>().FirstOrDefault( p => !p.IsProxy );
 
 		return System.HashCode.Combine(
-			System.HashCode.Combine( Headline, Subline, AliveValue, CurrentFloor, WinnerText ),
-			StateClass, HeadlineFont, UrgentClass, (int)CountdownPercent, Round?.PlayerCount ?? 0 );
+			System.HashCode.Combine( Headline, Subline, AliveValue, CurrentFloor, VisibleFeedCount, Round?.FeedRevision ?? 0 ),
+			System.HashCode.Combine( StateClass, HeadlineFont, UrgentClass, (int)CountdownPercent, Round?.PlayerCount ?? 0 ),
+			System.HashCode.Combine( ShowGo, ShowEliminated, IsSpectating, SpectateName ) );
 	}
 }

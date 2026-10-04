@@ -1,7 +1,7 @@
 /// <summary>
-/// Host-authoritative elimination volume. Attached by <see cref="ArenaGenerator"/> to the
-/// lava slab it builds, so the trigger and the visual always share one size.
-/// Elimination only — respawn and round reset belong to RoundManager.
+/// Host-authoritative lava volume. Attached by <see cref="ArenaGenerator"/> to the lava slab it
+/// builds, so the trigger and the visual always share one size. What touching it means — out
+/// during a round, back on top during the warm-up — belongs to <see cref="RoundManager.HandleLava"/>.
 /// </summary>
 public sealed class LavaZone : Component, Component.ITriggerListener
 {
@@ -14,7 +14,7 @@ public sealed class LavaZone : Component, Component.ITriggerListener
 		var player = other.GameObject.Components.GetInAncestorsOrSelf<TntPlayer>();
 		if ( player is null || !player.IsAlive ) return;
 
-		player.Eliminate();
+		Scene.Get<RoundManager>().HandleLava( player );
 	}
 
 	public void OnTriggerExit( Collider other )

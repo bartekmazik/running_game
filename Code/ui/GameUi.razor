@@ -11,31 +11,37 @@
 	subclasses can. So this is the only PanelComponent in the project, and every screen below it
 	is a plain Panel.
 
-	Its whole job is deciding which screens are on. The screens own their own content and their
-	own BuildHash, so this rebuilds only when visibility changes, not when a timer ticks.
+	Its whole job is routing the one path through the game: menu → lobby list → game → results.
+	Out of a session the menu owns the screen (title or lobby list); in one, the HUD does, with
+	the results laid over it while a round is Ended. The screens own their content and their own
+	BuildHash, so this rebuilds only when the route changes, not when a timer ticks.
 *@
 
 <root>
 	<div class="gameui">
-		<HudPanel />
-
-		@if ( ShowBrowser )
+		@if ( InSession )
 		{
-			<BrowserPanel />
+			<HudPanel />
+
+			@if ( ShowResults )
+			{
+				<ResultsPanel />
+			}
+		}
+		else
+		{
+			<MenuPanel />
 		}
 	</div>
 </root>
 
 @code
 {
-	LobbyBrowser Browser => Scene.Get<LobbyBrowser>();
+	RoundManager Round => Scene.Get<RoundManager>();
 
-	/// <summary>
-	/// Matches what LobbyBrowser used to decide for itself when it created its own panel: only a
-	/// machine that stood down from hosting browses. The not-connected half of the condition
-	/// stays inside BrowserPanel, exactly where it was before.
-	/// </summary>
-	bool ShowBrowser => Browser?.IsBrowsing == true;
+	bool InSession => Networking.IsActive;
 
-	protected override int BuildHash() => System.HashCode.Combine( ShowBrowser );
+	bool ShowResults => Round?.State == RoundManager.RoundState.Ended;
+
+	protected override int BuildHash() => System.HashCode.Combine( InSession, ShowResults );
 }

@@ -1,0 +1,88 @@
+@using System;
+@using System.Linq;
+@using System.Collections.Generic;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+
+@*
+	The end of the path: shown over the HUD while a round is Ended. Who won, how long the round
+	ran, everyone's placing, when the next warm-up starts — and the way out.
+*@
+
+<root>
+	<div class="results">
+		<div class="plate">
+			<label class="verdict">@Verdict</label>
+			<label class="duration">@DurationText</label>
+
+			<div class="standings">
+				@{ var placings = Placings; }
+				@for ( var i = 0; i < placings.Count; i++ )
+				{
+					var place = i + 1;
+					var name = placings[i];
+
+					<div class="placing @PlacingClass( place, name )">
+						<label class="place">@place</label>
+						<label class="name">@name</label>
+						@if ( name == LocalName )
+						{
+							<label class="you">You</label>
+						}
+					</div>
+				}
+			</div>
+
+			<div class="footer">
+				<label class="next">@NextText</label>
+
+				<div class="leave" onclick=@Leave>
+					<i>exit_to_app</i>
+					<label>Leave</label>
+				</div>
+			</div>
+		</div>
+	</div>
+</root>
+
+@code
+{
+	RoundManager Round => Scene.Get<RoundManager>();
+
+	/// <summary>Twelve rows fit the plate; past that, the top of the table is what matters.</summary>
+	const int MaxRows = 12;
+
+	IReadOnlyList<string> Placings => Round.LastResults.Take( MaxRows ).ToList();
+
+	string LocalName => Connection.Local?.DisplayName ?? "";
+
+	string Verdict => string.IsNullOrEmpty( Round.LastWinner )
+		? "Nobody made it"
+		: Round.LastWinner == LocalName ? "You win" : $"{Round.LastWinner} wins";
+
+	string DurationText => $"Round lasted {FormatTime( Round.LastRoundDuration )}";
+
+	string NextText => $"Warm-up starts in {MathF.Ceiling( Round.RestartRemaining ).Clamp( 0f, 99f ):0}";
+
+	string PlacingClass( int place, string name )
+	{
+		var classes = place == 1 && !string.IsNullOrEmpty( Round.LastWinner ) ? "first" : "";
+		return name == LocalName ? classes + " mine" : classes;
+	}
+
+	void Leave()
+	{
+		Sound.Play( "sounds/kenney/ui/ui.navigate.back.sound" );
+		Round.Leave();
+	}
+
+	static string FormatTime( float seconds )
+	{
+		var total = (int)seconds;
+		return $"{total / 60:0}:{total % 60:00}";
+	}
+
+	protected override int BuildHash() => System.HashCode.Combine(
+		Round?.LastResults.Count ?? 0, Round?.LastWinner, (int)(Round?.RestartRemaining ?? 0f) );
+}

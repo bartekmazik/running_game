@@ -2,15 +2,12 @@ using System.Threading.Tasks;
 using Sandbox.Network;
 
 /// <summary>
-/// TURN 2 — lobby discovery with a UI.
+/// Lobby discovery. Owns the query loop and the result set; <c>BrowserPanel</c> renders them.
+/// Polls on an interval while the menu's lobby list is open, and connects to a chosen lobby.
 ///
-/// Owns the query loop and the result set; <c>BrowserPanel</c> renders them. Polls on an
-/// interval and on demand, and connects to a chosen lobby.
-///
-/// Stands down on a machine that hosts: discovery is only meaningful before you are in a lobby,
-/// and the platform filters your own lobby out of the results anyway (established in turn 1 —
-/// machine A hosted an active lobby for the whole window machine B polled, and B saw nothing,
-/// because both ran the same Steam account).
+/// The platform filters your own lobby out of the results (established in turn 1 — machine A
+/// hosted an active lobby for the whole window machine B polled, and B saw nothing, because both
+/// ran the same Steam account).
 /// </summary>
 public sealed class LobbyBrowser : Component
 {
@@ -30,7 +27,7 @@ public sealed class LobbyBrowser : Component
 	/// </summary>
 	public int Revision { get; private set; }
 
-	/// <summary>False on a hosting machine, where the browser never runs.</summary>
+	/// <summary>True while the menu's lobby list is open. The poll loop only runs then.</summary>
 	public bool IsBrowsing { get; private set; }
 
 	TimeUntil _nextQuery;
@@ -40,23 +37,45 @@ public sealed class LobbyBrowser : Component
 	/// <summary>One query in flight at a time — the poll interval is shorter than a slow round trip.</summary>
 	bool _querying;
 
-	protected override void OnStart()
+	/// <summary>The menu's Browse button. Queries immediately, then every RefreshInterval.</summary>
+	public void StartBrowsing()
 	{
-		IsBrowsing = !Networking.IsActive && Scene.Get<RoundManager>()?.AutoHost != true;
+		if ( Networking.IsActive ) return;
 
-		// Says so explicitly, because silence is otherwise ambiguous: a browser that is standing
-		// down looks identical to a component that never loaded.
-		if ( !IsBrowsing )
-		{
-			Log.Info( "LobbyBrowser: standing down — this machine hosts. Untick RoundManager.AutoHost to browse." );
-			return;
-		}
+		IsBrowsing = true;
+		Revision++;
+		Refresh();
 
 		Log.Info( $"LobbyBrowser: polling every {RefreshInterval:0.#}s for ident '{Game.Ident}'" );
 	}
 
+	/// <summary>Back to the title screen. Stops polling; the last result stays for next time.</summary>
+	public void StopBrowsing()
+	{
+		IsBrowsing = false;
+		Revision++;
+	}
+
+	/// <summary>
+	/// Set when a join attempt ended without a session — the lobby closed, filled up, or the
+	/// connection failed. Cleared by the next query or join. The panel shows it in place of the
+	/// staleness readout.
+	/// </summary>
+	public bool JoinFailed { get; private set; }
+
+	bool _joining;
+
 	protected override void OnUpdate()
 	{
+		if ( _joining && !Networking.IsConnecting && !Networking.IsActive )
+		{
+			_joining = false;
+			JoinFailed = true;
+			Revision++;
+
+			Log.Warning( "LobbyBrowser: join failed" );
+		}
+
 		if ( !IsBrowsing ) return;
 
 		// Discovery is only meaningful before you're in a lobby.
@@ -89,6 +108,7 @@ public sealed class LobbyBrowser : Component
 		{
 			Lobbies = lobbies;
 			_sinceResult = 0;
+			JoinFailed = false;
 
 			Log.Info( $"LobbyBrowser: {lobbies.Count} lobby(s) visible — ident '{Game.Ident}'" );
 		}
@@ -108,6 +128,10 @@ public sealed class LobbyBrowser : Component
 		if ( lobby.IsFull ) return;
 
 		Log.Info( $"LobbyBrowser: connecting to '{lobby.Name}' ({lobby.LobbyId})" );
+
+		_joining = true;
+		JoinFailed = false;
+		Revision++;
 
 		Networking.Connect( lobby.LobbyId );
 	}

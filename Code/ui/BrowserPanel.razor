@@ -4,16 +4,16 @@
 @using Sandbox.Network;
 @namespace Sandbox
 
-<root>
-	@if ( Browser is null || Networking.IsActive )
-	{
-		return;
-	}
+@* The lobby list, shown inside MenuPanel's column in place of the host-or-browse buttons. *@
 
+<root>
 	<div class="browser">
 		<div class="titlebar">
-			<label class="title">Lobbies</label>
-			<label class="status">@StatusText</label>
+			<div class="button back" onclick=@Back>
+				<i>arrow_back</i>
+			</div>
+			<label class="title">Find a game</label>
+			<label class="status @( Browser.JoinFailed ? "error" : "" )">@StatusText</label>
 			<div class="button refresh @BusyClass" onclick=@Refresh>
 				<i>refresh</i>
 			</div>
@@ -23,29 +23,29 @@
 			@if ( Browser.Lobbies.Count == 0 )
 			{
 				<div class="empty">
-					<i>wifi_off</i>
-					<label>Nothing here yet</label>
+					<i>@( Browser.IsQuerying ? "hourglass_empty" : "wifi_off" )</i>
+					<label class="headline">@EmptyHeadline</label>
+					<label class="detail">@EmptyDetail</label>
 				</div>
 			}
 
 			@foreach ( var lobby in Browser.Lobbies )
 			{
-				<div class="row">
+				<div class="row @FullClass( lobby )" onclick=@( () => Join( lobby ) )>
 					<div class="cell name">
 						<label class="primary">@lobby.Name</label>
 						<label class="secondary">@Subtitle( lobby )</label>
 					</div>
+					<label class="cell state">@StateLabel( lobby )</label>
 					<label class="cell players">@Headcount( lobby )</label>
-					<label class="cell state">@( lobby.Get( "state", "?" ) )</label>
-					<label class="cell alive">@Alive( lobby )</label>
-					<div class="button join @FullClass( lobby )" onclick=@( () => Browser.Join( lobby ) )>
+					<div class="join">
 						<i>@JoinIcon( lobby )</i>
 					</div>
 				</div>
 			}
 		</div>
 
-		<label class="footnote">Your own lobby never appears here — the platform filters it out.</label>
+		<label class="footnote">Your own lobby never appears here. The list refreshes every few seconds.</label>
 	</div>
 </root>
 
@@ -63,43 +63,74 @@
 		get
 		{
 			var browser = Browser;
-			if ( browser.IsQuerying ) return "searching…";
+			if ( browser.JoinFailed ) return "Couldn't join that lobby. It may have closed or filled up.";
+			if ( browser.IsQuerying ) return "Searching…";
 
 			var count = browser.Lobbies.Count;
-			var age = $"checked {SecondsAgo}s ago";
+			var age = SecondsAgo < 2 ? "just now" : $"{SecondsAgo}s ago";
 
-			return count == 0 ? age : $"{count} found · {age}";
+			return count == 0 ? $"Checked {age}" : $"{count} open · checked {age}";
 		}
 	}
 
-	void Refresh() => Browser.Refresh();
+	string EmptyHeadline => Browser.IsQuerying ? "Looking for lobbies" : "No open lobbies right now";
+
+	string EmptyDetail => Browser.IsQuerying
+		? "This usually takes a second or two."
+		: "Host one yourself from the previous screen, and others will see it here.";
+
+	void Refresh()
+	{
+		Sound.Play( "sounds/kenney/ui/ui.button.press.sound" );
+		Browser.Refresh();
+	}
+
+	void Back()
+	{
+		Sound.Play( "sounds/kenney/ui/ui.navigate.back.sound" );
+		Browser.StopBrowsing();
+	}
+
+	void Join( LobbyInformation lobby )
+	{
+		if ( lobby.IsFull )
+		{
+			Sound.Play( "sounds/kenney/ui/ui.button.deny.sound" );
+			return;
+		}
+
+		Sound.Play( "sounds/kenney/ui/ui.navigate.forward.sound" );
+		Browser.Join( lobby );
+	}
 
 	/// <summary>
 	/// Host name and map. Host comes from Networking.SetData on the hosting machine, so it is
 	/// "?" whenever a lobby is up but has not published yet.
 	/// </summary>
-	string Subtitle( LobbyInformation lobby ) => $"{lobby.Get( "host", "?" )} · {lobby.Map}";
+	string Subtitle( LobbyInformation lobby ) => $"Hosted by {lobby.Get( "host", "?" )}";
 
 	string Headcount( LobbyInformation lobby ) => $"{lobby.Members}/{lobby.MaxMembers}";
 
-	string Alive( LobbyInformation lobby ) => $"{lobby.Get( "alive", "?" )} alive";
+	/// <summary>RoundManager publishes its enum name; this is the player-facing word for it.</summary>
+	string StateLabel( LobbyInformation lobby ) => lobby.Get( "state", "" ) switch
+	{
+		"Waiting" => "Warming up",
+		"Playing" => $"In round · {lobby.Get( "alive", "?" )} left",
+		"Ended" => "Results",
+		_ => "Starting"
+	};
 
 	string FullClass( LobbyInformation lobby ) => lobby.IsFull ? "full" : "";
 
 	/// <summary>
 	/// Core Material Icons only — `arrow_forward` and `block` both date from the original
-	/// 2014 set. `login` would read better but was added in 2020, and a ligature that does not
-	/// resolve renders as the literal word.
+	/// 2014 set. A ligature that does not resolve renders as the literal word.
 	/// </summary>
 	string JoinIcon( LobbyInformation lobby ) => lobby.IsFull ? "block" : "arrow_forward";
 
 	// Revision covers every content change — a lobby whose alive-count moved bumps it without
-	// the list length changing. SecondsAgo alone would tick the staleness readout.
-	//
-	// The guard matches the markup's early-return exactly. Without it the hash kept moving after
-	// joining, because SinceResult goes on counting once queries stop — so this panel rebuilt
-	// itself once a second, forever, to render nothing.
-	protected override int BuildHash() => Browser is null || Networking.IsActive
+	// the list length changing. SecondsAgo alone ticks the staleness readout.
+	protected override int BuildHash() => Browser is null
 		? 0
 		: System.HashCode.Combine( Browser.Revision, SecondsAgo );
 }

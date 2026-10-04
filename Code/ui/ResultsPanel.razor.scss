@@ -1,0 +1,161 @@
+@import "_ui.scss";
+
+// Results over the HUD. One plate, left of centre like the menu column, so the arena (and any
+// survivor still running on it) stays visible on the right.
+
+@keyframes plate-in {
+	0% { opacity: 0; transform: translateY(24px); }
+	100% { opacity: 1; transform: translateY(0px); }
+}
+
+@keyframes placing-in {
+	0% { opacity: 0; transform: translateX(-12px); }
+	100% { opacity: 1; transform: translateX(0px); }
+}
+
+.results {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	right: 0px;
+	bottom: 0px;
+	font-family: $font-display;
+	pointer-events: all;
+	align-items: center;
+	padding-left: 112px;
+	background-image: linear-gradient(90deg, rgba(10, 11, 16, 0.86) 0%, rgba(10, 11, 16, 0.6) 45%, rgba(10, 11, 16, 0) 80%);
+
+	transition: opacity 0.3s ease-out;
+
+	&:intro {
+		opacity: 0;
+	}
+
+	.plate {
+		width: 620px;
+		flex-direction: column;
+		padding: 40px 44px 32px 44px;
+		background-color: $fill;
+		box-shadow: $lift;
+
+		border-image: url( "/ui/panel-chamfer.svg" );
+		border-image-width-top: 20px;
+		border-image-width-right: 20px;
+		border-image-width-bottom: 20px;
+		border-image-width-left: 20px;
+
+		animation-name: plate-in;
+		animation-duration: 0.55s;
+		animation-timing-function: ease-out;
+		animation-fill-mode: backwards;
+	}
+
+	.verdict {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 54px;
+		line-height: 1.05;
+		letter-spacing: -0.03em;
+		color: $amber;
+	}
+
+	.duration {
+		margin-top: $s3;
+		font-size: 17px;
+		color: $dim;
+	}
+
+	.standings {
+		flex-direction: column;
+		margin-top: 28px;
+
+		.placing {
+			flex-direction: row;
+			align-items: center;
+			height: 40px;
+			padding: 0px $s4;
+			margin-bottom: 3px;
+			background-color: $steel;
+
+			animation-name: placing-in;
+			animation-duration: 0.35s;
+			animation-timing-function: ease-out;
+			animation-delay: 0.2s;
+			animation-fill-mode: backwards;
+
+			.place {
+				width: 40px;
+				font-family: $font-mono;
+				font-size: 16px;
+				font-weight: 700;
+				color: $faint;
+			}
+
+			.name {
+				flex-grow: 1;
+				font-size: 17px;
+				color: $chalk;
+			}
+
+			.you {
+				padding: 2px $s2;
+				font-size: 12px;
+				font-weight: 700;
+				color: $void;
+				background-color: $chalk;
+			}
+
+			// Before .first, so a winning local player still gets the winner's amber row.
+			&.mine {
+				background-color: #2A3044;
+			}
+
+			&.first {
+				height: 52px;
+				background-color: $amber;
+
+				.place, .name { color: $void; }
+				.name { font-size: 21px; font-weight: 700; }
+				.you { background-color: $void; color: $amber; }
+			}
+		}
+	}
+
+	.footer {
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 28px;
+
+		.next {
+			font-size: 16px;
+			color: $dim;
+		}
+
+		.leave {
+			flex-direction: row;
+			align-items: center;
+			height: 44px;
+			padding: 0px $s5 0px $s4;
+			cursor: pointer;
+			background-color: $steel;
+			transition: background-color 0.12s ease-out;
+
+			i {
+				font-size: 20px;
+				color: $chalk;
+				margin-right: $s3;
+			}
+
+			label {
+				font-size: 16px;
+				font-weight: 700;
+				color: $chalk;
+			}
+
+			&:hover {
+				background-color: $strike;
+			}
+		}
+	}
+}

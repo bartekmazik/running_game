@@ -277,8 +277,7 @@
           "__guid": "a1e4a000-0001-4000-8000-000000000007",
           "__enabled": true,
           "Flags": 0,
-          "AutoHost": true,
-          "CountdownDuration": 5,
+          "CountdownDuration": 10,
           "MaxPlayers": 24,
           "MinPlayers": 2,
           "OnComponentDestroy": null,
@@ -287,7 +286,7 @@
           "OnComponentFixedUpdate": null,
           "OnComponentStart": null,
           "OnComponentUpdate": null,
-          "RestartDelay": 3
+          "RestartDelay": 8
         },
         {
           "__type": "LobbyBrowser",
@@ -308,6 +307,7 @@
   ],
   "SceneProperties": {
     "NetworkInterpolation": true,
+    "PhysicsMode": "Physics3D",
     "TimeScale": 1,
     "WantsSystemScene": true,
     "Metadata": {

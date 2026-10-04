@@ -54,6 +54,18 @@ public sealed class TileDecay : Component
 	/// <summary>Packed indices of tiles collapsed since the last flush. Read-only view.</summary>
 	public IReadOnlyList<int> CollapseBuffer => _collapsed;
 
+	/// <summary>
+	/// Host-side: whether steps start countdowns at all. RoundManager arms this for Playing only,
+	/// so the warm-up in Waiting and the results screen in Ended leave the floor alone.
+	/// </summary>
+	public bool Armed { get; set; }
+
+	/// <summary>Collapse sounds per flush, at most. A flush can carry dozens of tiles.</summary>
+	const int MaxCollapseSounds = 3;
+
+	/// <summary>Only tiles this close to the listener are worth a sound.</summary>
+	const float CollapseSoundRange = 900f;
+
 	TimeUntil _nextFlush;
 
 	protected override void OnAwake()
@@ -103,6 +115,7 @@ public sealed class TileDecay : Component
 	void ApplyCollapses( int[] packed )
 	{
 		var dropped = 0;
+		var sounds = 0;
 
 		foreach ( var index in packed )
 		{
@@ -113,6 +126,15 @@ public sealed class TileDecay : Component
 			{
 				dropped++;
 				continue;
+			}
+
+			if ( sounds < MaxCollapseSounds &&
+				 tile.WorldPosition.Distance( Sound.Listener.Position ) < CollapseSoundRange )
+			{
+				var handle = Sound.Play( "sounds/impacts/melee/impact-melee-concrete.sound", tile.WorldPosition );
+				handle.Volume = 0.45f;
+				handle.Pitch = 0.8f + 0.1f * sounds;
+				sounds++;
 			}
 
 			tile.Enabled = false;
@@ -186,6 +208,7 @@ public sealed class TileDecay : Component
 	[Rpc.Host]
 	public void NotifyStep( int floor, int x, int y )
 	{
+		if ( !Armed ) return;
 		if ( !IsStepPlausible( floor, x, y ) ) return;
 		if ( _arena.GetTile( floor, x, y ) is null ) return;
 		if ( _marked[floor, x, y] ) return;
@@ -225,6 +248,9 @@ public sealed class TileDecay : Component
 			Log.Warning( $"TileDecay: step from eliminated player {caller?.DisplayName}" );
 			return false;
 		}
+
+		// CLAUDE.md: a ragdolled body does not collapse tiles — only an actively controlled player.
+		if ( player.IsRagdolled ) return false;
 
 		if ( !_arena.TryGetTileIndex( player.WorldPosition, out var onFloor, out var onX, out var onY ) )
 		{

@@ -3,10 +3,11 @@ using Sandbox.Network;
 /// <summary>
 /// Round state machine, lobby creation, and per-connection player spawning. Host-authoritative.
 ///
-/// Waiting gates on <see cref="MinPlayers"/> and then runs a <see cref="CountdownDuration"/>
-/// countdown. Both are written purely in terms of MinPlayers, so 1, 2 and 24 all take the same
-/// path — there is no 2-player special case. Ended routes back through Waiting rather than
-/// straight to Playing, so the gate and the countdown apply between rounds too.
+/// Waiting is a warm-up: the floor is intact and doesn't decay, and falling into the lava just
+/// puts you back on top. It gates on <see cref="MinPlayers"/> and then runs a
+/// <see cref="CountdownDuration"/> countdown. Both are written purely in terms of MinPlayers, so
+/// 1, 2 and 24 all take the same path. Ended shows the results, then routes back through Waiting
+/// rather than straight to Playing, so the gate and the countdown apply between rounds too.
 /// </summary>
 public sealed class RoundManager : Component, Component.INetworkListener
 {
@@ -17,6 +18,21 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		Ended
 	}
 
+	/// <summary>One line of the elimination feed, stamped locally when it arrives.</summary>
+	public readonly struct FeedEntry
+	{
+		public readonly string Name;
+		public readonly int Remaining;
+		public readonly float Time;
+
+		public FeedEntry( string name, int remaining, float time )
+		{
+			Name = name;
+			Remaining = remaining;
+			Time = time;
+		}
+	}
+
 	/// <summary>
 	/// Players required to start. Drop to 1 for solo testing — nothing below assumes 2, the
 	/// countdown and the win condition are both written in terms of this number.
@@ -24,37 +40,68 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	[Property, Range( 1, 24 )] public int MinPlayers { get; set; } = 2;
 
 	/// <summary>Seconds between reaching MinPlayers and the round starting. 0 starts instantly.</summary>
-	[Property, Range( 0f, 30f )] public float CountdownDuration { get; set; } = 5f;
+	[Property, Range( 0f, 30f )] public float CountdownDuration { get; set; } = 10f;
 
-	[Property, Range( 0.5f, 10f )] public float RestartDelay { get; set; } = 3f;
+	/// <summary>How long the results stay up before the warm-up starts again.</summary>
+	[Property, Range( 0.5f, 20f )] public float RestartDelay { get; set; } = 8f;
 
 	[Property, Range( 2, 64 )] public int MaxPlayers { get; set; } = 24;
 
-	/// <summary>
-	/// Turn this off to browse instead of host. Without it every machine creates its own lobby
-	/// on the first tick and there is nothing to discover.
-	/// </summary>
-	[Property] public bool AutoHost { get; set; } = true;
-
 	public RoundState State { get; private set; } = RoundState.Waiting;
 
-	/// <summary>Winner's object name, or empty for no survivors. Set on every machine.</summary>
+	/// <summary>Winner's display name, or empty for no survivors. Set on every machine.</summary>
 	public string LastWinner { get; private set; } = "";
+
+	/// <summary>
+	/// Final standings of the last round, winner first, set on every machine at Ended. Names only:
+	/// a placement outlives the player object if they leave while the results are up.
+	/// </summary>
+	public IReadOnlyList<string> LastResults => _lastResults;
+
+	/// <summary>How long the last round lasted, as the host measured it.</summary>
+	public float LastRoundDuration { get; private set; }
+
+	/// <summary>Recent eliminations, newest last. Every machine keeps its own copy.</summary>
+	public IReadOnlyList<FeedEntry> Feed => _feed;
+
+	/// <summary>Bumped on every feed change, so the HUD can fold it into its BuildHash.</summary>
+	public int FeedRevision { get; private set; }
+
+	/// <summary>True between pressing Host and the lobby coming up — the menu shows a spinner.</summary>
+	public bool IsStartingLobby => _lobbyRequested && !Networking.IsActive;
 
 	ArenaGenerator _arena;
 	TileDecay _decay;
 
 	TimeUntil _restartAt;
 
-	/// <summary>TimeUntil can't distinguish "unset" from "expired", hence the companion flag.</summary>
 	TimeUntil _startAt;
 
+	/// <summary>TimeUntil can't distinguish "unset" from "expired", hence the companion flag.</summary>
 	bool _countingDown;
 
 	TimeSince _roundElapsed;
 
 	/// <summary>Headcount when the round began — decides what "last alive" means.</summary>
 	int _playersAtRoundStart;
+
+	/// <summary>
+	/// Who fell this round, first out first. Kept on every machine, not just the host, so that if
+	/// the host leaves mid-round and the session migrates, the new host can still write the
+	/// standings. Same reason <see cref="_playersAtRoundStart"/> is broadcast.
+	/// </summary>
+	readonly List<string> _eliminated = new();
+
+	string[] _lastResults = System.Array.Empty<string>();
+
+	readonly List<FeedEntry> _feed = new();
+
+	const int MaxFeedEntries = 5;
+
+	/// <summary>Host-only: when each player was last sent back up from the lava in the warm-up.</summary>
+	readonly Dictionary<TntPlayer, TimeSince> _lavaRespawns = new();
+
+	const float LavaRespawnCooldown = 1f;
 
 	IEnumerable<TntPlayer> Players => Scene.GetAll<TntPlayer>();
 
@@ -70,6 +117,8 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 	public float RoundElapsed => _roundElapsed.Relative;
 
+	public float RestartRemaining => _restartAt.Relative;
+
 	/// <summary>
 	/// How many survivors the round can tolerate before it's over. With 2+ starters the round
 	/// ends when one is left standing; solo, it ends only when that player is dead. Generalises
@@ -78,6 +127,8 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	int SurvivorsToEndRound => _playersAtRoundStart > 1 ? 1 : 0;
 
 	bool _lobbyRequested;
+
+	bool _wasActive;
 
 	/// <summary>Last alive count pushed to the lobby, so we only republish when it moves.</summary>
 	int _publishedAlive = -1;
@@ -88,6 +139,11 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		// than OnStart because OnActive can fire before OnStart on a fast local connection.
 		_arena = Scene.Get<ArenaGenerator>();
 		_decay = Scene.Get<TileDecay>();
+
+		// Runtime-built like everything else: the scene holds exactly three objects.
+		GameObject.GetOrAddComponent<TileWarning>();
+		GameObject.GetOrAddComponent<PlayerImpacts>();
+		GameObject.GetOrAddComponent<MenuCamera>();
 
 		CreateUi();
 	}
@@ -110,6 +166,34 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	}
 
 	/// <summary>
+	/// The menu's Host button. Lobby creation used to be an editor toggle that fired on the first
+	/// tick; it is an explicit choice now, so a player who wants to browse never hosts by accident.
+	/// </summary>
+	public void Host()
+	{
+		if ( Networking.IsActive ) return;
+		if ( _lobbyRequested ) return;
+
+		_lobbyRequested = true;
+
+		Networking.CreateLobby( new LobbyConfig
+		{
+			MaxPlayers = MaxPlayers,
+			Privacy = LobbyPrivacy.Public,
+			Name = $"{Connection.Local?.DisplayName ?? "TNT Run"}'s TNT Run"
+		} );
+
+		Log.Info( "Round: creating lobby" );
+	}
+
+	/// <summary>Leave the session and go back to the menu. Works for host and client alike.</summary>
+	public void Leave()
+	{
+		_lobbyRequested = false;
+		Networking.Disconnect();
+	}
+
+	/// <summary>
 	/// Spawn one player per connection, owned by that connection. Host-only by contract —
 	/// INetworkListener only fires on the host.
 	///
@@ -124,14 +208,36 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		var player = new GameObject( true, $"Player - {connection.DisplayName}" );
 		player.Tags.Add( "player" );
 		player.WorldPosition = _arena.GetSpawnPosition( index, index + 1 );
-		player.AddComponent<TntPlayer>();
+
+		var tnt = player.AddComponent<TntPlayer>();
+
+		// Joining a round already under way makes you a spectator until the next warm-up —
+		// otherwise a late joiner would count towards "last alive" in a round they never started.
+		if ( State != RoundState.Waiting )
+			tnt.IsAlive = false;
+
 		player.NetworkSpawn( connection );
 
+		// Round state is broadcast, not synced, so a joiner hears nothing until the next change.
+		// Must go before the tile snapshot: nothing in it resets the arena, but keeping state
+		// first means a future reset-on-state can't silently wipe the snapshot.
+		// The host's own connection already holds the live state. Sending it to itself would land a
+		// frame later and could stomp a countdown that started in between — seen in testing as the
+		// countdown announcing twice.
+		if ( connection != Connection.Local )
+		{
+			using ( Rpc.FilterInclude( connection ) )
+			{
+				ApplyJoinState( State, _roundElapsed.Relative, _countingDown, _startAt.Relative );
+
+				// Joining on the results screen: they'd otherwise see an empty table.
+				if ( State == RoundState.Ended )
+					AnnounceResults( _lastResults, LastRoundDuration, LastWinner );
+			}
+		}
+
 		// Their arena is generated locally and starts pristine, so hand them the current
-		// collapsed set. Sent unconditionally rather than only during Playing: tiles stay down
-		// through Ended and the following Waiting too, and an unconditional send is both
-		// smaller and strictly more correct than a state check. Costs nothing when the arena
-		// is intact — the snapshot is empty and no message goes out.
+		// collapsed set. Costs nothing when the arena is intact — no message goes out.
 		_decay.SendSnapshotTo( connection );
 
 		Log.Info( $"Round: spawned player for {connection.DisplayName}" );
@@ -146,9 +252,25 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 	protected override void OnUpdate()
 	{
-		if ( Networking.IsActive && !Networking.IsHost ) return;
+		// The session ended under us — we left, the host left, or the connection dropped.
+		// Reloading the scene is the one reset that can't miss anything: arena, players,
+		// round state, UI all come back exactly as a fresh launch has them, menu up.
+		if ( _wasActive && !Networking.IsActive && !Networking.IsConnecting )
+		{
+			Log.Info( "Round: session ended, back to menu" );
+			Scene.LoadFromFile( "scenes/minimal.scene" );
+			return;
+		}
+
+		_wasActive = Networking.IsActive;
+
+		// No session yet: the menu is up and there is nothing to run.
+		if ( !Networking.IsActive ) return;
+		if ( !Networking.IsHost ) return;
 
 		if ( AliveCount != _publishedAlive ) PublishLobbyData();
+
+		CheckLava();
 
 		switch ( State )
 		{
@@ -166,10 +288,50 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		}
 	}
 
+	/// <summary>
+	/// Height check on top of LavaZone's trigger. The trigger needs a solid capsule to overlap,
+	/// and a ragdolled player has switched theirs off — so anything below the lava's surface is
+	/// in the lava, whatever its collider is doing. Arithmetic, like the tile lookup.
+	/// </summary>
+	void CheckLava()
+	{
+		var lavaZ = _arena.LavaTopZ + 4f;
+
+		foreach ( var player in Players )
+		{
+			if ( player.IsAlive && player.WorldPosition.z < lavaZ )
+				HandleLava( player );
+		}
+	}
+
+	/// <summary>
+	/// The one path for touching the lava, from the trigger or the height check. During a round
+	/// it eliminates; in the warm-up and on the results screen it just puts you back on top.
+	/// </summary>
+	public void HandleLava( TntPlayer player )
+	{
+		if ( Networking.IsActive && !Networking.IsHost ) return;
+		if ( !player.IsAlive ) return;
+
+		if ( State != RoundState.Playing )
+		{
+			// Respawn is an RPC to the owner, and the host keeps seeing the old position for a round
+			// trip — without this, CheckLava would re-send it every frame until the move lands.
+			if ( _lavaRespawns.TryGetValue( player, out var since ) && since < LavaRespawnCooldown ) return;
+			_lavaRespawns[player] = 0f;
+
+			var players = Players.ToList();
+			player.Respawn( players.IndexOf( player ), players.Count );
+			return;
+		}
+
+		player.Eliminate();
+
+		AnnounceElimination( player.DisplayName, AliveCount );
+	}
+
 	void TickWaiting()
 	{
-		if ( !EnsureLobby() ) return;
-
 		// Everything here is expressed in terms of MinPlayers, so this behaves identically at
 		// 1, 2 or 24 — a lone player at MinPlayers 1 counts down and starts exactly the same way.
 		if ( PlayerCount < MinPlayers )
@@ -197,31 +359,6 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		AnnounceCountdownCancelled( PlayerCount, MinPlayers );
 	}
 
-	/// <summary>
-	/// A lobby has to exist before OnActive fires and spawns anyone — including in solo editor
-	/// Play. Created from here rather than ISceneStartup.OnHostInitialize: OnUpdate is a path
-	/// already proven in this project, and a scene-event that silently never fires would leave
-	/// no lobby, no player, and no log to diagnose it by.
-	/// </summary>
-	bool EnsureLobby()
-	{
-		if ( Networking.IsActive ) return true;
-		if ( !AutoHost ) return false;
-		if ( _lobbyRequested ) return false;
-
-		_lobbyRequested = true;
-
-		Networking.CreateLobby( new LobbyConfig
-		{
-			MaxPlayers = MaxPlayers,
-			Privacy = LobbyPrivacy.Public,
-			Name = "TNT Run"
-		} );
-
-		Log.Info( "Round: creating lobby" );
-		return false;
-	}
-
 	void TickPlaying()
 	{
 		if ( AliveCount > SurvivorsToEndRound ) return;
@@ -234,17 +371,28 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		if ( !_restartAt ) return;
 
 		SetState( RoundState.Waiting );
+		RespawnEveryone();
 	}
 
 	void StartRound()
 	{
-		// Snapshot the list so index and total agree, and so ring slots are stable within
-		// this call even though Scene.GetAll order isn't guaranteed.
-		var players = Players.ToList();
-
 		// Broadcast first: every machine resets its own arena as part of entering Playing,
 		// so nobody respawns onto tiles that are still collapsed locally.
 		SetState( RoundState.Playing );
+
+		AnnounceRoundStart( RespawnEveryone() );
+	}
+
+	/// <summary>
+	/// Everyone back on floor 0, alive, spread around the ring. Used for both the warm-up and the
+	/// round proper, so a spectator who joined mid-round gets a body back at the next warm-up.
+	/// Returns the headcount.
+	/// </summary>
+	int RespawnEveryone()
+	{
+		// Snapshot the list so index and total agree, and so ring slots are stable within
+		// this call even though Scene.GetAll order isn't guaranteed.
+		var players = Players.ToList();
 
 		for ( var i = 0; i < players.Count; i++ )
 		{
@@ -253,17 +401,18 @@ public sealed class RoundManager : Component, Component.INetworkListener
 			players[i].Respawn( i, players.Count );
 		}
 
-		_playersAtRoundStart = players.Count;
-
-		Log.Info( $"Round: started with {_playersAtRoundStart} player(s)" );
+		return players.Count;
 	}
 
 	void EndRound()
 	{
-		var winner = Players.FirstOrDefault( p => p.IsAlive );
+		var survivors = Players.Where( p => p.IsAlive ).Select( p => p.DisplayName );
+
+		// Winner first, then everyone else in reverse order of falling — last out is second.
+		var results = survivors.Concat( Enumerable.Reverse( _eliminated ) ).ToArray();
 
 		SetState( RoundState.Ended );
-		AnnounceWinner( winner?.GameObject.Name ?? "" );
+		AnnounceResults( results, _roundElapsed.Relative, results.Length > 0 && _playersAtRoundStart > 1 ? results[0] : "" );
 
 		_restartAt = RestartDelay;
 	}
@@ -299,13 +448,6 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	}
 
 	/// <summary>
-	/// Transitions are discrete events, so they broadcast rather than sync. An RPC also avoids
-	/// needing NetworkMode.Object on the Arena object, which [Sync] would require.
-	///
-	/// Arena reset rides along with entering Playing: tiles are NetworkMode.Never, so there is
-	/// no tile state to replicate — each machine just needs the instruction to rebuild its own.
-	/// </summary>
-	/// <summary>
 	/// Broadcast so both screens show the countdown. Clients don't run the state machine — the
 	/// host guard stops them at OnUpdate — so without this they'd just see Playing appear from
 	/// nowhere. Counts are passed rather than recomputed locally so the log reflects the host's
@@ -332,31 +474,90 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	}
 
 	[Rpc.Broadcast( NetFlags.HostOnly )]
-	void AnnounceWinner( string winner )
+	void AnnounceRoundStart( int players )
 	{
-		LastWinner = winner;
+		_playersAtRoundStart = players;
+		_eliminated.Clear();
 
-		Log.Info( string.IsNullOrEmpty( winner )
-			? "Round: no survivors"
-			: $"Round: winner is {winner}" );
+		Log.Info( $"Round: started with {players} player(s)" );
 	}
 
 	[Rpc.Broadcast( NetFlags.HostOnly )]
+	void AnnounceElimination( string name, int remaining )
+	{
+		_eliminated.Add( name );
+
+		_feed.Add( new FeedEntry( name, remaining, Time.Now ) );
+		if ( _feed.Count > MaxFeedEntries ) _feed.RemoveAt( 0 );
+		FeedRevision++;
+
+		Log.Info( $"Round: {name} fell ({remaining} left)" );
+	}
+
+	[Rpc.Broadcast( NetFlags.HostOnly )]
+	void AnnounceResults( string[] results, float duration, string winner )
+	{
+		_lastResults = results;
+		LastRoundDuration = duration;
+		LastWinner = winner;
+
+		// Each machine runs its own restart clock, like the countdown, for the results screen.
+		_restartAt = RestartDelay;
+
+		Log.Info( string.IsNullOrEmpty( winner )
+			? "Round: no winner"
+			: $"Round: winner is {winner}" );
+	}
+
+	/// <summary>
+	/// Everything a joiner missed, in one message: the state without the arena reset that a live
+	/// transition carries, and the clocks as the host has them right now.
+	/// </summary>
+	[Rpc.Broadcast( NetFlags.HostOnly )]
+	void ApplyJoinState( RoundState state, float elapsed, bool countingDown, float countdownLeft )
+	{
+		State = state;
+		_roundElapsed = elapsed;
+		_countingDown = countingDown;
+		_startAt = countdownLeft;
+	}
+
+	/// <summary>
+	/// Transitions are discrete events, so they broadcast rather than sync. An RPC also avoids
+	/// needing NetworkMode.Object on the Arena object, which [Sync] would require.
+	///
+	/// Arena reset rides along with entering Waiting and Playing: tiles are NetworkMode.Never, so
+	/// there is no tile state to replicate — each machine just needs the instruction to rebuild
+	/// its own.
+	/// </summary>
+	[Rpc.Broadcast( NetFlags.HostOnly )]
 	void ApplyRoundState( RoundState next )
 	{
+		var changed = State != next;
 		State = next;
 
 		// Any transition ends the countdown — this is what clears the flag on clients, which
 		// never run TickWaiting.
 		_countingDown = false;
 
+		// Only the host's copy matters; set everywhere so the flag never disagrees with State.
+		_decay.Armed = next == RoundState.Playing;
+
+		if ( !changed ) return;
+
 		Log.Info( $"Round: {next}" );
 
 		PublishLobbyData();
 
-		if ( next != RoundState.Playing ) return;
+		if ( next == RoundState.Ended ) return;
 
-		_roundElapsed = 0f;
+		if ( next == RoundState.Playing )
+		{
+			_roundElapsed = 0f;
+			_feed.Clear();
+			FeedRevision++;
+		}
+
 		ResetArena();
 	}
 }
