@@ -26,8 +26,40 @@ public static class TileTextures
 	// play sessions, so a cached material outlives the code that built it — every texture change
 	// silently kept showing the first version. The caller builds these once per arena and holds them.
 
-	/// <summary>The ordinary floor block.</summary>
+	/// <summary>The ordinary floor block, generated. Fallback if a Kenney texture fails to load.</summary>
 	public static Material CreateBlock() => CreateMaterial( "tnt_block", BlockPixels( 1337 ) );
+
+	/// <summary>
+	/// The user's Kenney pattern-pack motifs, baked into greyscale tile textures with the block bevel
+	/// (Assets/textures/kenney, made from kenney_pattern-pack.zip). One motif per floor, so each floor
+	/// reads as its own place — dots, hearts, diamonds, hexagons, stars, checks, pebbles, octagons.
+	/// Greyscale like the generated ones, so ModelRenderer.Tint still carries the floor colour.
+	/// </summary>
+	public static string FloorTexturePath( int floor ) => $"textures/kenney/tile_floor{floor % 8}.png";
+
+	public const string EdgeTexturePath = "textures/kenney/tile_edge.png";
+	public const string FrameTexturePath = "textures/kenney/frame_bricks.png";
+	public const string LavaTexturePath = "textures/kenney/lava_blobs.png";
+
+	/// <summary>
+	/// A copy of <paramref name="baseMaterial"/> wearing a texture file from the project, or null if
+	/// it didn't load — callers fall back to a generated texture, so a missing file degrades the look
+	/// rather than painting the arena in the engine's error checkerboard.
+	/// </summary>
+	public static Material CreateFromFile( string name, string path, string baseMaterial = ArenaGenerator.SurfaceMaterialPath )
+	{
+		var texture = Texture.LoadFromFileSystem( path, FileSystem.Mounted, true );
+		if ( texture is null || texture.IsError )
+		{
+			Log.Warning( $"TileTextures: couldn't load {path}, using the generated texture instead" );
+			return null;
+		}
+
+		var material = Material.Load( baseMaterial ).CreateCopy( name );
+		material.Set( "Color", texture );
+		material.Set( "g_flModelTintAmount", 1f );
+		return material;
+	}
 
 	/// <summary>Diagonal warning stripes for the outermost ring. Tint it a warning colour.</summary>
 	public static Material CreateHazard() => CreateMaterial( "tnt_hazard", HazardPixels() );
@@ -41,7 +73,9 @@ public static class TileTextures
 	/// </summary>
 	public static Material CreateLava( string baseMaterial )
 	{
-		var material = CreateMaterial( "tnt_lava", LavaPixels( 4242 ), baseMaterial );
+		// The Kenney blob pattern when it loads; the generated crust otherwise. Both tile seamlessly.
+		var material = CreateFromFile( "tnt_lava", LavaTexturePath, baseMaterial )
+			?? CreateMaterial( "tnt_lava", LavaPixels( 4242 ), baseMaterial );
 
 		// The slab is one box ~1900 units across; repeat the 16-pixel crust so a crack is a crack,
 		// not a 200-unit stripe. LavaPixels wraps, so the repeats meet without seams.

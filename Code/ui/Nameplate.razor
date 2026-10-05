@@ -9,8 +9,7 @@
 	happening to them. A world-space PanelComponent on its own GameObject — PanelComponents can't
 	nest, but each WorldPanel is a root of its own, so one per player is the shipped pattern.
 
-	Hidden for this machine's own player (you don't need your own name over your head) and for
-	spectators. Rank colour on the name is a Silver+ perk; Master's name is gold (see Ranks).
+	For this machine's own player only the emote shows; spectators show nothing. Rank colour on the name is a Silver+ perk; Master's name is gold (see Ranks).
 *@
 
 <root class="@RootClass">
@@ -21,10 +20,13 @@
 			{
 				<div class="emote" style="background-image: url(@Emote)"></div>
 			}
-			<div class="plate">
-				<div class="emblem" style="background-image: url(@Ranks.Emblem( Player.RankPoints ))"></div>
-				<label class="name" style="color: @NameColour">@Player.DisplayName</label>
-			</div>
+			@if ( !IsLocal )
+			{
+				<div class="plate">
+					<div class="emblem" style="background-image: url(@Ranks.Emblem( Player.RankPoints ))"></div>
+					<label class="name" style="color: @NameColour">@Player.DisplayName</label>
+				</div>
+			}
 		</div>
 	}
 </root>
@@ -35,7 +37,11 @@
 
 	bool IsLocal => Player is not null && Player == TntPlayer.FindLocal( Scene );
 
-	bool Visible => Player is not null && Player.IsValid() && Player.IsAlive && !IsLocal;
+	/// <summary>
+	/// Other players get the whole tag. Your own player gets only the emote — you don't need your
+	/// name over your head, but seeing the stars when you're floored is part of the joke.
+	/// </summary>
+	bool Visible => Player is not null && Player.IsValid() && Player.IsAlive && (!IsLocal || !string.IsNullOrEmpty( Emote ));
 
 	string RootClass => Visible ? "" : "hidden";
 
@@ -69,5 +75,5 @@
 
 	protected override int BuildHash() => Player is null
 		? 0
-		: HashCode.Combine( Visible, Player.DisplayName, Player.RankPoints, Emote );
+		: HashCode.Combine( Visible, IsLocal, Player.DisplayName, Player.RankPoints, Emote );
 }

@@ -112,7 +112,8 @@ public sealed class ArenaGenerator : Component
 	GameObject[,,] _tiles;
 	ModelRenderer[,,] _renderers;
 
-	Material _blockMaterial;
+	/// <summary>One material per floor — each wears its own Kenney motif.</summary>
+	Material[] _floorMaterials;
 	Material _hazardMaterial;
 	Material _glowMaterial;
 
@@ -170,8 +171,12 @@ public sealed class ArenaGenerator : Component
 		var span = Arena.GridSize * Arena.TileSize;
 
 		var boxModel = Model.Load( "models/dev/box.vmdl" );
-		_blockMaterial = TileTextures.CreateBlock();
-		_hazardMaterial = TileTextures.CreateHazard();
+		var fallbackBlock = TileTextures.CreateBlock();
+		_floorMaterials = new Material[Arena.FloorCount];
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+			_floorMaterials[floor] = TileTextures.CreateFromFile( $"tnt_floor{floor}", TileTextures.FloorTexturePath( floor ) ) ?? fallbackBlock;
+
+		_hazardMaterial = TileTextures.CreateFromFile( "tnt_edge", TileTextures.EdgeTexturePath ) ?? TileTextures.CreateHazard();
 		_glowMaterial = Material.Load( GlowMaterialPath );
 		var tileScale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness ) / BoxModelUnits;
 
@@ -188,7 +193,7 @@ public sealed class ArenaGenerator : Component
 
 					var renderer = tile.AddComponent<ModelRenderer>();
 					renderer.Model = boxModel;
-					renderer.MaterialOverride = TileMaterial( x, y );
+					renderer.MaterialOverride = TileMaterial( floor, x, y );
 					renderer.Tint = TileColor( floor, x, y );
 
 					var collider = tile.AddComponent<BoxCollider>();
@@ -204,6 +209,7 @@ public sealed class ArenaGenerator : Component
 		CreateFrame( boxModel, span );
 		CreateLava( boxModel, span );
 		CreateClouds();
+		CreateSigns( span );
 		ConfigureLighting();
 		ConfigureCamera();
 
@@ -217,7 +223,7 @@ public sealed class ArenaGenerator : Component
 	}
 
 	/// <summary>Code-generated block texture inside, hazard stripes on the outermost ring.</summary>
-	Material TileMaterial( int x, int y ) => IsEdge( x, y ) ? _hazardMaterial : _blockMaterial;
+	Material TileMaterial( int floor, int x, int y ) => IsEdge( x, y ) ? _hazardMaterial : _floorMaterials[floor];
 
 	/// <summary>
 	/// The resting colour of a tile. Three layers, all from the index alone so a reset can
@@ -274,7 +280,7 @@ public sealed class ArenaGenerator : Component
 		var renderer = _renderers?[floor, x, y];
 		if ( renderer is null ) return;
 
-		renderer.MaterialOverride = TileMaterial( x, y );
+		renderer.MaterialOverride = TileMaterial( floor, x, y );
 		renderer.Tint = TileColor( floor, x, y );
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y );
 	}
@@ -352,7 +358,8 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	void CreateFrame( Model boxModel, float span )
 	{
-		var frameMaterial = TileTextures.CreatePlate( FrameMaterialPath );
+		var frameMaterial = TileTextures.CreateFromFile( "tnt_frame", TileTextures.FrameTexturePath, FrameMaterialPath )
+			?? TileTextures.CreatePlate( FrameMaterialPath );
 		var glowMaterial = Material.Load( GlowMaterialPath );
 
 		var frame = new GameObject( GameObject, true, "Frame" );
@@ -504,6 +511,49 @@ public sealed class ArenaGenerator : Component
 	}
 
 	GameObject _clouds;
+
+	/// <summary>
+	/// Signage in the world: a floor-number disc (floor colour + that floor's Kenney motif) on every
+	/// corner post of every floor, so you can read your depth looking across the shaft, and the
+	/// trophy over the tower — Kenney's gold medal and the one rule — for the menu orbit and for
+	/// anyone looking up. Billboards, so they read from any side; no colliders.
+	/// </summary>
+	void CreateSigns( float span )
+	{
+		var signs = new GameObject( GameObject, true, "Signs" );
+		MakeLocalOnly( signs );
+
+		var corner = span * 0.5f + PillarSize * 0.5f;
+		var outward = 34f;
+
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+		{
+			for ( var i = 0; i < 4; i++ )
+			{
+				var cx = (i & 1) == 0 ? 1f : -1f;
+				var cy = (i & 2) == 0 ? 1f : -1f;
+				var position = new Vector3( cx * (corner + outward), cy * (corner + outward), -floor * Arena.FloorGap + 72f );
+
+				AddSign( signs, position, new Vector2( 640f, 640f ), 1f, floor );
+			}
+		}
+
+		AddSign( signs, Vector3.Up * (PillarRise + 420f), new Vector2( 1500f, 1300f ), 4f, -1 );
+	}
+
+	void AddSign( GameObject parent, Vector3 localPosition, Vector2 panelSize, float scale, int floor )
+	{
+		var sign = new GameObject( parent, true, floor < 0 ? "Trophy" : $"Floor Sign {floor + 1}" );
+		sign.LocalPosition = localPosition;
+		sign.LocalScale = new Vector3( scale );
+		MakeLocalOnly( sign );
+
+		var world = sign.AddComponent<WorldPanel>();
+		world.PanelSize = panelSize;
+		world.LookAtCamera = true;
+
+		sign.AddComponent<ArenaSign>().Floor = floor;
+	}
 
 	static readonly Color CloudColor = new Color( 0.60f, 0.60f, 0.64f );
 

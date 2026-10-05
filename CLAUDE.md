@@ -242,6 +242,13 @@ bots that were removed again):
 - Not verified with two real clients yet: ability replication on remote screens, late-join
   snapshots of scores and mines, remote rank perks. The WinNAT block has a no-admin fix: run
   `net_local_port 57333` in the console before hosting; a local second instance then joins.
+- **Kenney assets in the world, not only the UI (2026-10-05, after user feedback "nie widzę na mapie
+  assetów"):** each floor wears its own Kenney pattern-pack motif (`Assets/textures/kenney/tile_floor0..7.png`,
+  baked with the block bevel from `kenney_pattern-pack.zip`), the edge ring Kenney stripes, the frame
+  Kenney bricks, the lava Kenney blobs; floor-number discs on every corner post and a Kenney gold-medal
+  trophy over the tower (`ArenaSign`); your own player shows its Kenney emote too. Loaded with
+  `Texture.LoadFromFileSystem`; each falls back to the generated texture with a warning if missing.
+  Not play-tested by request — the user tests.
 - UI style rules learned the hard way are in memory (`sbox-scss-limits`,
   `sbox-render-audio-findings`): every `<label>` carries class `label`; absolute children need a
   `position: relative` container; emissive pastels blow out, so effects use a matte copy with

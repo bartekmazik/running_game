@@ -1,0 +1,81 @@
+@import "_ui.scss";
+
+ArenaSign {
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	font-family: $font-title;
+}
+
+// --- Floor plate ---------------------------------------------------------------------------
+
+.disc {
+	position: relative;
+	width: 340px;
+	height: 340px;
+	border-radius: 170px;
+	align-items: center;
+	justify-content: center;
+	border: 22px solid $paper;
+	border-bottom: 36px solid $paper-edge;
+	overflow: hidden;
+}
+
+// The floor's Kenney motif, faint over the floor colour — the texture file is opaque greyscale, so
+// it sits on top at low opacity rather than being blended into the colour.
+.motif {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	right: 0px;
+	bottom: 0px;
+	background-size: 50%;
+	background-repeat: repeat;
+	opacity: 0.3;
+}
+
+.number {
+	font-weight: 800;
+	font-size: 200px;
+	line-height: 1;
+	color: $ink;
+	text-shadow: 0px 10px 0px rgba(255, 247, 232, 0.85);
+}
+
+// --- Trophy over the tower -----------------------------------------------------------------
+
+.trophy {
+	flex-direction: column;
+	align-items: center;
+	padding: 40px 90px 60px 90px;
+	border-radius: 80px;
+	background-color: $paper;
+	border-bottom: 40px solid $paper-edge;
+}
+
+.medal {
+	width: 260px;
+	height: 390px;
+	margin-top: -10px;
+	background-image: url("/ui/kenney/medals/medal_3.svg");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.title {
+	font-weight: 800;
+	font-size: 190px;
+	line-height: 1;
+	color: $ink;
+	letter-spacing: -6px;
+}
+
+.rule {
+	margin-top: 10px;
+	font-weight: 700;
+	font-size: 70px;
+	color: $ink-soft;
+}
