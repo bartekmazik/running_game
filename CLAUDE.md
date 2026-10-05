@@ -239,8 +239,9 @@ bots that were removed again):
 - Rank is owner-authoritative (`[Sync] RankPoints` from the local profile), which follows from
   storing it locally: a modified client can show any rank. `Services.Stats` is the place to make
   it authoritative once the game is published.
-- Not verified with two real clients (WinNAT port issue above still applies): ability replication
-  on remote screens, late-join snapshots of scores and mines, remote rank perks.
+- Not verified with two real clients yet: ability replication on remote screens, late-join
+  snapshots of scores and mines, remote rank perks. The WinNAT block has a no-admin fix: run
+  `net_local_port 57333` in the console before hosting; a local second instance then joins.
 - UI style rules learned the hard way are in memory (`sbox-scss-limits`,
   `sbox-render-audio-findings`): every `<label>` carries class `label`; absolute children need a
   `position: relative` container; emissive pastels blow out, so effects use a matte copy with
