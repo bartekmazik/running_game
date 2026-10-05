@@ -1,0 +1,86 @@
+@using System;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+@inherits Panel
+
+@* The rules on one page, in the order a new player meets them, and the controls. *@
+
+<root>
+	<div class="card sheet">
+		<div class="head">
+			<i class="sparkle">auto_awesome</i>
+			<label class="title">How to play</label>
+			<i class="sparkle">auto_awesome</i>
+		</div>
+
+		<div class="rules">
+			<div class="rule">
+				<div class="icon butter"><i>directions_run</i></div>
+				<label class="name">Keep running</label>
+				<label class="text">Every tile you step on drops away a moment later. Stand still and you fall.</label>
+			</div>
+			<div class="rule">
+				<div class="icon sky"><i>layers</i></div>
+				<label class="name">Eight floors</label>
+				<label class="text">Fall through a hole and you land on the floor below. Under the last one is the lava.</label>
+			</div>
+			<div class="rule">
+				<div class="icon coral"><i>sports_kabaddi</i></div>
+				<label class="name">Shove</label>
+				<label class="text">Crash into someone. Whoever hit softer goes flying — sprint in, never get caught standing.</label>
+			</div>
+			<div class="rule">
+				<div class="icon mint"><i>bolt</i></div>
+				<label class="name">Two abilities</label>
+				<label class="text">Pick two of thirty before you play. Save yourself, or wreck someone else's floor.</label>
+			</div>
+			<div class="rule">
+				<div class="icon lilac"><i>military_tech</i></div>
+				<label class="name">Climb the ranks</label>
+				<label class="text">Last one standing wins. Points and placings earn rank, from Bronze to Master.</label>
+			</div>
+		</div>
+
+		<div class="controls">
+			<div class="control">
+				<div class="prompt" style="background-image: url(/ui/kenney/prompts/keyboard_w.svg)"></div>
+				<div class="prompt" style="background-image: url(/ui/kenney/prompts/keyboard_a.svg)"></div>
+				<div class="prompt" style="background-image: url(/ui/kenney/prompts/keyboard_s.svg)"></div>
+				<div class="prompt" style="background-image: url(/ui/kenney/prompts/keyboard_d.svg)"></div>
+				<label>Move</label>
+			</div>
+			<div class="control">
+				<div class="prompt wide" style="background-image: url(/ui/kenney/prompts/keyboard_shift.svg)"></div>
+				<label>Sprint</label>
+			</div>
+			<div class="control">
+				<div class="prompt wide" style="background-image: url(/ui/kenney/prompts/keyboard_space.svg)"></div>
+				<label>Jump</label>
+			</div>
+			<div class="control">
+				<div class="prompt" style="background-image: url(/ui/kenney/prompts/mouse_left.svg)"></div>
+				<div class="prompt" style="background-image: url(/ui/kenney/prompts/mouse_right.svg)"></div>
+				<label>Abilities</label>
+			</div>
+		</div>
+
+		<div class="foot">
+			<div class="brick paper" onclick=@Back>
+				<i>arrow_back</i>
+				<label>Back</label>
+			</div>
+		</div>
+	</div>
+</root>
+
+@code
+{
+	void Back()
+	{
+		Sfx.Ui( Sfx.Back, 0.5f );
+		Scene.Get<GameUi>().Open( GameUi.MenuPage.Title );
+	}
+
+	protected override int BuildHash() => 0;
+}

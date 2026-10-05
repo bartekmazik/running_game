@@ -8,13 +8,13 @@
 	The single root panel. Everything the player sees hangs off this one ScreenPanel.
 
 	It exists because a PanelComponent cannot be nested inside another panel — only Panel
-	subclasses can. So this is the only PanelComponent in the project, and every screen below it
-	is a plain Panel.
+	subclasses can. So this is the only screen-space PanelComponent in the project (nameplates are
+	world-space), and every screen below it is a plain Panel.
 
 	Its whole job is routing the one path through the game: menu → lobby list → game → results.
-	Out of a session the menu owns the screen (title or lobby list); in one, the HUD does, with
-	the results laid over it while a round is Ended. The screens own their content and their own
-	BuildHash, so this rebuilds only when the route changes, not when a timer ticks.
+	Out of a session the menu owns the screen and switches between its own pages (title, lobby
+	list, loadout, profile, how to play); in one, the HUD does, with the results laid over it
+	while a round is Ended — and the loadout picker over those when the player opens it there.
 *@
 
 <root>
@@ -27,6 +27,11 @@
 			{
 				<ResultsPanel />
 			}
+
+			@if ( ShowResults && LoadoutOpen )
+			{
+				<LoadoutPanel />
+			}
 		}
 		else
 		{
@@ -37,11 +42,49 @@
 
 @code
 {
+	/// <summary>Pages of the out-of-session menu.</summary>
+	public enum MenuPage
+	{
+		Title,
+		Browse,
+		Loadout,
+		Profile,
+		HowTo
+	}
+
+	public MenuPage Page { get; set; } = MenuPage.Title;
+
+	/// <summary>The loadout picker laid over the results screen, inside a session.</summary>
+	public bool LoadoutOpen { get; set; }
+
 	RoundManager Round => Scene.Get<RoundManager>();
 
 	bool InSession => Networking.IsActive;
 
 	bool ShowResults => Round?.State == RoundManager.RoundState.Ended;
 
-	protected override int BuildHash() => System.HashCode.Combine( InSession, ShowResults );
+	/// <summary>Go to a menu page. The lobby list owns its own polling, so it's started and stopped here.</summary>
+	public void Open( MenuPage page )
+	{
+		var browser = Scene.Get<LobbyBrowser>();
+
+		if ( page == MenuPage.Browse ) browser?.StartBrowsing();
+		else if ( Page == MenuPage.Browse ) browser?.StopBrowsing();
+
+		Page = page;
+		StateHasChanged();
+	}
+
+	protected override void OnUpdate()
+	{
+		// The picker and the rank-up card both belong to one results screen; neither outlives it.
+		if ( ShowResults ) return;
+
+		if ( LoadoutOpen ) LoadoutOpen = false;
+
+		var store = Scene.Get<ProfileStore>();
+		if ( store is not null && store.RankUpToStep >= 0 ) store.RankUpToStep = -1;
+	}
+
+	protected override int BuildHash() => HashCode.Combine( InSession, ShowResults, LoadoutOpen, Page );
 }

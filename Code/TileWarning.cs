@@ -12,8 +12,8 @@ public sealed class TileWarning : Component
 	ArenaGenerator _arena;
 	RoundManager _round;
 
-	/// <summary>Packed tile index → when it started warning.</summary>
-	readonly Dictionary<int, float> _warned = new();
+	/// <summary>Packed tile index → when it started warning, and how long it has.</summary>
+	readonly Dictionary<int, (float Start, float Duration)> _warned = new();
 
 	readonly List<int> _finished = new();
 
@@ -25,18 +25,37 @@ public sealed class TileWarning : Component
 		_round = GetComponent<RoundManager>();
 	}
 
+	/// <summary>
+	/// An ability doomed this tile with its own delay (TileDecay.ForceCollapse). Footprints are
+	/// predictable on every machine; these aren't, so the host's broadcast lands here.
+	/// </summary>
+	public void Warn( int packed, float duration )
+	{
+		_warned[packed] = (Time.Now, duration);
+	}
+
+	/// <summary>The tile was rebuilt (Patch, Bridge): stop painting it.</summary>
+	public void Forget( int packed )
+	{
+		_warned.Remove( packed );
+	}
+
 	protected override void OnUpdate()
 	{
-		// Steps only doom tiles while the round is live (TileDecay.Armed), so the paint follows
-		// the same rule. ArenaGenerator.ResetAll restores looks on the way into a new round.
-		if ( _round.State != RoundManager.RoundState.Playing )
+		// Steps only doom tiles while the round is live (TileDecay.Armed), so the footprint half of
+		// the paint follows the same rule. Ability warnings arrive by broadcast and still run.
+		// ArenaGenerator.ResetAll restores looks on the way into a new round.
+		if ( _round.State == RoundManager.RoundState.Ended )
 		{
 			_warned.Clear();
 			return;
 		}
 
+		var live = _round.State == RoundManager.RoundState.Playing;
+
 		foreach ( var player in Scene.GetAll<TntPlayer>() )
 		{
+			if ( !live ) break;
 			if ( !player.CanMarkTiles ) continue;
 
 			var count = _arena.GetFootprintTiles( player.WorldPosition, TntPlayer.FootprintRadius, _footprint );
@@ -51,15 +70,22 @@ public sealed class TileWarning : Component
 				var tile = _arena.GetTile( floor, x, y );
 				if ( tile is null || !tile.Enabled ) continue;
 
-				_warned[packed] = Time.Now;
+				_warned[packed] = (Time.Now, TileDecay.StepDelay( player ));
 			}
 		}
 
-		foreach ( var (packed, started) in _warned )
+		foreach ( var (packed, warning) in _warned )
 		{
 			TileDecay.UnpackIndex( packed, out var floor, out var x, out var y );
 
 			var tile = _arena.GetTile( floor, x, y );
+
+			// An ability warning can arrive on a joiner before its arena exists.
+			if ( tile is null )
+			{
+				_finished.Add( packed );
+				continue;
+			}
 
 			// Collapsed by the host's broadcast: put the resting look back while it's hidden, so
 			// the next round re-enables a clean tile.
@@ -70,7 +96,7 @@ public sealed class TileWarning : Component
 				continue;
 			}
 
-			var t = ((Time.Now - started) / Arena.DecayDelay).Clamp( 0f, 1f );
+			var t = ((Time.Now - warning.Start) / warning.Duration).Clamp( 0f, 1f );
 			_arena.SetTileWarning( floor, x, y, t );
 		}
 

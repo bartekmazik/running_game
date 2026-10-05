@@ -1,0 +1,29 @@
+@using System;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+@inherits Panel
+
+@* One loadout slot as a small brick: the mouse button that casts it, its icon, its name. *@
+
+<root class="@KindClass">
+	<div class="prompt" style="background-image: url(@PromptPath)"></div>
+	<div class="icon"><i>@Info.Icon</i></div>
+	<label class="name">@Info.Name</label>
+</root>
+
+@code
+{
+	public AbilityId Ability { get; set; }
+
+	/// <summary>0 = left mouse, 1 = right mouse.</summary>
+	public int Slot { get; set; }
+
+	AbilityInfo Info => AbilityCatalog.Get( Ability );
+
+	string KindClass => Info.Kind == AbilityKind.Help ? "help" : "harm";
+
+	string PromptPath => Slot == 0 ? "/ui/kenney/prompts/mouse_left.svg" : "/ui/kenney/prompts/mouse_right.svg";
+
+	protected override int BuildHash() => HashCode.Combine( Ability, Slot );
+}

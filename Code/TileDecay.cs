@@ -41,10 +41,12 @@ public sealed class TileDecay : Component
 	bool[,,] _marked;
 
 	/// <summary>
-	/// DecayDelay is constant, so insertion order is due order and the head is always the next
-	/// tile to collapse. Avoids scanning every pending tile each tick.
+	/// Kept sorted by due time, so the head is always the next tile to collapse and the tick never
+	/// scans the whole list. Delays vary since abilities arrived (Heavy Boots halves a player's
+	/// delay, Trench and Sabotage set their own), so plain insertion order is no longer due order;
+	/// a sorted insert keeps the cheap head check. The list is short — tens of tiles, not thousands.
 	/// </summary>
-	readonly Queue<Pending> _pending = new();
+	readonly List<Pending> _pending = new();
 
 	readonly List<int> _collapsed = new();
 
@@ -81,9 +83,11 @@ public sealed class TileDecay : Component
 	{
 		if ( Networking.IsActive && !Networking.IsHost ) return;
 
-		while ( _pending.Count > 0 && Time.Now >= _pending.Peek().DueTime )
+		while ( _pending.Count > 0 && Time.Now >= _pending[0].DueTime )
 		{
-			Collapse( _pending.Dequeue() );
+			var due = _pending[0];
+			_pending.RemoveAt( 0 );
+			Collapse( due );
 		}
 
 		if ( !_nextFlush ) return;
@@ -131,9 +135,7 @@ public sealed class TileDecay : Component
 			if ( sounds < MaxCollapseSounds &&
 				 tile.WorldPosition.Distance( Sound.Listener.Position ) < CollapseSoundRange )
 			{
-				var handle = Sound.Play( "sounds/impacts/melee/impact-melee-concrete.sound", tile.WorldPosition );
-				handle.Volume = 0.45f;
-				handle.Pitch = 0.8f + 0.1f * sounds;
+				Sfx.At( Sfx.TileCollapse, tile.WorldPosition, 0.45f, 0.8f + 0.1f * sounds );
 				sounds++;
 			}
 
@@ -209,12 +211,120 @@ public sealed class TileDecay : Component
 	public void NotifyStep( int floor, int x, int y )
 	{
 		if ( !Armed ) return;
-		if ( !IsStepPlausible( floor, x, y ) ) return;
+		if ( !IsStepPlausible( floor, x, y, out var player ) ) return;
 		if ( _arena.GetTile( floor, x, y ) is null ) return;
 		if ( _marked[floor, x, y] ) return;
 
+		Schedule( floor, x, y, StepDelay( player ) );
+	}
+
+	/// <summary>
+	/// How long a tile under <paramref name="player"/> holds. Heavy Boots halves it — the one
+	/// ability that changes how fast your own floor goes. TileWarning uses the same rule so the
+	/// glow on every screen finishes when the tile really drops.
+	/// </summary>
+	public static float StepDelay( TntPlayer player )
+	{
+		var heavy = player is not null && player.Status.Has( StatusKind.HeavyBoots );
+		return heavy ? Arena.DecayDelay * 0.5f : Arena.DecayDelay;
+	}
+
+	void Schedule( int floor, int x, int y, float delay )
+	{
 		_marked[floor, x, y] = true;
-		_pending.Enqueue( new Pending( floor, x, y, Time.Now + Arena.DecayDelay ) );
+
+		var pending = new Pending( floor, x, y, Time.Now + delay );
+
+		var index = _pending.Count;
+		while ( index > 0 && _pending[index - 1].DueTime > pending.DueTime ) index--;
+		_pending.Insert( index, pending );
+	}
+
+	/// <summary>
+	/// Host only. Doom a set of tiles from an ability — Trench, Sabotage, the TNT bomb — with their
+	/// own delay, and tell every machine to glow them for exactly that long. Unlike steps these
+	/// aren't anyone's footprint, so TileWarning can't predict them and needs the broadcast.
+	/// Armed or not: an ability is a deliberate act, and the warm-up resets the arena anyway.
+	/// </summary>
+	public void ForceCollapse( IReadOnlyList<int> packed, float delay )
+	{
+		if ( Networking.IsActive && !Networking.IsHost ) return;
+
+		var doomed = new List<int>();
+
+		foreach ( var index in packed )
+		{
+			UnpackIndex( index, out var floor, out var x, out var y );
+
+			var tile = _arena.GetTile( floor, x, y );
+			if ( tile is null || !tile.Enabled ) continue;
+			if ( _marked[floor, x, y] ) continue;
+
+			Schedule( floor, x, y, delay );
+			doomed.Add( index );
+		}
+
+		if ( doomed.Count > 0 )
+			BroadcastWarnings( doomed.ToArray(), delay );
+	}
+
+	[Rpc.Broadcast( NetFlags.HostOnly )]
+	void BroadcastWarnings( int[] packed, float delay )
+	{
+		var warning = GetComponent<TileWarning>();
+		foreach ( var index in packed )
+			warning?.Warn( index, delay );
+	}
+
+	/// <summary>
+	/// Host only. Rebuild tiles — Patch and Bridge. Brings back collapsed tiles and cancels ones
+	/// still counting down, then one broadcast puts them back on every machine.
+	/// </summary>
+	public void Restore( IReadOnlyList<int> packed )
+	{
+		if ( Networking.IsActive && !Networking.IsHost ) return;
+
+		var restored = new List<int>();
+
+		foreach ( var index in packed )
+		{
+			UnpackIndex( index, out var floor, out var x, out var y );
+
+			var tile = _arena.GetTile( floor, x, y );
+			if ( tile is null ) continue;
+			if ( tile.Enabled && !_marked[floor, x, y] ) continue;
+
+			_marked[floor, x, y] = false;
+			_pending.RemoveAll( p => p.Floor == floor && p.X == x && p.Y == y );
+			_collapsed.Remove( index );
+			restored.Add( index );
+		}
+
+		if ( restored.Count > 0 )
+			ApplyRestores( restored.ToArray() );
+	}
+
+	[Rpc.Broadcast( NetFlags.HostOnly )]
+	void ApplyRestores( int[] packed )
+	{
+		var warning = GetComponent<TileWarning>();
+		var local = TntPlayer.FindLocal( Scene );
+
+		foreach ( var index in packed )
+		{
+			UnpackIndex( index, out var floor, out var x, out var y );
+
+			var tile = _arena.GetTile( floor, x, y );
+			if ( tile is null ) continue;
+
+			warning?.Forget( index );
+			_arena.RestoreTile( floor, x, y );
+			tile.Enabled = true;
+
+			// The owner dedups its step reports per life; a rebuilt tile has to be reportable again,
+			// or standing on it would never doom it.
+			local?.ForgetReported( index );
+		}
 	}
 
 	/// <summary>
@@ -226,15 +336,19 @@ public sealed class TileDecay : Component
 	/// 4500 in the arena. It is not anti-cheat against collapsing your own neighbours — that is
 	/// just the game — it stops remote collapses under other players.
 	/// </summary>
-	bool IsStepPlausible( int floor, int x, int y )
+	bool IsStepPlausible( int floor, int x, int y, out TntPlayer player )
 	{
 		// Not a remote call: solo play, or the host reporting its own player. Nothing to check
 		// it against, and the host is authoritative by definition.
-		if ( !Rpc.Calling ) return true;
+		if ( !Rpc.Calling )
+		{
+			player = TntPlayer.FindLocal( Scene );
+			return true;
+		}
 
 		var caller = Rpc.Caller;
 
-		var player = Scene.GetAll<TntPlayer>()
+		player = Scene.GetAll<TntPlayer>()
 			.FirstOrDefault( p => p.Network.Owner == caller );
 
 		if ( player is null )
@@ -250,7 +364,9 @@ public sealed class TileDecay : Component
 		}
 
 		// CLAUDE.md: a ragdolled body does not collapse tiles — only an actively controlled player.
+		// Ghost Step is the same rule by ability: the owner already skips reporting, this backs it up.
 		if ( player.IsRagdolled ) return false;
+		if ( player.Status.Has( StatusKind.Ghost ) ) return false;
 
 		if ( !_arena.TryGetTileIndex( player.WorldPosition, out var onFloor, out var onX, out var onY ) )
 		{
@@ -297,7 +413,7 @@ public sealed class TileDecay : Component
 		_collapsed.Clear();
 	}
 
-	/// <summary>Flatten a tile index into one int. Max value is 4499, so this fits a ushort on the wire.</summary>
+	/// <summary>Flatten a tile index into one int. Max value is 7199, so this fits a ushort on the wire.</summary>
 	public static int PackIndex( int floor, int x, int y )
 	{
 		return (floor * Arena.GridSize + x) * Arena.GridSize + y;

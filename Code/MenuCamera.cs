@@ -14,11 +14,14 @@ public sealed class MenuCamera : Component
 	/// <summary>Degrees per second. Slow enough to read as ambience rather than motion.</summary>
 	const float OrbitSpeed = 4f;
 
+	/// <summary>Sideways offset of the aim point, in world units.</summary>
+	const float FrameShift = 620f;
+
 	float _yaw = 35f;
 
 	protected override void OnUpdate()
 	{
-		if ( Scene.GetAll<TntPlayer>().Any( p => !p.IsProxy ) ) return;
+		if ( TntPlayer.FindLocal( Scene ) is not null ) return;
 
 		var camera = Scene.Camera;
 		if ( !camera.IsValid() ) return;
@@ -30,6 +33,10 @@ public sealed class MenuCamera : Component
 		// so a taller or shorter tower stays framed.
 		var focus = WorldPosition + Vector3.Down * ((Arena.FloorCount - 1) * Arena.FloorGap * 0.42f);
 		var rotation = new Angles( OrbitPitch, _yaw, 0f ).ToRotation();
+
+		// Look past the tower's left side, so it stands in the right two thirds of the frame and
+		// the menu column on the left has open sky behind it.
+		focus += rotation.Left * FrameShift;
 
 		camera.WorldPosition = focus - rotation.Forward * OrbitDistance;
 		camera.WorldRotation = rotation;

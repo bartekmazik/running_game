@@ -1,0 +1,199 @@
+@using System;
+@using System.Linq;
+@using System.Collections.Generic;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+@inherits Panel
+
+@*
+	Pick two of the thirty. Like Curve Fever: you choose your tools before the match, they're
+	saved locally and come with you into every lobby. Opens from the menu, and over the results
+	screen between rounds — a change applies from the next cast.
+
+	Two slots at the top, one per mouse button. Click a slot to make it the one you're filling,
+	then click an ability. Help and Harm are separate shelves so the choice reads at a glance:
+	one way out, one way to ruin someone's day is the classic pair.
+*@
+
+<root>
+	<div class="card picker">
+		<div class="head">
+			<i class="sparkle">auto_awesome</i>
+			<label class="title">Abilities</label>
+			<i class="sparkle">auto_awesome</i>
+		</div>
+		<label class="lede">Take two into every match. Left click casts one, right click the other.</label>
+
+		<div class="slots">
+			@for ( var slot = 0; slot < 2; slot++ )
+			{
+				var s = slot;
+				var info = AbilityCatalog.Get( Chosen( s ) );
+
+				<div class="slot @SlotClass( s ) @KindClass( info )" onclick=@( () => PickSlot( s ) )>
+					<div class="prompt" style="background-image: url(@PromptPath( s ))"></div>
+					<div class="icon"><i>@info.Icon</i></div>
+					<div class="text">
+						<label class="name">@info.Name</label>
+						<label class="desc">@info.Description</label>
+					</div>
+					<label class="cd">@CooldownText( info )</label>
+				</div>
+			}
+		</div>
+
+		<div class="shelf-title help">
+			<i>favorite</i>
+			<label>Help yourself</label>
+		</div>
+		<div class="grid">
+			@foreach ( var id in HelpIds )
+			{
+				var a = id;
+				<div class="tile @TileClass( a )" onclick=@( () => Choose( a ) )>
+					<div class="icon"><i>@AbilityCatalog.Get( a ).Icon</i></div>
+					<label class="name">@AbilityCatalog.Get( a ).Name</label>
+					@if ( !string.IsNullOrEmpty( Badge( a ) ) )
+					{
+						<label class="badge">@Badge( a )</label>
+					}
+				</div>
+			}
+		</div>
+
+		<div class="shelf-title harm">
+			<i>bolt</i>
+			<label>Get in their way</label>
+		</div>
+		<div class="grid">
+			@foreach ( var id in HarmIds )
+			{
+				var a = id;
+				<div class="tile @TileClass( a )" onclick=@( () => Choose( a ) )>
+					<div class="icon"><i>@AbilityCatalog.Get( a ).Icon</i></div>
+					<label class="name">@AbilityCatalog.Get( a ).Name</label>
+					@if ( !string.IsNullOrEmpty( Badge( a ) ) )
+					{
+						<label class="badge">@Badge( a )</label>
+					}
+				</div>
+			}
+		</div>
+
+		<div class="foot">
+			<div class="brick paper" onclick=@Randomise>
+				<i>casino</i>
+				<label>Surprise me</label>
+			</div>
+			<div class="brick mint" onclick=@Done>
+				<i>check</i>
+				<label>Done</label>
+			</div>
+		</div>
+	</div>
+</root>
+
+@code
+{
+	ProfileStore Profile => Scene.Get<ProfileStore>();
+
+	GameUi Ui => Scene.Get<GameUi>();
+
+	/// <summary>Which slot the next click fills.</summary>
+	int _activeSlot;
+
+	IEnumerable<AbilityId> HelpIds => AbilityCatalog.All.Where( a => AbilityCatalog.Get( a ).Kind == AbilityKind.Help );
+
+	IEnumerable<AbilityId> HarmIds => AbilityCatalog.All.Where( a => AbilityCatalog.Get( a ).Kind == AbilityKind.Harm );
+
+	AbilityId Chosen( int slot ) => slot == 0 ? Profile.First : Profile.Second;
+
+	string SlotClass( int slot ) => slot == _activeSlot ? "active" : "";
+
+	static string KindClass( AbilityInfo info ) => info.Kind == AbilityKind.Help ? "help" : "harm";
+
+	static string PromptPath( int slot ) => slot == 0 ? "/ui/kenney/prompts/mouse_left.svg" : "/ui/kenney/prompts/mouse_right.svg";
+
+	static string CooldownText( AbilityInfo info ) => $"{info.Cooldown:0}s";
+
+	string TileClass( AbilityId id )
+	{
+		var kind = AbilityCatalog.Get( id ).Kind == AbilityKind.Help ? "help" : "harm";
+		var picked = id == Profile.First || id == Profile.Second ? " picked" : "";
+		return kind + picked;
+	}
+
+	/// <summary>Which mouse button a picked ability sits on.</summary>
+	string Badge( AbilityId id )
+	{
+		if ( id == Profile.First ) return "Left";
+		if ( id == Profile.Second ) return "Right";
+		return null;
+	}
+
+	void PickSlot( int slot )
+	{
+		_activeSlot = slot;
+		Sfx.Ui( Sfx.Hover, 0.4f );
+		StateHasChanged();
+	}
+
+	/// <summary>
+	/// Put an ability in the active slot. Picking the one already in the other slot swaps them —
+	/// you can't carry the same ability twice. Then the other slot becomes active, so two clicks
+	/// fill both.
+	/// </summary>
+	void Choose( AbilityId id )
+	{
+		var first = Profile.First;
+		var second = Profile.Second;
+
+		if ( _activeSlot == 0 )
+		{
+			if ( id == second ) second = first;
+			first = id;
+		}
+		else
+		{
+			if ( id == first ) first = second;
+			second = id;
+		}
+
+		Profile.SetLoadout( first, second );
+		_activeSlot = 1 - _activeSlot;
+
+		Sfx.Ui( Sfx.Select, 0.5f );
+		StateHasChanged();
+	}
+
+	void Randomise()
+	{
+		var all = AbilityCatalog.All.ToList();
+		var help = all.Where( a => AbilityCatalog.Get( a ).Kind == AbilityKind.Help ).ToList();
+		var harm = all.Where( a => AbilityCatalog.Get( a ).Kind == AbilityKind.Harm ).ToList();
+
+		// One of each — the pairing that's always playable.
+		Profile.SetLoadout( help[Game.Random.Next( help.Count )], harm[Game.Random.Next( harm.Count )] );
+
+		Sfx.Ui( Sfx.Status, 0.5f );
+		StateHasChanged();
+	}
+
+	void Done()
+	{
+		Sfx.Ui( Sfx.Confirm, 0.5f );
+
+		if ( Networking.IsActive )
+		{
+			Ui.LoadoutOpen = false;
+			Ui.StateHasChanged();
+		}
+		else
+		{
+			Ui.Open( GameUi.MenuPage.Title );
+		}
+	}
+
+	protected override int BuildHash() => HashCode.Combine( Profile?.Revision, _activeSlot );
+}

@@ -6,41 +6,87 @@
 @namespace Sandbox
 
 @*
-	The end of the path: shown over the HUD while a round is Ended. Who won, how long the round
-	ran, everyone's placing, when the next warm-up starts — and the way out.
+	The end of a round, over the HUD while it's Ended: who won, the podium with Kenney's medals,
+	everyone's points, what this round did to your rank — and, when it happened, the rank-up card,
+	modelled on the "Level up!" card in the user's reference screenshots.
 *@
 
 <root>
-	<div class="results">
-		<div class="plate">
-			<label class="verdict">@Verdict</label>
-			<label class="duration">@DurationText</label>
+	<div class="card results">
+		@if ( RankedUp )
+		{
+			<div class="rankup">
+				<div class="star"><div class="emblem" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div></div>
+				<div class="text">
+					<label class="title">Rank up!</label>
+					<label class="to">@RankUpName</label>
+				</div>
+			</div>
+		}
 
-			<div class="standings">
-				@{ var placings = Placings; }
-				@for ( var i = 0; i < placings.Count; i++ )
+		<label class="verdict">@Verdict</label>
+		<label class="duration">@DurationText</label>
+
+		<div class="podium">
+			@foreach ( var place in PodiumOrder )
+			{
+				@if ( place <= Rows.Count )
 				{
-					var place = i + 1;
-					var name = placings[i];
+					var row = Rows[place - 1];
+					<div class="step p@(place) @MineClass( row.Name )">
+						<div class="medal" style="background-image: url(@MedalPath( place ))"></div>
+						<div class="emblem" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
+						<label class="name">@row.Name</label>
+						<label class="pts">@PointsText( row )</label>
+						<div class="block"><label>@PlaceText( place )</label></div>
+					</div>
+				}
+			}
+		</div>
 
-					<div class="placing @PlacingClass( place, name )">
-						<label class="place">@place</label>
-						<label class="name">@name</label>
-						@if ( name == LocalName )
-						{
-							<label class="you">You</label>
-						}
+		@if ( Rows.Count > 3 )
+		{
+			<div class="table">
+				@for ( var i = 3; i < Math.Min( Rows.Count, MaxRows ); i++ )
+				{
+					var row = Rows[i];
+					<div class="row @MineClass( row.Name )">
+						<label class="place">@PlaceText( i + 1 )</label>
+						<div class="emblem" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
+						<label class="name">@row.Name</label>
+						<label class="kd">@KnockdownText( row )</label>
+						<label class="pts">@PointsText( row )</label>
 					</div>
 				}
 			</div>
+		}
 
-			<div class="footer">
-				<label class="next">@NextText</label>
-
-				<div class="leave" onclick=@Leave>
-					<i>exit_to_app</i>
-					<label>Leave</label>
+		@if ( ShowRank )
+		{
+			<div class="you">
+				<div class="emblem" style="background-image: url(@Ranks.Emblem( Rp ))"></div>
+				<div class="mid">
+					<label class="rank">@Ranks.Name( Rp )</label>
+					<div class="bar"><div class="fill" style="width: @(Ranks.Progress( Rp ) * 100f)%"></div></div>
 				</div>
+				<label class="delta @DeltaClass">@DeltaText</label>
+			</div>
+		}
+		else if ( !Round.LastRoundRanked )
+		{
+			<label class="unranked">Solo rounds don't count towards rank.</label>
+		}
+
+		<div class="foot">
+			<label class="next">@NextText</label>
+
+			<div class="brick mint" onclick=@OpenLoadout>
+				<i>bolt</i>
+				<label>Abilities</label>
+			</div>
+			<div class="brick coral" onclick=@Leave>
+				<i>logout</i>
+				<label>Leave</label>
 			</div>
 		</div>
 	</div>
@@ -50,30 +96,63 @@
 {
 	RoundManager Round => Scene.Get<RoundManager>();
 
-	/// <summary>Twelve rows fit the plate; past that, the top of the table is what matters.</summary>
+	ProfileStore Store => Scene.Get<ProfileStore>();
+
 	const int MaxRows = 12;
 
-	IReadOnlyList<string> Placings => Round.LastResults.Take( MaxRows ).ToList();
+	IReadOnlyList<RoundManager.ResultRow> Rows => Round.LastRows;
+
+	/// <summary>Second, first, third — the classic podium silhouette.</summary>
+	static int[] PodiumOrder => new[] { 2, 1, 3 };
 
 	string LocalName => Connection.Local?.DisplayName ?? "";
 
+	int Rp => Store?.Profile.RankPoints ?? 0;
+
+	bool RankedUp => Store is not null && Store.RankUpToStep >= 0;
+
+	string RankUpName => $"You're now {Ranks.NameOfStep( Store.RankUpToStep )}";
+
+	bool ShowRank => Round.LastRoundRanked && Store is not null && Store.HasLastDelta;
+
+	string DeltaText => Store.LastDelta >= 0 ? $"+{Store.LastDelta} RP" : $"{Store.LastDelta} RP";
+
+	string DeltaClass => Store.LastDelta >= 0 ? "up" : "down";
+
 	string Verdict => string.IsNullOrEmpty( Round.LastWinner )
 		? "Nobody made it"
-		: Round.LastWinner == LocalName ? "You win" : $"{Round.LastWinner} wins";
+		: Round.LastWinner == LocalName ? "You win!" : $"{Round.LastWinner} wins";
 
 	string DurationText => $"Round lasted {FormatTime( Round.LastRoundDuration )}";
 
-	string NextText => $"Warm-up starts in {MathF.Ceiling( Round.RestartRemaining ).Clamp( 0f, 99f ):0}";
+	string NextText => $"Next warm-up in {MathF.Ceiling( Round.RestartRemaining ).Clamp( 0f, 99f ):0}";
 
-	string PlacingClass( int place, string name )
+	string MineClass( string name ) => name == LocalName ? "mine" : "";
+
+	static string MedalPath( int place ) => place switch
 	{
-		var classes = place == 1 && !string.IsNullOrEmpty( Round.LastWinner ) ? "first" : "";
-		return name == LocalName ? classes + " mine" : classes;
+		1 => "/ui/kenney/medals/medal_3.svg",
+		2 => "/ui/kenney/medals/medal_2.svg",
+		_ => "/ui/kenney/medals/medal_1.svg"
+	};
+
+	static string PlaceText( int place ) => $"#{place}";
+
+	static string PointsText( RoundManager.ResultRow row ) => $"{row.Points} pts";
+
+	static string KnockdownText( RoundManager.ResultRow row ) => row.Knockdowns == 1 ? "1 knockdown" : $"{row.Knockdowns} knockdowns";
+
+	void OpenLoadout()
+	{
+		Sfx.Ui( Sfx.Click );
+		var ui = Scene.Get<GameUi>();
+		ui.LoadoutOpen = true;
+		ui.StateHasChanged();
 	}
 
 	void Leave()
 	{
-		Sound.Play( "sounds/kenney/ui/ui.navigate.back.sound" );
+		Sfx.Ui( Sfx.Back );
 		Round.Leave();
 	}
 
@@ -83,6 +162,17 @@
 		return $"{total / 60:0}:{total % 60:00}";
 	}
 
-	protected override int BuildHash() => System.HashCode.Combine(
-		Round?.LastResults.Count ?? 0, Round?.LastWinner, (int)(Round?.RestartRemaining ?? 0f) );
+	bool _playedRankUp;
+
+	public override void Tick()
+	{
+		if ( RankedUp && !_playedRankUp )
+		{
+			_playedRankUp = true;
+			Sfx.Ui( Sfx.RankUp, 0.8f );
+		}
+	}
+
+	protected override int BuildHash() => HashCode.Combine(
+		Rows.Count, Round?.LastWinner, (int)(Round?.RestartRemaining ?? 0f), Store?.Revision, Store?.RankUpToStep, Store?.HasLastDelta );
 }

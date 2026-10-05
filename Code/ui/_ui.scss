@@ -1,39 +1,27 @@
-// Shared design tokens — angular, high-contrast, competitive-HUD language.
+// Shared design tokens — pastel toy-box arcade.
 //
-// Engine facts baked in here, all verified against shipped s&box content. Do not re-litigate:
-//   * `clip-path` and `transform: skew()` appear NOWHERE in addons/. Angles come from
-//     `mask: linear-gradient(...)`, which Facepunch's own menu uses in a dozen places.
-//   * In an s&box mask, WHITE shows and BLACK hides — see Carousel.razor.scss:97.
-//   * `var(--x)` does not exist. Use these SCSS variables.
-//   * CORRECTION (official docs): `text-transform` IS supported (none/capitalize/lowercase/
-//     uppercase). It was banned here because it appears in no shipped stylesheet — absence of
-//     use is not absence of support, and that inference was wrong. Casing is still written into
-//     the markup this round only because the brief says to use nothing unproven end-to-end in
-//     this project; switching to text-transform is a safe cleanup once anything else proves it.
-//   * Also newly available per the docs, all unproven here and therefore NOT used yet:
-//     `font-variant-numeric: tabular-nums` (would remove the need for a separate mono family on
-//     counters), `text-stroke: <len> <color>` (better than text-shadow over a busy scene),
-//     `text-decoration: underline` with offset/thickness, `filter`, `aspect-ratio`, `gap`,
-//     `min()/max()/clamp()`, `mask-angle`, `mask-mode: luminance|alpha`.
-//   * `font-family` takes a single name. No fallback chains.
-//   * A shipped .ttf does not mean the family resolves — 'Roboto Condensed' ships and fails.
-//   * Black/ExtraBold/Light are SEPARATE families ('Roboto Black'), not weights. Only Bold is
-//     reachable as `font-weight: 700` on the base family.
+// Direction (KONTEKST.md + Assets/gui reference): cream storybook cards, rounded and chunky, plum
+// ink instead of black, pastel floor colours as the brand. One idea carries the whole UI:
+// everything you press is a toy brick — a solid colour block with a thicker darker bottom edge,
+// like the tiles you run on. Boldness is spent on the title tower and the bricks; text stays calm.
+//
+// Engine facts baked in, verified against this install (see memory notes):
+//   * Gradient stops must be PERCENTAGES. A px stop is rejected, and a rejected mask hides the
+//     element completely.
+//   * No clip-path, no transform: skew(), no var(--x). SCSS variables only.
+//   * `font-family` takes a single name. Proven here: Poppins (800 reachable), Roboto, Roboto Mono,
+//     Material Icons. Disproven: Roboto Condensed.
+//   * A <label> that mixes literal text with an @expression drops the literal — one expression
+//     per label, build strings in C#.
 
 // --- Type ---------------------------------------------------------------------------------
 
-// The proven family. 700 is reachable here because Roboto-Bold.ttf keeps Family='Roboto'.
-$font-display: "Roboto";
+$font-title: "Poppins";
+$font-body: "Poppins";
 $font-mono: "Roboto Mono";
 
-// Probe results (2026-10-03 log): 'Poppins' resolves — no FontManager failure line — and
-// 'Roboto Black' does not. Poppins is the display voice now: geometric, wide, heavy at 800, which
-// is what a title that has to read across a room needs. Roboto stays for UI text.
-$font-title: "Poppins";
-
-// Condensed is unavailable in this install, so density comes from negative tracking instead.
-$track-tight: -0.02em;
-$track-label: 0.16em;
+// Kept for older stylesheets that still name it.
+$font-display: "Poppins";
 
 // --- Space --------------------------------------------------------------------------------
 
@@ -43,48 +31,45 @@ $s3: 12px;
 $s4: 16px;
 $s5: 24px;
 $s6: 32px;
-
-// --- Geometry -----------------------------------------------------------------------------
-// GRADIENT STOPS MUST BE PERCENTAGES. The parser rejects lengths outright:
-//   "Only percent stop values are supported: 'black 18px'"
-// A rejected mask does not degrade to "no mask" — it hides the element completely. Every masked
-// element in the HUD vanished at once because of this. Never write a px stop in a gradient.
-//
-// Diagonal colour blocking already used % and was never affected, so the angular language
-// survives through backgrounds even where silhouette cuts cannot be used.
-
-$angle-cut: 135deg; // corner slice — the gradient line starts top-left
-$angle-block: 112deg; // diagonal colour split across a fill
-
-// Corner masks are gone for good. The percentage form parses and renders, but a mask over an
-// element that also has a border wipes diagonally through that border and smears it — that was
-// the orange artefact on the alive pill. The wedge below is the only geometric device now.
-// The wedge idea is dead, and the reason is worth keeping: a gradient at $angle-block across a
-// ~250px panel has a short gradient line, so a 5% stop lands as a fat TRIANGLE over one corner
-// instead of a sliver down the edge. On screen it read as a rendering fault. Angled gradients
-// only behave on large surfaces — the notice scrim, a full-width band, is the one place left
-// using one. Everywhere else, angles come from `transform: rotate` (crisp at any size) and edges
-// come from thick borders (cannot distort).
+$s7: 48px;
 
 // --- Colour -------------------------------------------------------------------------------
-// Saturated and blocky, not grounded in the arena's greys — with one deliberate exception:
-// the "you / alive" accent stays warm. The scene's lava is Color(0.90, 0.24, 0.05), hue ~15°;
-// $amber sits at hue ~38°, same family, pushed bright and fully saturated. So the accent is
-// still of this world without being muted by it.
-//
-// No third "win" colour: with an amber accent, a gold would collide with it. The winner state
-// is the amber block at full bleed instead. One accent, one danger.
 
-$void: #12141C; // panel base — blue-black, never flat black
-$steel: #1E2230; // secondary fills, rows, inactive slabs
-$chalk: #F2F5F8; // primary text
-$amber: #FFB020; // you, alive, active, winner
-$strike: #E01B24; // danger, eliminated, full
-$dim: rgba(242, 245, 248, 0.55); // secondary text on $void — 7.1:1, passes for body text
-$faint: rgba(242, 245, 248, 0.38); // tertiary labels only, never sentences
+// Paper: the storybook card.
+$paper: #FFF7E8;
+$paper-deep: #F7E8CC;
+$paper-edge: #E9D3A8;
+
+// Ink: plum, never black. Text on paper and the dark "night" surfaces.
+$ink: #3D2E5C;
+$ink-soft: #776A99;
+$ink-faint: rgba(61, 46, 92, 0.42);
+$night: #2B2142;
+
+// Pastel brick colours, each with the darker edge that makes it a brick.
+$butter: #FFCC61;
+$butter-deep: #E2A635;
+$mint: #7ADB94;
+$mint-deep: #48B067;
+$coral: #FF7A85;
+$coral-deep: #DD5361;
+$sky: #75B8FA;
+$sky-deep: #4C8FD6;
+$lilac: #D18AEB;
+$lilac-deep: #A862C4;
+$peach: #FFA375;
+$peach-deep: #E07C4C;
+
+// Semantic
+$you: $butter;
+$you-deep: $butter-deep;
+$help: $mint;
+$help-deep: $mint-deep;
+$harm: $coral;
+$harm-deep: $coral-deep;
 
 // Floor identity colours — the same values as ArenaGenerator.FloorColor(), top floor first, so the
-// menu's stack, the depth ladder and the arena itself all agree.
+// title tower, the depth ladder and the arena itself all agree.
 $floor0: #FFCC61;
 $floor1: #FFA375;
 $floor2: #FA8FB2;
@@ -95,16 +80,14 @@ $floor6: #61D1D1;
 $floor7: #7ADB94;
 $lava: #EB3861;
 
-// --- Depth --------------------------------------------------------------------------------
-// Solid shapes and a hard offset shadow. No frosted glass: depth comes from stacked opaque
-// forms and one strong edge, not from transparency.
+// --- Shape & depth ------------------------------------------------------------------------
 
-// FULLY OPAQUE, deliberately. At 0.92 the arena bled through by 8% — and the arena is a
-// checkerboard, so that 8% landed under the text as an interlaced pattern. That was the
-// "jagged/dithered" glyph rendering, not compression and not font hinting.
-$fill: #12141C;
-$drop: 0px 6px 0px rgba(0, 0, 0, 0.35);
-// Softer lift for the full-screen surfaces (menu, results): an offset plus a real blur, so large
-// plates sit above the arena instead of reading as stickers.
-$lift: 0px 14px 40px rgba(0, 0, 0, 0.55);
-$keyline: 3px;
+$radius-card: 28px;
+$radius-brick: 18px;
+$radius-pill: 999px;
+
+$brick-edge: 7px;
+
+// A flat offset shadow reads as a toy sitting on a table; a soft one lifts the big cards.
+$drop: 0px 8px 0px rgba(61, 46, 92, 0.22);
+$lift: 0px 18px 44px rgba(43, 33, 66, 0.35);

@@ -5,111 +5,152 @@
 @namespace Sandbox
 
 @*
-	The out-of-session shell: the title screen with its host-or-browse choice, and the lobby list
-	behind the second option. Both sit over the live arena — MenuCamera orbits it — on the left
-	third of the screen, so the world itself is the backdrop.
+	The out-of-session shell. The title page sits on the left third over the live arena — MenuCamera
+	orbits it — so the world itself is the backdrop. Loadout, profile and how-to-play open as big
+	storybook cards in the middle; the lobby list takes the left column in place of the buttons.
 *@
 
 <root>
-	<div class="menu @( Browsing ? "browsing" : "title" )">
+	<div class="menu page-@PageName">
 		<div class="scrim"></div>
 
-		<div class="column">
-			<div class="brand">
-				@* The arena in miniature: five floors stepping down into lava. The same colours as
-				   the tiles, so the mark is a diagram of the game, not decoration. *@
-				<div class="stack">
-					<div class="slab f0"></div>
-					<div class="slab f1"></div>
-					<div class="slab f2"></div>
-					<div class="slab f3"></div>
-					<div class="slab f4"></div>
-					<div class="slab lava"></div>
-				</div>
-
-				<label class="wordmark">TNT RUN</label>
-				<label class="pitch">Every tile you touch falls away. Be the last one standing.</label>
-			</div>
-
-			@if ( Browsing )
-			{
-				<BrowserPanel />
-			}
-			else
-			{
-				<div class="actions">
-					<div class="action primary @HostClass" onclick=@Host>
-						<i>@( IsBusy ? "hourglass_empty" : "play_arrow" )</i>
-						<div class="text">
-							<label class="name">@HostLabel</label>
-							<label class="hint">@HostHint</label>
-						</div>
+		@if ( Ui.Page == GameUi.MenuPage.Title || Ui.Page == GameUi.MenuPage.Browse )
+		{
+			<div class="column">
+				<div class="brand">
+					@* The tower in miniature: eight floors stepping down into candy lava. Same colours as
+					   the tiles, so the logo is a diagram of the game, not decoration. *@
+					<div class="tower">
+						<div class="slab f0"></div>
+						<div class="slab f1"></div>
+						<div class="slab f2"></div>
+						<div class="slab f3"></div>
+						<div class="slab f4"></div>
+						<div class="slab f5"></div>
+						<div class="slab f6"></div>
+						<div class="slab f7"></div>
+						<div class="slab lava"></div>
 					</div>
 
-					<div class="action secondary @BusyClass" onclick=@Browse>
-						<i>search</i>
-						<div class="text">
-							<label class="name">Find a game</label>
-							<label class="hint">Browse open lobbies and jump in</label>
+					<label class="wordmark">TNT Run</label>
+					<label class="pitch">Every tile you touch falls away. Shove, trick and outlast everyone.</label>
+				</div>
+
+				@if ( Ui.Page == GameUi.MenuPage.Browse )
+				{
+					<BrowserPanel />
+				}
+				else
+				{
+					<div class="actions">
+						<div class="brick big @HostClass" onclick=@Host>
+							<i>@( IsBusy ? "hourglass_empty" : "play_arrow" )</i>
+							<div class="text">
+								<label class="name">@HostLabel</label>
+								<label class="hint">@HostHint</label>
+							</div>
+						</div>
+
+						<div class="brick big sky @BusyClass" onclick=@Browse>
+							<i>travel_explore</i>
+							<div class="text">
+								<label class="name">Find a game</label>
+								<label class="hint">Join a lobby someone else is hosting</label>
+							</div>
+						</div>
+
+						<div class="row">
+							<div class="brick mint" onclick=@( () => Go( GameUi.MenuPage.Loadout ) )>
+								<i>bolt</i>
+								<label>Abilities</label>
+							</div>
+							<div class="brick lilac" onclick=@( () => Go( GameUi.MenuPage.Profile ) )>
+								<i>military_tech</i>
+								<label>Rank</label>
+							</div>
+							<div class="brick paper" onclick=@( () => Go( GameUi.MenuPage.HowTo ) )>
+								<i>help</i>
+								<label>How to play</label>
+							</div>
 						</div>
 					</div>
-				</div>
-			}
-		</div>
-
-		<div class="footer">
-			<div class="keys">
-				<div class="key">W</div><div class="key">A</div><div class="key">S</div><div class="key">D</div>
-				<label class="what">Move</label>
-				<div class="key wide">Shift</div>
-				<label class="what">Sprint</label>
-				<div class="key wide">Space</div>
-				<label class="what">Jump</label>
+				}
 			</div>
 
-			<label class="who">@PlayerName</label>
-		</div>
+			<div class="rank-badge" onclick=@( () => Go( GameUi.MenuPage.Profile ) )>
+				<div class="emblem" style="background-image: url(@Ranks.Emblem( RankPoints ))"></div>
+				<div class="text">
+					<label class="who">@PlayerName</label>
+					<label class="rank">@RankLine</label>
+				</div>
+			</div>
+
+			<div class="loadout-chip" onclick=@( () => Go( GameUi.MenuPage.Loadout ) )>
+				<AbilityChip Ability=@Profile.First Slot=@(0) />
+				<AbilityChip Ability=@Profile.Second Slot=@(1) />
+			</div>
+		}
+		else if ( Ui.Page == GameUi.MenuPage.Loadout )
+		{
+			<LoadoutPanel />
+		}
+		else if ( Ui.Page == GameUi.MenuPage.Profile )
+		{
+			<ProfilePanel />
+		}
+		else
+		{
+			<HowToPanel />
+		}
 	</div>
 </root>
 
 @code
 {
+	GameUi Ui => Scene.Get<GameUi>();
+
 	RoundManager Round => Scene.Get<RoundManager>();
 
-	LobbyBrowser Browser => Scene.Get<LobbyBrowser>();
+	ProfileStore Profile => Scene.Get<ProfileStore>();
 
-	bool Browsing => Browser?.IsBrowsing == true;
+	string PageName => Ui.Page.ToString().ToLowerInvariant();
 
 	/// <summary>Hosting or joining is in flight — both buttons stand down until it resolves.</summary>
 	bool IsBusy => Round?.IsStartingLobby == true || Networking.IsConnecting;
 
-	string BusyClass => IsBusy ? "busy" : "";
+	string BusyClass => IsBusy ? "disabled" : "";
 
-	string HostClass => IsBusy ? "busy pending" : "";
+	string HostClass => IsBusy ? "disabled" : "";
 
 	string HostLabel => Networking.IsConnecting ? "Joining…" : IsBusy ? "Starting lobby…" : "Host a game";
 
-	string HostHint => IsBusy ? "Hang tight, this takes a moment" : "Open a lobby others can find and join";
+	string HostHint => IsBusy ? "Hang tight, this takes a moment" : "Open a lobby and play with friends";
 
 	string PlayerName => Connection.Local?.DisplayName ?? "";
+
+	int RankPoints => Profile?.Profile.RankPoints ?? 0;
+
+	string RankLine => $"{Ranks.Name( RankPoints )}  ·  {RankPoints} RP";
 
 	void Host()
 	{
 		if ( IsBusy ) return;
 
-		Click();
+		Sfx.Ui( Sfx.Click );
 		Round?.Host();
 	}
 
 	void Browse()
 	{
 		if ( IsBusy ) return;
-
-		Click();
-		Browser?.StartBrowsing();
+		Go( GameUi.MenuPage.Browse );
 	}
 
-	static void Click() => Sound.Play( "sounds/kenney/ui/ui.button.press.sound" );
+	void Go( GameUi.MenuPage page )
+	{
+		Sfx.Ui( Sfx.Click );
+		Ui.Open( page );
+	}
 
-	protected override int BuildHash() => System.HashCode.Combine( Browsing, IsBusy, Networking.IsConnecting, PlayerName );
+	protected override int BuildHash() => HashCode.Combine( Ui?.Page, IsBusy, Networking.IsConnecting, PlayerName, Profile?.Revision );
 }

@@ -7,14 +7,16 @@
 @* The lobby list, shown inside MenuPanel's column in place of the host-or-browse buttons. *@
 
 <root>
-	<div class="browser">
+	<div class="card browser">
 		<div class="titlebar">
-			<div class="button back" onclick=@Back>
+			<div class="brick paper square" onclick=@Back>
 				<i>arrow_back</i>
 			</div>
-			<label class="title">Find a game</label>
-			<label class="status @( Browser.JoinFailed ? "error" : "" )">@StatusText</label>
-			<div class="button refresh @BusyClass" onclick=@Refresh>
+			<div class="titles">
+				<label class="title">Find a game</label>
+				<label class="status @( Browser.JoinFailed ? "error" : "" )">@StatusText</label>
+			</div>
+			<div class="brick sky square @BusyClass" onclick=@Refresh>
 				<i>refresh</i>
 			</div>
 		</div>
@@ -56,7 +58,7 @@
 	/// <summary>Whole seconds since the last result, so the readout ticks once a second.</summary>
 	int SecondsAgo => (int)Browser.SinceResult;
 
-	string BusyClass => Browser.IsQuerying ? "busy" : "";
+	string BusyClass => Browser.IsQuerying ? "disabled" : "";
 
 	string StatusText
 	{
@@ -81,25 +83,25 @@
 
 	void Refresh()
 	{
-		Sound.Play( "sounds/kenney/ui/ui.button.press.sound" );
+		Sfx.Ui( Sfx.Click );
 		Browser.Refresh();
 	}
 
 	void Back()
 	{
-		Sound.Play( "sounds/kenney/ui/ui.navigate.back.sound" );
-		Browser.StopBrowsing();
+		Sfx.Ui( Sfx.Back );
+		Scene.Get<GameUi>().Open( GameUi.MenuPage.Title );
 	}
 
 	void Join( LobbyInformation lobby )
 	{
 		if ( lobby.IsFull )
 		{
-			Sound.Play( "sounds/kenney/ui/ui.button.deny.sound" );
+			Sfx.Ui( Sfx.Deny );
 			return;
 		}
 
-		Sound.Play( "sounds/kenney/ui/ui.navigate.forward.sound" );
+		Sfx.Ui( Sfx.Confirm );
 		Browser.Join( lobby );
 	}
 

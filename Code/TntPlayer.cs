@@ -1,9 +1,14 @@
+using System;
 using Sandbox.Citizen;
 
 /// <summary>
 /// Player movement, third-person camera, spectating, ragdoll presentation and tile stepping.
-/// Builds its own <see cref="CharacterController"/> and Citizen body at runtime — no prefabs.
-/// Uses only the default input actions: forward, backward, left, right, jump, run.
+/// Builds its own <see cref="CharacterController"/> and Citizen body at runtime — no prefabs,
+/// plus its sibling components: <see cref="PlayerStatus"/> (timed effects),
+/// <see cref="PlayerAbilities"/> (the two loadout slots) and <see cref="PlayerCosmetics"/>
+/// (rank perks and status visuals).
+/// Uses only the default input actions: forward, backward, left, right, jump, run (and
+/// attack1/attack2, read by PlayerAbilities).
 /// </summary>
 public sealed class TntPlayer : Component, Component.INetworkSpawn
 {
@@ -32,7 +37,7 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	/// </summary>
 	public const float FootprintRadius = 12f;
 
-	/// <summary>How long a shoved player stays a ragdoll before snapping back to control.</summary>
+	/// <summary>Default time a knocked-down player stays a ragdoll. Hard hits last longer (PlayerImpacts).</summary>
 	public const float RagdollDuration = 1.3f;
 
 	/// <summary>
@@ -65,10 +70,39 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	/// Whether this player's feet should doom tiles right now. One definition shared by the
 	/// owner's step reports and every machine's warning tint.
 	/// </summary>
-	public bool CanMarkTiles => IsAlive && IsGrounded && !IsRagdolled;
+	public bool CanMarkTiles => IsAlive && IsGrounded && !IsRagdolled && !Status.Has( StatusKind.Ghost );
+
+	/// <summary>
+	/// Owner-synced rank points from the owner's local profile. Everyone else uses it for the
+	/// nameplate emblem and the rank perks. Owner-written because the profile lives on the owner's
+	/// machine (ranks are persisted locally).
+	/// </summary>
+	[Sync] public int RankPoints { get; set; }
+
+	public RankTier RankTier => Ranks.Tier( RankPoints );
 
 	/// <summary>The owning connection's name, or a placeholder before ownership lands.</summary>
 	public string DisplayName => Network.Owner?.DisplayName ?? "Player";
+
+	/// <summary>
+	/// This machine's own player, or null on the menu, while spectating a join, or on a dedicated
+	/// host. The one definition of "local player" every system shares.
+	/// </summary>
+	public static TntPlayer FindLocal( Scene scene ) => scene.GetAll<TntPlayer>().FirstOrDefault( p => !p.IsProxy );
+
+	/// <summary>Timed effects from abilities. Same object, every machine.</summary>
+	public PlayerStatus Status { get; private set; }
+
+	public PlayerAbilities Abilities { get; private set; }
+
+	/// <summary>The animated Citizen. Cosmetics hang their perks off it.</summary>
+	public SkinnedModelRenderer Body => _body;
+
+	/// <summary>Owner only: where this player is looking. Abilities aim along it.</summary>
+	public Angles EyeAngles => _eyeAngles;
+
+	/// <summary>Owner only: whether the sprint key is driving us right now.</summary>
+	public bool IsSprinting => _isSprinting;
 
 	/// <summary>
 	/// Floor index under the player, or -1 outside the arena. Delegates to the one implementation
@@ -133,9 +167,33 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 	TimeSince _sinceCreated;
 
+	/// <summary>Owner only: Double Jump spends this until the next landing.</summary>
+	bool _airJumpUsed;
+
+	/// <summary>Owner only: where we were, sampled for Rewind.</summary>
+	readonly Queue<(float Time, Vector3 Position)> _history = new();
+	TimeSince _sinceSample;
+
+	const float RewindSeconds = 3f;
+
+	/// <summary>Camera shake amplitude in degrees, decaying. Every machine shakes its own camera.</summary>
+	float _shake;
+
+	/// <summary>Extra field of view from a hit, decaying back to zero.</summary>
+	float _fovPunch;
+
+	float _baseFov;
+
+	/// <summary>Smoothed camera focus, so a tumbling ragdoll doesn't whip the view around.</summary>
+	Vector3 _cameraFocus;
+	bool _cameraFocusValid;
+
 	protected override void OnAwake()
 	{
 		_sinceCreated = 0f;
+
+		Status = GetOrAddComponent<PlayerStatus>();
+		Abilities = GetOrAddComponent<PlayerAbilities>();
 
 		_controller = GetOrAddComponent<CharacterController>();
 		_controller.Height = 72f;
@@ -171,6 +229,30 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		_arena = Scene.Get<ArenaGenerator>();
 		_decay = Scene.Get<TileDecay>();
 		_round = Scene.Get<RoundManager>();
+
+		// Presentation only, rebuilt on every machine like the Body — it reads synced state and
+		// nothing reads it back.
+		GetOrAddComponent<PlayerCosmetics>();
+		CreateNameplate();
+	}
+
+	/// <summary>
+	/// A world-space name tag over the head: name, rank emblem, status emote. Local, unsaved and
+	/// unnetworked like the Body, and hidden for this machine's own player by the panel itself.
+	/// </summary>
+	void CreateNameplate()
+	{
+		var tag = new GameObject( GameObject, true, "Nameplate" );
+		tag.Flags |= GameObjectFlags.NotSaved;
+		tag.NetworkMode = NetworkMode.Never;
+		tag.LocalPosition = Vector3.Up * 96f;
+
+		var world = tag.AddComponent<WorldPanel>();
+		world.PanelSize = new Vector2( 900f, 260f );
+		world.RenderScale = 1.5f;
+		world.LookAtCamera = true;
+
+		tag.AddComponent<Nameplate>().Player = this;
 	}
 
 	/// <summary>
@@ -197,6 +279,10 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	{
 		_clothing = ClothingContainer.CreateFromConnection( owner, false );
 		Dress( _body );
+
+		// Our own player: publish the rank from this machine's profile. Everyone else reads it.
+		if ( !IsProxy )
+			RankPoints = Scene.Get<ProfileStore>()?.Profile.RankPoints ?? 0;
 	}
 
 	/// <summary>
@@ -221,6 +307,8 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		UpdateRenderVelocity();
 		UpdateAnimation();
 		UpdateFootsteps();
+
+		UpdateCameraEffects();
 
 		if ( IsProxy ) return;
 
@@ -262,8 +350,21 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		Move();
 
 		IsGrounded = _controller.IsOnGround;
+		if ( IsGrounded ) _airJumpUsed = false;
 
+		SampleHistory();
 		UpdateTiles();
+	}
+
+	/// <summary>Owner: a position every 0.1s for the last few seconds, for Rewind.</summary>
+	void SampleHistory()
+	{
+		if ( _sinceSample < 0.1f ) return;
+		_sinceSample = 0f;
+
+		_history.Enqueue( (Time.Now, WorldPosition) );
+		while ( _history.Count > 0 && Time.Now - _history.Peek().Time > RewindSeconds + 0.5f )
+			_history.Dequeue();
 	}
 
 	/// <summary>Called by RoundManager on the host. Idempotent.</summary>
@@ -291,8 +392,8 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		// a death anyone saw, so it gets no blast.
 		if ( _sinceCreated < 1f ) return;
 
-		var blast = Sound.Play( "sounds/effects/explosion/explosion_small.sound", WorldPosition );
-		blast.Volume = 0.8f;
+		Sfx.At( Sfx.Blast, WorldPosition, 0.8f );
+		AbilityFx.Burst( WorldPosition + Vector3.Up * 20f, AbilityFx.Coral, 14, 340f, 12f );
 	}
 
 	/// <summary>
@@ -324,7 +425,78 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		// A new life starts with a clean slate, or tiles walked over in a previous one would
 		// never be reported again.
 		_reported.Clear();
+		_history.Clear();
+		_airJumpUsed = false;
 		SpectateTarget = null;
+		_cameraFocusValid = false;
+	}
+
+	/// <summary>A rebuilt tile (Patch, Bridge) must be reportable again by whoever stands on it.</summary>
+	public void ForgetReported( int packed ) => _reported.Remove( packed );
+
+	/// <summary>
+	/// Host → owner: add velocity. Dash, Hook, Super Jump and friends. Movement is owner-authoritative,
+	/// so the host can't move the body itself — it asks the owner to, like Respawn.
+	/// </summary>
+	[Rpc.Owner]
+	public void Launch( Vector3 velocity )
+	{
+		if ( !IsAlive || IsRagdolled ) return;
+
+		var horizontal = velocity.WithZ( 0f );
+		_controller.Velocity = _controller.Velocity.WithZ( 0f ) * 0.35f + horizontal;
+
+		// Punch lifts the controller off the ground so it doesn't immediately re-stick.
+		if ( velocity.z > 0f )
+			_controller.Punch( Vector3.Up * velocity.z );
+	}
+
+	/// <summary>Host → owner: put the body somewhere else. Blink and Swap.</summary>
+	[Rpc.Owner]
+	public void TeleportTo( Vector3 position )
+	{
+		if ( !IsAlive ) return;
+
+		EndRagdoll();
+		WorldPosition = position;
+		Transform.ClearInterpolation();
+		_controller.Velocity = Vector3.Zero;
+		_cameraFocusValid = false;
+	}
+
+	/// <summary>Host → owner: Rewind. Only the owner remembers where it has been.</summary>
+	[Rpc.Owner]
+	public void RewindNow()
+	{
+		if ( !IsAlive || _history.Count == 0 ) return;
+
+		var target = _history.Peek();
+		foreach ( var sample in _history )
+		{
+			if ( Time.Now - sample.Time <= RewindSeconds )
+			{
+				target = sample;
+				break;
+			}
+		}
+
+		AbilityFx.Line( WorldPosition + Vector3.Up * 36f, target.Position + Vector3.Up * 36f, AbilityFx.Lilac, 40f, 10f );
+		TeleportTo( target.Position + Vector3.Up * 4f );
+		_history.Clear();
+	}
+
+	/// <summary>
+	/// Host → owner, once per ranked round: how it went. The owner's profile is the only copy of
+	/// its rank, so this is where rank points actually change hands.
+	/// </summary>
+	[Rpc.Owner]
+	public void ReceiveRoundResult( int delta, int place, int players, int knockdowns )
+	{
+		var store = Scene.Get<ProfileStore>();
+		if ( store is null ) return;
+
+		store.ApplyRoundResult( delta, place, players, knockdowns );
+		RankPoints = store.Profile.RankPoints;
 	}
 
 	/// <summary>
@@ -333,7 +505,7 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	/// and the same launch velocity, and the owner's copy is the one the player's root follows.
 	/// </summary>
 	[Rpc.Broadcast( NetFlags.HostOnly )]
-	public void BeginRagdoll( Vector3 launchVelocity )
+	public void BeginRagdoll( Vector3 launchVelocity, float duration )
 	{
 		if ( !IsAlive ) return;
 		if ( IsRagdolled ) return;
@@ -365,10 +537,44 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		// ragdoll off itself. Lava detection doesn't depend on it — RoundManager checks height.
 		_capsule.Enabled = false;
 
-		_ragdollEnds = RagdollDuration;
+		_ragdollEnds = duration;
 
-		var thud = Sound.Play( "sounds/impacts/melee/impact-melee-flesh.sound", WorldPosition + Vector3.Up * 40f );
-		thud.Volume = 0.9f;
+		// Feel: the harder the hit, the louder and lower the thud, and the more nearby cameras shake.
+		var strength = (launchVelocity.Length / 700f).Clamp( 0.3f, 1.2f );
+		Sfx.At( Sfx.BodyHit, WorldPosition + Vector3.Up * 40f, 0.6f + 0.4f * strength, 1.15f - 0.25f * strength );
+		AbilityFx.Flash( WorldPosition + Vector3.Up * 40f, Color.White, 50f + 40f * strength );
+		AbilityFx.Burst( WorldPosition + Vector3.Up * 40f, AbilityFx.Butter, 6, 160f + 120f * strength, 7f );
+
+		ShakeNearby( WorldPosition, strength );
+	}
+
+	/// <summary>
+	/// Shake whichever camera this machine is driving, scaled by distance from the hit. Our own
+	/// knockdown shakes hardest; a crash across the floor barely registers.
+	/// </summary>
+	void ShakeNearby( Vector3 position, float strength )
+	{
+		var camera = Scene.Camera;
+		if ( !camera.IsValid() ) return;
+
+		var local = TntPlayer.FindLocal( Scene );
+		if ( local is null ) return;
+
+		var distance = camera.WorldPosition.Distance( position );
+		var falloff = (1f - distance / 900f).Clamp( 0f, 1f );
+		if ( falloff <= 0f ) return;
+
+		local._shake = MathF.Max( local._shake, 5f * strength * falloff );
+		local._fovPunch = MathF.Max( local._fovPunch, 9f * strength * falloff );
+	}
+
+	/// <summary>Owner: decay shake and FOV punch on the camera this machine is driving.</summary>
+	void UpdateCameraEffects()
+	{
+		if ( IsProxy ) return;
+
+		_shake = MathX.Approach( _shake, 0f, Time.Delta * 14f );
+		_fovPunch = MathX.Approach( _fovPunch, 0f, Time.Delta * 30f );
 	}
 
 	/// <summary>
@@ -390,7 +596,20 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 			_controller.Velocity = Vector3.Zero;
 			Transform.ClearInterpolation();
 		}
+
+		// Dazed for a moment after getting up — cartoon stars, and the body blinks (PlayerCosmetics)
+		// while PlayerImpacts' grace makes it impossible to floor again straight away.
+		if ( IsAlive )
+		{
+			AbilityFx.Dizzy( GameObject, PlayerImpacts.Immunity, AbilityFx.Butter );
+			_recoveredAt = 0f;
+		}
 	}
+
+	TimeSince _recoveredAt = 999f;
+
+	/// <summary>True for a moment after getting up from a ragdoll, on every machine — the body blinks.</summary>
+	public bool IsRecovering => _recoveredAt < PlayerImpacts.Immunity;
 
 	void UpdateRagdoll()
 	{
@@ -442,20 +661,32 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 	void Move()
 	{
+		var stunned = Status.Has( StatusKind.Stunned );
+		var iced = Status.Has( StatusKind.Ice );
+		var feather = Status.Has( StatusKind.FeatherFall );
+
 		var yaw = Rotation.FromYaw( _eyeAngles.yaw );
-		var wishDir = Input.AnalogMove * yaw;
+		var input = stunned ? Vector3.Zero : Input.AnalogMove;
+
+		// Confuse flips the stick both ways — forward walks you back, left goes right.
+		if ( Status.Has( StatusKind.Confused ) )
+			input = new Vector3( -input.x, -input.y, input.z );
+
+		var wishDir = input * yaw;
 		if ( !wishDir.IsNearZeroLength )
 			wishDir = wishDir.Normal;
 
 		_isSprinting = Input.Down( "run" ) && !wishDir.IsNearZeroLength;
-		_wishVelocity = wishDir * (_isSprinting ? SprintSpeed : WalkSpeed);
+		_wishVelocity = wishDir * (_isSprinting ? SprintSpeed : WalkSpeed) * Status.SpeedScale;
 
-		// Assigned every tick so inspector edits take effect live during Play.
-		_controller.Acceleration = GroundAcceleration;
+		if ( stunned ) _jumpQueued = false;
+
+		// Assigned every tick so inspector edits take effect live during Play. Ice barely grips.
+		_controller.Acceleration = iced ? GroundAcceleration * 0.18f : GroundAcceleration;
 
 		if ( _controller.IsOnGround )
 		{
-			_controller.ApplyFriction( GroundFriction, StopSpeed );
+			_controller.ApplyFriction( iced ? GroundFriction * 0.08f : GroundFriction, StopSpeed );
 			_controller.Accelerate( _wishVelocity );
 
 			if ( _jumpQueued )
@@ -468,11 +699,37 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		}
 		else
 		{
-			// Don't bank a mid-air press — it would fire the instant we land.
+			// Double Jump spends the press in mid-air; otherwise don't bank it, or it would fire
+			// the instant we land.
+			if ( _jumpQueued && !_airJumpUsed && Status.Has( StatusKind.DoubleJump ) )
+			{
+				_airJumpUsed = true;
+				_controller.Velocity = _controller.Velocity.WithZ( 0f );
+				_controller.Punch( Vector3.Up * JumpPower * 1.05f );
+				_animation.TriggerJump();
+				PlayJumpSound();
+				AbilityFx.Ring( WorldPosition, 50f, AbilityFx.Mint, 0.3f );
+			}
+
 			_jumpQueued = false;
 
-			_controller.Velocity += Scene.PhysicsWorld.Gravity * Time.Delta;
-			_controller.Accelerate( _wishVelocity * AirControl );
+			var gravity = Scene.PhysicsWorld.Gravity * (feather ? 0.22f : 1f);
+			_controller.Velocity += gravity * Time.Delta;
+
+			// Feather Fall also caps the drop and hands back real steering.
+			if ( feather && _controller.Velocity.z < -140f )
+				_controller.Velocity = _controller.Velocity.WithZ( -140f );
+
+			_controller.Accelerate( _wishVelocity * (feather ? 0.6f : AirControl) );
+		}
+
+		// Vortex: a steady pull towards the whirl's centre, owner-side so it's smooth at any ping.
+		if ( Status.Has( StatusKind.Vortex ) )
+		{
+			var toCentre = (Status.VortexCentre - WorldPosition).WithZ( 0f );
+			var distance = toCentre.Length;
+			if ( distance > 8f )
+				_controller.Velocity += toCentre / distance * 900f * Time.Delta;
 		}
 
 		MoveVelocity = _controller.Velocity;
@@ -511,13 +768,37 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	void UpdateCamera()
 	{
 		var target = WorldPosition + Vector3.Up * CameraTargetHeight;
-		PlaceCamera( target, _eyeAngles.ToRotation(), CameraDistance );
+
+		// Ease the focus while ragdolled: the root follows a tumbling pelvis, and a camera glued to
+		// it whips with every bounce. Snapped when controlled, so running never feels floaty.
+		if ( !_cameraFocusValid || !IsRagdolled )
+			_cameraFocus = target;
+		else
+			_cameraFocus = Vector3.Lerp( _cameraFocus, target, (Time.Delta * 8f).Clamp( 0f, 1f ) );
+
+		_cameraFocusValid = true;
+
+		// Pull back a little while down, so you can see where you're about to land.
+		var distance = IsRagdolled ? CameraDistance * 1.25f : CameraDistance;
+		PlaceCamera( _cameraFocus, _eyeAngles.ToRotation(), distance );
 	}
 
 	void PlaceCamera( Vector3 target, Rotation rotation, float distance )
 	{
 		var camera = Scene.Camera;
 		if ( !camera.IsValid() ) return;
+
+		if ( _baseFov <= 0f ) _baseFov = camera.FieldOfView;
+		camera.FieldOfView = _baseFov + _fovPunch;
+
+		if ( _shake > 0.01f )
+		{
+			var jitter = new Angles(
+				(Game.Random.NextSingle() - 0.5f) * 2f * _shake,
+				(Game.Random.NextSingle() - 0.5f) * 2f * _shake,
+				(Game.Random.NextSingle() - 0.5f) * _shake );
+			rotation *= jitter.ToRotation();
+		}
 
 		var desired = target - rotation.Forward * distance;
 
@@ -626,8 +907,7 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 		if ( grounded && !_wasGrounded && _airborneFromZ - WorldPosition.z > 40f )
 		{
-			var land = Sound.Play( "sounds/footsteps/footstep-concrete-land.sound", WorldPosition );
-			land.Volume = 0.9f;
+			Sfx.At( Sfx.FootstepLand, WorldPosition, 0.9f );
 			_strideDistance = 0f;
 		}
 
@@ -643,14 +923,12 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 		_strideDistance = 0f;
 
-		var step = Sound.Play( "sounds/footsteps/footstep-concrete.sound", WorldPosition );
-		step.Volume = IsProxy ? 0.35f : 0.5f;
+		Sfx.At( Sfx.Footstep, WorldPosition, IsProxy ? 0.35f : 0.5f );
 	}
 
 	void PlayJumpSound()
 	{
-		var jump = Sound.Play( "sounds/footsteps/footstep-concrete-jump.sound", WorldPosition );
-		jump.Volume = 0.6f;
+		Sfx.At( Sfx.FootstepJump, WorldPosition, 0.6f );
 	}
 
 	protected override void OnDestroy()

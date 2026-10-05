@@ -156,6 +156,10 @@ public sealed class ArenaGenerator : Component
 
 		_lavaRenderer.Tint = Color.Lerp( LavaColor, LavaHotColor, pulse );
 		_lavaLight.LightColor = LavaGlowColor * (0.8f + 0.35f * pulse);
+
+		// The whole cloud ring turns very slowly — enough to feel alive behind a standing player.
+		if ( _clouds.IsValid() )
+			_clouds.LocalRotation = Rotation.FromYaw( t * 0.6f );
 	}
 
 	void Generate()
@@ -199,6 +203,7 @@ public sealed class ArenaGenerator : Component
 
 		CreateFrame( boxModel, span );
 		CreateLava( boxModel, span );
+		CreateClouds();
 		ConfigureLighting();
 		ConfigureCamera();
 
@@ -446,6 +451,61 @@ public sealed class ArenaGenerator : Component
 	/// LocalScale, and a child would inherit it — both its offset and the light's radius would
 	/// come out stretched.
 	/// </summary>
+	/// <summary>
+	/// Puffy toy clouds drifting in a wide ring around the tower, so the flat pastel sky has depth
+	/// and the menu orbit has something passing by. Clusters of matte spheres — no models of our
+	/// own, no colliders, nothing that could ever be stood on. Deterministic, so every machine
+	/// sees the same sky.
+	/// </summary>
+	void CreateClouds()
+	{
+		var sphere = Model.Load( "models/dev/sphere.vmdl" );
+		var units = MathF.Max( sphere.Bounds.Size.x, 1f );
+		var random = new System.Random( 2024 );
+
+		var sky = new GameObject( GameObject, true, "Clouds" );
+		MakeLocalOnly( sky );
+
+		const int Count = 16;
+		var towerDepth = (Arena.FloorCount - 1) * Arena.FloorGap;
+
+		for ( var i = 0; i < Count; i++ )
+		{
+			var yaw = i * 360f / Count + (float)random.NextDouble() * 14f;
+			var distance = 3400f + (float)random.NextDouble() * 2200f;
+			var height = 300f - (float)random.NextDouble() * (towerDepth + 900f);
+
+			var cloud = new GameObject( sky, true, "Cloud" );
+			cloud.LocalPosition = Rotation.FromYaw( yaw ).Forward * distance + Vector3.Up * height;
+			cloud.LocalRotation = Rotation.FromYaw( (float)random.NextDouble() * 360f );
+			MakeLocalOnly( cloud );
+
+			var puffs = 3 + random.Next( 3 );
+			for ( var p = 0; p < puffs; p++ )
+			{
+				var size = 260f + (float)random.NextDouble() * 260f;
+				var puff = new GameObject( cloud, true, "Puff" );
+				puff.LocalPosition = new Vector3( (p - puffs * 0.5f) * 210f, (float)random.NextDouble() * 120f - 60f, (float)random.NextDouble() * 80f );
+				puff.LocalScale = new Vector3( size, size * 0.85f, size * 0.62f ) / units;
+				MakeLocalOnly( puff );
+
+				var renderer = puff.AddComponent<ModelRenderer>();
+				renderer.Model = sphere;
+				// Self-lit: a lit sphere seen from the side is half shadow, and a grey cloud reads as
+				// smoke. A dimmed emissive white lands as soft cream under the tonemapper.
+				renderer.MaterialOverride = _glowMaterial;
+				renderer.Tint = CloudColor;
+				renderer.RenderType = ModelRenderer.ShadowRenderType.Off;
+			}
+		}
+
+		_clouds = sky;
+	}
+
+	GameObject _clouds;
+
+	static readonly Color CloudColor = new Color( 0.60f, 0.60f, 0.64f );
+
 	void CreateLavaGlow( float lavaZ, float span )
 	{
 		var glow = new GameObject( GameObject, true, "Lava Glow" );
@@ -606,6 +666,43 @@ public sealed class ArenaGenerator : Component
 		}
 
 		return count;
+	}
+
+	/// <summary>
+	/// The floor you would land on from here: the one whose top face is at, or first below, this
+	/// height. Unlike <see cref="TryGetTileIndex"/>, which rounds to the nearest floor for a
+	/// grounded player, this never answers with the floor above someone who is mid-fall.
+	/// </summary>
+	public bool TryGetFloorBelow( Vector3 worldPosition, out int floor )
+	{
+		var local = worldPosition - GridOrigin;
+		var drop = (Arena.TileThickness * 0.5f - local.z) / Arena.FloorGap;
+
+		floor = (int)MathF.Ceiling( drop - 0.08f );
+		if ( floor < 0 ) floor = 0;
+		return floor < Arena.FloorCount;
+	}
+
+	/// <summary>Column and row under a world position, ignoring height. False outside the grid.</summary>
+	public bool TryGetColumn( Vector3 worldPosition, out int x, out int y )
+	{
+		var local = worldPosition - GridOrigin;
+		x = FloorToTile( local.x );
+		y = FloorToTile( local.y );
+		return x >= 0 && y >= 0 && x < Arena.GridSize && y < Arena.GridSize;
+	}
+
+	/// <summary>World position of the centre of a tile's top face.</summary>
+	public Vector3 TileTop( int floor, int x, int y )
+	{
+		return WorldPosition + TileLocalPosition( floor, x, y ) + Vector3.Up * (Arena.TileThickness * 0.5f);
+	}
+
+	/// <summary>True if the tile exists and hasn't collapsed.</summary>
+	public bool IsTileStanding( int floor, int x, int y )
+	{
+		var tile = GetTile( floor, x, y );
+		return tile is not null && tile.Enabled;
 	}
 
 	/// <summary>Floor, not truncate — a coordinate just off the min edge must land on -1, not 0.</summary>

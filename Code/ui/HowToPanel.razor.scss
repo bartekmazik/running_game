@@ -1,0 +1,127 @@
+@import "_ui.scss";
+@import "_kit.scss";
+
+HowToPanel {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+	pointer-events: all;
+	font-family: $font-body;
+}
+
+.sheet {
+	width: 1180px;
+	padding: $s6 $s7;
+	animation: card-in 0.25s ease-out both;
+}
+
+@keyframes card-in {
+	from { opacity: 0; transform: translateY(30px) scale(0.97); }
+	to { opacity: 1; transform: translateY(0px) scale(1); }
+}
+
+.head {
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: $s5;
+
+	.title {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 44px;
+		color: $ink;
+		margin: 0px $s3;
+	}
+}
+
+.rules {
+	flex-direction: row;
+	justify-content: space-between;
+	margin-bottom: $s6;
+}
+
+.rule {
+	width: 200px;
+	flex-direction: column;
+	align-items: center;
+
+	.icon {
+		width: 92px;
+		height: 92px;
+		border-radius: 28px;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: $s3;
+
+		i {
+			font-family: "Material Icons";
+			font-size: 54px;
+			color: $ink;
+		}
+
+		&.butter { background-color: $butter; border-bottom: 7px solid $butter-deep; }
+		&.sky { background-color: $sky; border-bottom: 7px solid $sky-deep; }
+		&.coral { background-color: $coral; border-bottom: 7px solid $coral-deep; }
+		&.mint { background-color: $mint; border-bottom: 7px solid $mint-deep; }
+		&.lilac { background-color: $lilac; border-bottom: 7px solid $lilac-deep; }
+	}
+
+	.name {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 22px;
+		color: $ink;
+		margin-bottom: $s1;
+	}
+
+	.text {
+		font-size: 15px;
+		line-height: 1.35;
+		color: $ink-soft;
+		text-align: center;
+	}
+}
+
+.controls {
+	flex-direction: row;
+	justify-content: center;
+	padding: $s4;
+	border-radius: 22px;
+	background-color: $night;
+}
+
+.control {
+	flex-direction: row;
+	align-items: center;
+	margin: 0px $s5;
+
+	.prompt {
+		width: 52px;
+		height: 52px;
+		margin-right: 4px;
+		background-size: contain;
+		background-repeat: no-repeat;
+		background-position: center;
+
+		&.wide { width: 92px; }
+	}
+
+	label {
+		margin-left: $s2;
+		font-family: $font-title;
+		font-weight: 700;
+		font-size: 18px;
+		color: $paper;
+	}
+}
+
+.foot {
+	flex-direction: row;
+	justify-content: flex-end;
+	margin-top: $s5;
+
+	.brick { min-width: 170px; }
+}

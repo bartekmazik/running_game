@@ -1,0 +1,48 @@
+@import "_ui.scss";
+
+AbilityChip {
+	flex-direction: row;
+	align-items: center;
+	margin-left: 12px;
+	padding: 8px 18px 8px 8px;
+	border-radius: 999px;
+	background-color: $paper;
+	border-bottom: 6px solid $paper-edge;
+	box-shadow: $drop;
+
+	.prompt {
+		width: 34px;
+		height: 34px;
+		margin-right: 6px;
+		background-size: 80%;
+		background-repeat: no-repeat;
+		background-position: center;
+		background-color: $ink;
+		border-radius: 17px;
+	}
+
+	.icon {
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
+		align-items: center;
+		justify-content: center;
+		margin-right: 10px;
+
+		i {
+			font-family: "Material Icons";
+			font-size: 28px;
+			color: $ink;
+		}
+	}
+
+	.name {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 19px;
+		color: $ink;
+	}
+
+	&.help .icon { background-color: $help; border-bottom: 4px solid $help-deep; }
+	&.harm .icon { background-color: $harm; border-bottom: 4px solid $harm-deep; }
+}

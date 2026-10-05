@@ -25,11 +25,32 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		public readonly int Remaining;
 		public readonly float Time;
 
-		public FeedEntry( string name, int remaining, float time )
+		/// <summary>Who knocked them in, if anyone did within the credit window. Empty otherwise.</summary>
+		public readonly string By;
+
+		public FeedEntry( string name, int remaining, float time, string by )
 		{
 			Name = name;
 			Remaining = remaining;
 			Time = time;
+			By = by;
+		}
+	}
+
+	/// <summary>One row of the results table, set on every machine at Ended.</summary>
+	public readonly struct ResultRow
+	{
+		public readonly string Name;
+		public readonly int Points;
+		public readonly int Knockdowns;
+		public readonly int RankPoints;
+
+		public ResultRow( string name, int points, int knockdowns, int rankPoints )
+		{
+			Name = name;
+			Points = points;
+			Knockdowns = knockdowns;
+			RankPoints = rankPoints;
 		}
 	}
 
@@ -58,6 +79,12 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	/// </summary>
 	public IReadOnlyList<string> LastResults => _lastResults;
 
+	/// <summary>Points, knockdowns and rank for each row of <see cref="LastResults"/>, same order.</summary>
+	public IReadOnlyList<ResultRow> LastRows => _lastRows;
+
+	/// <summary>Whether the last round counted towards rank (it had at least two starters).</summary>
+	public bool LastRoundRanked { get; private set; }
+
 	/// <summary>How long the last round lasted, as the host measured it.</summary>
 	public float LastRoundDuration { get; private set; }
 
@@ -72,6 +99,9 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 	ArenaGenerator _arena;
 	TileDecay _decay;
+	MatchScore _score;
+	AbilitySystem _abilities;
+
 
 	TimeUntil _restartAt;
 
@@ -86,13 +116,16 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	int _playersAtRoundStart;
 
 	/// <summary>
-	/// Who fell this round, first out first. Kept on every machine, not just the host, so that if
-	/// the host leaves mid-round and the session migrates, the new host can still write the
-	/// standings. Same reason <see cref="_playersAtRoundStart"/> is broadcast.
+	/// Who fell this round, first out first, by player object id — not by name, since two players
+	/// can share a Steam name — and when each fell. Kept on every machine, not just the host, so
+	/// that if the host leaves mid-round and the session migrates, the new host can still write
+	/// the standings. Same reason <see cref="_playersAtRoundStart"/> is broadcast.
 	/// </summary>
-	readonly List<string> _eliminated = new();
+	readonly List<System.Guid> _eliminatedIds = new();
+	readonly Dictionary<System.Guid, float> _fellAt = new();
 
 	string[] _lastResults = System.Array.Empty<string>();
+	ResultRow[] _lastRows = System.Array.Empty<ResultRow>();
 
 	readonly List<FeedEntry> _feed = new();
 
@@ -140,9 +173,13 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		_arena = Scene.Get<ArenaGenerator>();
 		_decay = Scene.Get<TileDecay>();
 
-		// Runtime-built like everything else: the scene holds exactly three objects.
+		// Runtime-built like everything else: the scene holds exactly three objects. Order matters
+		// where one component's OnAwake looks up another: the profile and the score come first.
+		GameObject.GetOrAddComponent<ProfileStore>();
+		_score = GameObject.GetOrAddComponent<MatchScore>();
 		GameObject.GetOrAddComponent<TileWarning>();
 		GameObject.GetOrAddComponent<PlayerImpacts>();
+		_abilities = GameObject.GetOrAddComponent<AbilitySystem>();
 		GameObject.GetOrAddComponent<MenuCamera>();
 
 		CreateUi();
@@ -232,7 +269,13 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 				// Joining on the results screen: they'd otherwise see an empty table.
 				if ( State == RoundState.Ended )
-					AnnounceResults( _lastResults, LastRoundDuration, LastWinner );
+				{
+					AnnounceResults( _lastResults,
+						_lastRows.Select( r => r.Points ).ToArray(),
+						_lastRows.Select( r => r.Knockdowns ).ToArray(),
+						_lastRows.Select( r => r.RankPoints ).ToArray(),
+						LastRoundDuration, LastWinner, LastRoundRanked );
+				}
 			}
 		}
 
@@ -326,8 +369,14 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		}
 
 		player.Eliminate();
+		player.Status.ClearAll();
 
-		AnnounceElimination( player.DisplayName, AliveCount );
+		// Pushed, shoved or sabotaged in the last few seconds? Whoever did it gets the credit.
+		var by = _score.ClaimElimination( player );
+		if ( by is not null && by.IsValid() )
+			_score.Award( by, MatchScore.EliminationPoints, "Elimination" );
+
+		AnnounceElimination( player.DisplayName, player.GameObject.Id, AliveCount, by is not null && by.IsValid() ? by.DisplayName : "" );
 	}
 
 	void TickWaiting()
@@ -372,6 +421,7 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 		SetState( RoundState.Waiting );
 		RespawnEveryone();
+		_abilities.ResetRound();
 	}
 
 	void StartRound()
@@ -379,6 +429,9 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		// Broadcast first: every machine resets its own arena as part of entering Playing,
 		// so nobody respawns onto tiles that are still collapsed locally.
 		SetState( RoundState.Playing );
+
+		_score.ResetRound();
+		_abilities.ResetRound();
 
 		AnnounceRoundStart( RespawnEveryone() );
 	}
@@ -398,6 +451,7 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		{
 			// IsAlive is FromHost, so it has to be written here, not inside Respawn.
 			players[i].IsAlive = true;
+			players[i].Status.ClearAll();
 			players[i].Respawn( i, players.Count );
 		}
 
@@ -406,15 +460,61 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 	void EndRound()
 	{
-		var survivors = Players.Where( p => p.IsAlive ).Select( p => p.DisplayName );
-
 		// Winner first, then everyone else in reverse order of falling — last out is second.
-		var results = survivors.Concat( Enumerable.Reverse( _eliminated ) ).ToArray();
+		// Late joiners spectate and were never in the round, so they're in neither list.
+		var fallen = Enumerable.Reverse( _eliminatedIds )
+			.Select( id => Players.FirstOrDefault( p => p.GameObject.Id == id ) )
+			.Where( p => p is not null );
+
+		var order = Players.Where( p => p.IsAlive ).Concat( fallen ).ToList();
+		var ranked = _playersAtRoundStart > 1;
+		var duration = _roundElapsed.Relative;
+
+		// Placement and survival points land before the table is built, so it shows final totals.
+		for ( var i = 0; i < order.Count; i++ )
+		{
+			var place = i + 1;
+			var player = order[i];
+
+			var bonus = place switch
+			{
+				1 => MatchScore.WinPoints,
+				2 => MatchScore.SecondPoints,
+				3 => MatchScore.ThirdPoints,
+				_ => 0
+			};
+
+			if ( ranked && bonus > 0 ) _score.Award( player, bonus, place == 1 ? "Winner" : $"#{place}" );
+
+			var alive = player.IsAlive ? duration : SurvivedFor( player, duration );
+			_score.Award( player, (int)(alive * MatchScore.SurvivalPointsPerSecond), "Survival" );
+		}
+
+		var results = order.Select( p => p.DisplayName ).ToArray();
+		var points = order.Select( p => _score.PointsOf( p ) ).ToArray();
+		var knockdowns = order.Select( p => _score.KnockdownsOf( p ) ).ToArray();
+		var rank = order.Select( p => p.RankPoints ).ToArray();
 
 		SetState( RoundState.Ended );
-		AnnounceResults( results, _roundElapsed.Relative, results.Length > 0 && _playersAtRoundStart > 1 ? results[0] : "" );
+		AnnounceResults( results, points, knockdowns, rank, duration, ranked && results.Length > 0 ? results[0] : "", ranked );
+
+		// Rank points travel to each owner, whose profile is the only copy of their rank.
+		if ( ranked )
+		{
+			for ( var i = 0; i < order.Count; i++ )
+			{
+				var delta = Ranks.Delta( i + 1, order.Count, points[i] );
+				order[i].ReceiveRoundResult( delta, i + 1, order.Count, knockdowns[i] );
+			}
+		}
 
 		_restartAt = RestartDelay;
+	}
+
+	/// <summary>How long an eliminated player lasted, in seconds into the round.</summary>
+	float SurvivedFor( TntPlayer player, float duration )
+	{
+		return _fellAt.TryGetValue( player.GameObject.Id, out var at ) ? at : duration;
 	}
 
 	/// <summary>
@@ -477,17 +577,20 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	void AnnounceRoundStart( int players )
 	{
 		_playersAtRoundStart = players;
-		_eliminated.Clear();
+		_eliminatedIds.Clear();
+		_fellAt.Clear();
+		Scene.Get<ProfileStore>()?.ClearLastDelta();
 
 		Log.Info( $"Round: started with {players} player(s)" );
 	}
 
 	[Rpc.Broadcast( NetFlags.HostOnly )]
-	void AnnounceElimination( string name, int remaining )
+	void AnnounceElimination( string name, System.Guid id, int remaining, string by )
 	{
-		_eliminated.Add( name );
+		_eliminatedIds.Add( id );
+		_fellAt[id] = _roundElapsed.Relative;
 
-		_feed.Add( new FeedEntry( name, remaining, Time.Now ) );
+		_feed.Add( new FeedEntry( name, remaining, Time.Now, by ) );
 		if ( _feed.Count > MaxFeedEntries ) _feed.RemoveAt( 0 );
 		FeedRevision++;
 
@@ -495,11 +598,16 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	}
 
 	[Rpc.Broadcast( NetFlags.HostOnly )]
-	void AnnounceResults( string[] results, float duration, string winner )
+	void AnnounceResults( string[] results, int[] points, int[] knockdowns, int[] rank, float duration, string winner, bool ranked )
 	{
 		_lastResults = results;
+		_lastRows = new ResultRow[results.Length];
+		for ( var i = 0; i < results.Length; i++ )
+			_lastRows[i] = new ResultRow( results[i], points[i], knockdowns[i], rank[i] );
+
 		LastRoundDuration = duration;
 		LastWinner = winner;
+		LastRoundRanked = ranked;
 
 		// Each machine runs its own restart clock, like the countdown, for the results screen.
 		_restartAt = RestartDelay;

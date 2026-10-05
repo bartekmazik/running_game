@@ -1,0 +1,73 @@
+@using System;
+@using Sandbox;
+@using Sandbox.UI;
+@namespace Sandbox
+@inherits PanelComponent
+
+@*
+	The tag over another player's head: rank emblem, name, and a Kenney emote for whatever is
+	happening to them. A world-space PanelComponent on its own GameObject — PanelComponents can't
+	nest, but each WorldPanel is a root of its own, so one per player is the shipped pattern.
+
+	Hidden for this machine's own player (you don't need your own name over your head) and for
+	spectators. Rank colour on the name is a Silver+ perk; Master's name is gold (see Ranks).
+*@
+
+<root class="@RootClass">
+	@if ( Visible )
+	{
+		<div class="tag">
+			@if ( !string.IsNullOrEmpty( Emote ) )
+			{
+				<div class="emote" style="background-image: url(@Emote)"></div>
+			}
+			<div class="plate">
+				<div class="emblem" style="background-image: url(@Ranks.Emblem( Player.RankPoints ))"></div>
+				<label class="name" style="color: @NameColour">@Player.DisplayName</label>
+			</div>
+		</div>
+	}
+</root>
+
+@code
+{
+	public TntPlayer Player { get; set; }
+
+	bool IsLocal => Player is not null && Player == TntPlayer.FindLocal( Scene );
+
+	bool Visible => Player is not null && Player.IsValid() && Player.IsAlive && !IsLocal;
+
+	string RootClass => Visible ? "" : "hidden";
+
+	string NameColour
+	{
+		get
+		{
+			var tier = Player.RankTier;
+			if ( tier < RankTier.Silver ) return "#FFFFFF";
+			return Ranks.TierHex( tier );
+		}
+	}
+
+	/// <summary>The emote that best says what's happening to them right now, if anything.</summary>
+	string Emote
+	{
+		get
+		{
+			var status = Player.Status;
+			if ( Player.IsRagdolled ) return "/ui/kenney/emotes/stars.svg";
+			if ( status.Has( StatusKind.Stunned ) ) return "/ui/kenney/emotes/swirl.svg";
+			if ( status.Has( StatusKind.Confused ) ) return "/ui/kenney/emotes/question.svg";
+			if ( status.Has( StatusKind.Blackout ) ) return "/ui/kenney/emotes/sleeps.svg";
+			if ( status.Has( StatusKind.HeavyBoots ) ) return "/ui/kenney/emotes/anger.svg";
+			if ( status.Has( StatusKind.Glue ) ) return "/ui/kenney/emotes/drops.svg";
+			if ( status.Has( StatusKind.Vortex ) ) return "/ui/kenney/emotes/exclamations.svg";
+			if ( status.Has( StatusKind.Ice ) ) return "/ui/kenney/emotes/exclamation.svg";
+			return null;
+		}
+	}
+
+	protected override int BuildHash() => Player is null
+		? 0
+		: HashCode.Combine( Visible, Player.DisplayName, Player.RankPoints, Emote );
+}

@@ -1,0 +1,94 @@
+// Reusable pieces shared by every screen. Import after _ui.scss.
+
+// The storybook card: cream paper with a darker bottom lip, like a thick page.
+.card {
+	flex-direction: column;
+	background-color: $paper;
+	border-radius: $radius-card;
+	border-bottom: 10px solid $paper-edge;
+	box-shadow: $lift;
+	padding: $s6;
+	color: $ink;
+}
+
+// A toy brick button. Colour comes from a modifier class; the darker bottom edge is the brick.
+.brick {
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding: $s3 $s5;
+	border-radius: $radius-brick;
+	border-bottom: $brick-edge solid $butter-deep;
+	background-color: $butter;
+	color: $ink;
+	font-family: $font-title;
+	font-weight: 800;
+	font-size: 22px;
+	cursor: pointer;
+	pointer-events: all;
+	transition: all 0.08s ease-out;
+
+	i {
+		font-family: "Material Icons";
+		font-size: 28px;
+		margin-right: $s2;
+	}
+
+	&:hover {
+		transform: translateY(-2px);
+		border-bottom-width: $brick-edge + 2px;
+	}
+
+	&:active {
+		transform: translateY(4px);
+		border-bottom-width: 2px;
+	}
+
+	&.mint { background-color: $mint; border-bottom-color: $mint-deep; }
+	&.coral { background-color: $coral; border-bottom-color: $coral-deep; }
+	&.sky { background-color: $sky; border-bottom-color: $sky-deep; }
+	&.lilac { background-color: $lilac; border-bottom-color: $lilac-deep; }
+	&.peach { background-color: $peach; border-bottom-color: $peach-deep; }
+	&.paper { background-color: $paper-deep; border-bottom-color: $paper-edge; }
+
+	&.disabled {
+		background-color: #E4DCEB;
+		border-bottom-color: #C9BCD6;
+		color: $ink-faint;
+		cursor: default;
+
+		&:hover, &:active {
+			transform: none;
+			border-bottom-width: $brick-edge;
+		}
+	}
+}
+
+// Small rounded label on paper.
+.pill {
+	flex-direction: row;
+	align-items: center;
+	padding: $s1 $s3;
+	border-radius: $radius-pill;
+	background-color: $paper-deep;
+	color: $ink;
+	font-family: $font-title;
+	font-weight: 700;
+	font-size: 15px;
+}
+
+// A Kenney key/mouse prompt, drawn from Assets/ui/kenney/prompts.
+.prompt {
+	width: 40px;
+	height: 40px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+// Twinkle stars flanking a card title, as in the reference book UI.
+.sparkle {
+	font-family: "Material Icons";
+	font-size: 26px;
+	color: $butter-deep;
+}

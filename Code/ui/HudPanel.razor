@@ -5,58 +5,52 @@
 @using Sandbox.UI;
 @namespace Sandbox
 
-<root>
-	<div class="hud @StateClass @UrgentClass">
-		@* Ambient framing. Purely decorative, no data — depth at the screen edges and four
-		   angular brackets so the play area reads as a framed instrument. *@
-		<div class="vignette"></div>
-		<div class="corner tl"></div>
-		<div class="corner tr"></div>
-		<div class="corner bl"></div>
-		<div class="corner br"></div>
+@*
+	In-round HUD. Corners hold the slow-changing facts (who's left, the feed, your depth), the top
+	centre the one number that matters right now, and the bottom centre the two things your hands
+	do — your abilities — with your points beside them. Everything big and loud is a moment:
+	"Run!", "Out!", a status landing on you.
+*@
 
-		<div class="roundstate">
-			<label class="headline @HeadlineFont">@Headline</label>
-			<div class="rule"></div>
+<root>
+	<div class="hud @StateClass">
+		@if ( IsBlackedOut )
+		{
+			<div class="blackout"></div>
+		}
+
+		<div class="roundstate @UrgentClass">
+			<div class="clock">
+				<label class="headline">@Headline</label>
+			</div>
 			@if ( !string.IsNullOrEmpty( Subline ) )
 			{
 				<label class="subline">@Subline</label>
 			}
 
-			@* Countdown drains as a bar. Same number as the headline, read as a quantity rather
-			   than a digit — you see "almost out" without reading. *@
 			@if ( IsCountingDown )
 			{
 				<div class="drain">
 					<div class="fill" style="width: @(CountdownPercent)%"></div>
 				</div>
 			}
-
-			@if ( IsWarmup )
-			{
-				<label class="warmup">Warm-up. The floor holds until the round starts.</label>
-			}
 		</div>
 
 		<div class="alive">
-			<div class="head">
-				<i>person</i>
-				<label class="value">@AliveValue</label>
-			</div>
-
-			@* One pip per player, lit while they are still standing. *@
-			<div class="pips">
-				@foreach ( var index in PlayerSlots )
-				{
-					<div class="pip @PipClass( index )"></div>
-				}
-			</div>
+			<i>groups</i>
+			<label class="value">@AliveValue</label>
+			<label class="unit">@AliveUnit</label>
 		</div>
 
 		<div class="feed">
 			@foreach ( var entry in VisibleFeed )
 			{
 				<div class="line">
+					@if ( !string.IsNullOrEmpty( entry.By ) )
+					{
+						<label class="who by">@entry.By</label>
+						<i>sports_kabaddi</i>
+					}
 					<label class="who">@entry.Name</label>
 					<label class="what">@FeedText( entry )</label>
 				</div>
@@ -64,39 +58,93 @@
 		</div>
 
 		<div class="ladder">
-			<label class="cap">DEPTH</label>
+			<label class="cap">@FloorLabel</label>
 
 			@foreach ( var index in FloorIndices )
 			{
 				<div class="rung f@(index) @FloorClass( index )">
-					<div class="mark"></div>
 					<div class="bar"></div>
+					@if ( index == CurrentFloor )
+					{
+						<div class="you"><i>arrow_left</i></div>
+					}
 				</div>
 			}
+			<div class="rung lava"><div class="bar"></div></div>
 		</div>
+
+		@if ( ShowAbilities )
+		{
+			<div class="bottom">
+				<div class="statuses">
+					@foreach ( var status in Statuses )
+					{
+						<div class="status @( PlayerStatus.IsDebuff( status ) ? "bad" : "good" )">
+							<label class="what">@PlayerStatus.Label( status )</label>
+							<label class="time">@StatusTime( status )</label>
+						</div>
+					}
+				</div>
+
+				<div class="bar-row">
+					<div class="points">
+						<i>star</i>
+						<label class="value">@PointsValue</label>
+						<div class="popups">
+							@foreach ( var popup in VisiblePopups )
+							{
+								<label class="popup">@PopupText( popup )</label>
+							}
+						</div>
+					</div>
+
+					@for ( var slot = 0; slot < 2; slot++ )
+					{
+						var s = slot;
+						var info = AbilityCatalog.Get( SlotAbility( s ) );
+
+						<div class="ability @( info.Kind == AbilityKind.Help ? "help" : "harm" ) @SlotState( s )">
+							<div class="face">
+								<i>@info.Icon</i>
+								<div class="cooldown" style="height: @(CooldownPercent( s ))%"></div>
+								@if ( IsCooling( s ) )
+								{
+									<label class="seconds">@CooldownSeconds( s )</label>
+								}
+							</div>
+							<div class="caption">
+								<div class="prompt" style="background-image: url(@PromptPath( s ))"></div>
+								<label class="name">@info.Name</label>
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+		}
 
 		@if ( ShowGo )
 		{
-			<div class="go">
-				<label>RUN!</label>
+			<div class="moment go">
+				<label>Run!</label>
 			</div>
 		}
 
 		@if ( ShowEliminated )
 		{
-			<div class="notice strike">
-				<label>ELIMINATED</label>
+			<div class="moment out">
+				<label>Out!</label>
+				<label class="sub">@OutLine</label>
 			</div>
 		}
 
 		@if ( IsSpectating )
 		{
 			<div class="spectate">
-				<label class="tag">Spectating</label>
+				<i>visibility</i>
 				<label class="target">@SpectateName</label>
 				@if ( HasSpectateTarget )
 				{
-					<div class="key">Space</div>
+					<div class="prompt wide" style="background-image: url(/ui/kenney/prompts/keyboard_space.svg)"></div>
 					<label class="hint">Next player</label>
 				}
 			</div>
@@ -108,63 +156,50 @@
 {
 	RoundManager Round => Scene.Get<RoundManager>();
 
+	MatchScore Score => Scene.Get<MatchScore>();
+
 	/// <summary>
 	/// The player this client controls, resolved once per frame in <see cref="BuildHash"/>
-	/// rather than on every read. A proxy is somebody else's player; solo, IsProxy is false,
-	/// so this works with or without a session.
+	/// rather than on every read.
 	/// </summary>
 	TntPlayer LocalPlayer => _localPlayer;
 
 	TntPlayer _localPlayer;
 
-	/// <summary>Feed lines stay up this long.</summary>
 	const float FeedLifetime = 6f;
 
-	/// <summary>How long the big ELIMINATED card holds before the spectator bar takes over.</summary>
+	/// <summary>How long the big "Out!" card holds before the spectator bar takes over.</summary>
 	const float EliminatedCardTime = 2.5f;
 
 	const float GoCardTime = 1.2f;
 
-	/// <summary>Local clock since this client last saw its player die — drives the card.</summary>
+	const float PopupLifetime = 1.8f;
+
 	TimeSince _sinceDeath;
 
 	bool _wasAlive = true;
 
 	int _lastCountdownSecond = -1;
 
+	/// <summary>Deepest floor reached this life, for the "Out!" card.</summary>
+	int _deepest;
+
 	RoundManager.RoundState _lastState = RoundManager.RoundState.Waiting;
 
-	/// <summary>True while the pre-round countdown is running.</summary>
 	bool IsCountingDown => Round?.IsCountingDown == true;
 
-	bool IsWarmup => Round?.State == RoundManager.RoundState.Waiting;
-
-	/// <summary>
-	/// How much of the countdown is left, 0–100. Drives the drain bar's width directly, so the
-	/// bar shows the same number the headline does — read as a quantity instead of a digit.
-	/// </summary>
 	float CountdownPercent
 	{
 		get
 		{
 			var round = Round;
-			if ( round is null ) return 0f;
-			if ( round.CountdownDuration <= 0f ) return 0f;
-
+			if ( round is null || round.CountdownDuration <= 0f ) return 0f;
 			return (round.CountdownRemaining / round.CountdownDuration * 100f).Clamp( 0f, 100f );
 		}
 	}
 
-	/// <summary>Flashes the countdown once it is nearly out.</summary>
 	string UrgentClass => IsCountingDown && Round.CountdownRemaining <= 3f ? "urgent" : "";
 
-	/// <summary>One pip per connected player.</summary>
-	IEnumerable<int> PlayerSlots => Enumerable.Range( 0, Round?.PlayerCount ?? 0 );
-
-	/// <summary>Pips fill from the left, one per survivor.</summary>
-	string PipClass( int index ) => index < (Round?.AliveCount ?? 0) ? "lit" : "";
-
-	/// <summary>One rung per floor, top floor first — the same order they stack in the world.</summary>
 	IEnumerable<int> FloorIndices => Enumerable.Range( 0, Arena.FloorCount );
 
 	IEnumerable<RoundManager.FeedEntry> VisibleFeed => Round is null
@@ -173,21 +208,29 @@
 
 	int VisibleFeedCount => VisibleFeed.Count();
 
-	/// <summary>One expression per label — mixing literal text and @expressions in a label drops the literal.</summary>
+	/// <summary>One expression per label — mixing literal text and @expressions drops the literal.</summary>
 	static string FeedText( RoundManager.FeedEntry entry ) => entry.Remaining == 1
-		? "fell · 1 left"
-		: $"fell · {entry.Remaining} left";
+		? "is out, 1 left"
+		: $"is out, {entry.Remaining} left";
 
-	/// <summary>Floor under the player, or -1 when they're outside the arena or gone.</summary>
 	int CurrentFloor
 	{
 		get
 		{
 			var player = LocalPlayer;
 			if ( player is null || !player.IsAlive ) return -1;
-
 			return player.CurrentFloor;
 		}
+	}
+
+	string FloorLabel => CurrentFloor < 0 ? "Floor" : $"Floor {CurrentFloor + 1}";
+
+	string FloorClass( int index )
+	{
+		var floor = CurrentFloor;
+		if ( floor < 0 ) return "below";
+		if ( index == floor ) return "here";
+		return index < floor ? "passed" : "below";
 	}
 
 	bool IsEliminated => LocalPlayer is not null && !LocalPlayer.IsAlive;
@@ -195,6 +238,8 @@
 	bool ShowEliminated => IsEliminated
 		&& Round?.State == RoundManager.RoundState.Playing
 		&& _sinceDeath < EliminatedCardTime;
+
+	string OutLine => _deepest <= 0 ? "Straight into the lava" : $"You made it to floor {_deepest + 1}";
 
 	bool IsSpectating => IsEliminated
 		&& Round?.State == RoundManager.RoundState.Playing
@@ -208,14 +253,16 @@
 		&& Round.RoundElapsed < GoCardTime
 		&& !IsEliminated;
 
-	/// <summary>Drives the whole panel's look from one place, rather than per-element checks.</summary>
+	bool ShowAbilities => LocalPlayer is not null && LocalPlayer.IsAlive && Round?.State != RoundManager.RoundState.Ended;
+
+	bool IsBlackedOut => LocalPlayer is not null && LocalPlayer.IsAlive && LocalPlayer.Status.Has( StatusKind.Blackout );
+
 	string StateClass
 	{
 		get
 		{
 			var round = Round;
 			if ( round is null ) return "";
-
 			if ( IsEliminated && round.State == RoundManager.RoundState.Playing ) return "dead";
 
 			return round.State switch
@@ -228,40 +275,6 @@
 		}
 	}
 
-	/// <summary>
-	/// Monospace only while the headline is a ticking number. Prose set in mono looks like a
-	/// terminal; digits set in proportional type wobble as they change width.
-	/// </summary>
-	string HeadlineFont
-	{
-		get
-		{
-			var round = Round;
-			if ( round is null ) return "";
-
-			var ticking = round.State == RoundManager.RoundState.Playing
-				|| (round.State == RoundManager.RoundState.Waiting && round.IsCountingDown);
-
-			return ticking ? "mono" : "";
-		}
-	}
-
-	/// <summary>
-	/// Segment state, read top-down: floors already dropped past, the one you're on, and the
-	/// ones still under you.
-	/// </summary>
-	string FloorClass( int index )
-	{
-		var floor = CurrentFloor;
-		if ( floor < 0 ) return "below";
-
-		if ( index == floor ) return "here";
-		if ( index < floor ) return "passed";
-
-		return "below";
-	}
-
-	/// <summary>The one number that matters right now — countdown, clock, or nothing.</summary>
 	string Headline
 	{
 		get
@@ -271,23 +284,15 @@
 
 			return round.State switch
 			{
-				RoundManager.RoundState.Waiting when round.IsCountingDown
-					=> MathF.Ceiling( round.CountdownRemaining ).ToString( "0" ),
-				RoundManager.RoundState.Waiting
-					=> $"{round.PlayerCount} / {round.MinPlayers}",
-				RoundManager.RoundState.Playing
-					=> FormatTime( round.RoundElapsed ),
-				RoundManager.RoundState.Ended
-					=> "ROUND OVER",
+				RoundManager.RoundState.Waiting when round.IsCountingDown => MathF.Ceiling( round.CountdownRemaining ).ToString( "0" ),
+				RoundManager.RoundState.Waiting => $"{round.PlayerCount}/{round.MinPlayers}",
+				RoundManager.RoundState.Playing => FormatTime( round.RoundElapsed ),
+				RoundManager.RoundState.Ended => "Round over",
 				_ => "-"
 			};
 		}
 	}
 
-	/// <summary>
-	/// What the headline means. Upper case is written here, not applied in CSS — s&box has no
-	/// text-transform.
-	/// </summary>
 	string Subline
 	{
 		get
@@ -297,24 +302,54 @@
 
 			return round.State switch
 			{
-				RoundManager.RoundState.Waiting when round.IsCountingDown => "GET READY",
-				RoundManager.RoundState.Waiting => "WAITING FOR PLAYERS",
-				RoundManager.RoundState.Playing => "KEEP MOVING",
+				RoundManager.RoundState.Waiting when round.IsCountingDown => "Get ready. The floor holds until zero.",
+				RoundManager.RoundState.Waiting => "Warm-up. Lava just sends you back up for now.",
+				RoundManager.RoundState.Playing => "",
 				_ => ""
 			};
 		}
 	}
 
-	string AliveValue
-	{
-		get
-		{
-			var round = Round;
-			if ( round is null ) return "-";
+	string AliveValue => Round is null ? "-" : $"{Round.AliveCount}/{Round.PlayerCount}";
 
-			return $"{round.AliveCount}/{round.PlayerCount}";
-		}
+	string AliveUnit => "standing";
+
+	// --- Abilities ---------------------------------------------------------------------------
+
+	PlayerAbilities Abilities => LocalPlayer?.Abilities;
+
+	AbilityId SlotAbility( int slot ) => Abilities?.InSlot( slot ) ?? AbilityId.None;
+
+	bool IsCooling( int slot ) => Abilities is not null && Abilities.CooldownRemaining( slot ) > 0f;
+
+	float CooldownPercent( int slot ) => Abilities is null ? 0f : (1f - Abilities.ReadyFraction( slot )) * 100f;
+
+	string CooldownSeconds( int slot ) => MathF.Ceiling( Abilities.CooldownRemaining( slot ) ).ToString( "0" );
+
+	string SlotState( int slot )
+	{
+		if ( Abilities is null ) return "";
+		if ( !Abilities.CanCastNow ) return "blocked";
+		return IsCooling( slot ) ? "cooling" : "ready";
 	}
+
+	static string PromptPath( int slot ) => slot == 0 ? "/ui/kenney/prompts/mouse_left.svg" : "/ui/kenney/prompts/mouse_right.svg";
+
+	// --- Statuses ----------------------------------------------------------------------------
+
+	IEnumerable<StatusKind> Statuses => LocalPlayer?.Status.Current ?? Enumerable.Empty<StatusKind>();
+
+	string StatusTime( StatusKind kind ) => $"{MathF.Ceiling( LocalPlayer.Status.Remaining( kind ) ):0}s";
+
+	// --- Points ------------------------------------------------------------------------------
+
+	string PointsValue => (Score?.PointsOf( LocalPlayer ) ?? 0).ToString();
+
+	IEnumerable<MatchScore.Popup> VisiblePopups => Score is null
+		? Enumerable.Empty<MatchScore.Popup>()
+		: Score.Popups.Where( p => Time.Now - p.Time < PopupLifetime );
+
+	static string PopupText( MatchScore.Popup popup ) => $"+{popup.Amount} {popup.Reason}";
 
 	static string FormatTime( float seconds )
 	{
@@ -324,7 +359,7 @@
 
 	/// <summary>
 	/// The HUD's audio cues, kept with the visuals they belong to: a tick on each of the last
-	/// three countdown seconds, a cue when the round goes live, and the death moment's clock.
+	/// three countdown seconds, a bong when the round goes live, and the moment of death.
 	/// </summary>
 	public override void Tick()
 	{
@@ -335,7 +370,7 @@
 		{
 			var second = (int)MathF.Ceiling( round.CountdownRemaining );
 			if ( second != _lastCountdownSecond && second <= 3 && second > 0 )
-				Sound.Play( "sounds/kenney/ui/ui.button.over.sound" );
+				Sfx.Ui( Sfx.Tick, 0.7f );
 
 			_lastCountdownSecond = second;
 		}
@@ -345,29 +380,33 @@
 		}
 
 		if ( round.State != _lastState && round.State == RoundManager.RoundState.Playing )
-			Sound.Play( "sounds/kenney/ui/ui.popup.message.open.sound" );
+		{
+			Sfx.Ui( Sfx.Go, 0.7f );
+			_deepest = 0;
+		}
 
 		_lastState = round.State;
+
+		var floor = CurrentFloor;
+		if ( floor > _deepest ) _deepest = floor;
 
 		var alive = LocalPlayer?.IsAlive ?? true;
 		if ( _wasAlive && !alive ) _sinceDeath = 0f;
 		_wasAlive = alive;
 	}
 
-	// Countdown and elapsed time change every frame, so they're deliberately in the hash —
-	// this panel is a handful of labels, so rebuilding each second costs nothing.
-	//
-	// Resolving the player here, rather than in the LocalPlayer getter, is deliberate: BuildHash
-	// runs once per frame and always before the tree is built, so the field is fresh by the time
-	// anything reads it, while the getter would otherwise run Scene.GetAll<TntPlayer>() several
-	// times per rebuild.
 	protected override int BuildHash()
 	{
-		_localPlayer = Scene.GetAll<TntPlayer>().FirstOrDefault( p => !p.IsProxy );
+		_localPlayer = TntPlayer.FindLocal( Scene );
 
-		return System.HashCode.Combine(
-			System.HashCode.Combine( Headline, Subline, AliveValue, CurrentFloor, VisibleFeedCount, Round?.FeedRevision ?? 0 ),
-			System.HashCode.Combine( StateClass, HeadlineFont, UrgentClass, (int)CountdownPercent, Round?.PlayerCount ?? 0 ),
-			System.HashCode.Combine( ShowGo, ShowEliminated, IsSpectating, SpectateName ) );
+		var abilities = Abilities;
+		var cooldown = abilities is null ? 0 : HashCode.Combine( (int)(abilities.ReadyFraction( 0 ) * 40), (int)(abilities.ReadyFraction( 1 ) * 40), abilities.First, abilities.Second, abilities.CanCastNow );
+		var statuses = LocalPlayer is null ? 0 : HashCode.Combine( LocalPlayer.Status.Revision, Statuses.Sum( s => (int)LocalPlayer.Status.Remaining( s ) ) );
+
+		return HashCode.Combine(
+			HashCode.Combine( Headline, Subline, AliveValue, CurrentFloor, VisibleFeedCount, Round?.FeedRevision ?? 0 ),
+			HashCode.Combine( StateClass, UrgentClass, (int)CountdownPercent, ShowAbilities, IsBlackedOut ),
+			HashCode.Combine( ShowGo, ShowEliminated, IsSpectating, SpectateName ),
+			HashCode.Combine( cooldown, statuses, PointsValue, VisiblePopups.Count(), Score?.Revision ?? 0 ) );
 	}
 }

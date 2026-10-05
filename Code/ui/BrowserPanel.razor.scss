@@ -1,208 +1,165 @@
 @import "_ui.scss";
+@import "_kit.scss";
 
-// The lobby list inside MenuPanel's column. Same plates as the menu buttons: opaque, lifted,
-// angular icons in square buttons, rows that light up rather than grow borders.
-
-@keyframes list-rise {
-	0% { opacity: 0; transform: translateY(14px); }
-	100% { opacity: 1; transform: translateY(0px); }
+BrowserPanel {
+	flex-direction: column;
+	width: 600px;
+	font-family: $font-body;
 }
 
 .browser {
-	flex-direction: column;
-	width: 760px;
-	margin-top: 36px;
-	font-family: $font-display;
-	pointer-events: all;
+	padding: $s5;
+	animation: card-in 0.22s ease-out both;
+}
 
-	animation-name: list-rise;
-	animation-duration: 0.45s;
-	animation-timing-function: ease-out;
-	animation-fill-mode: backwards;
+@keyframes card-in {
+	from { opacity: 0; transform: translateY(24px); }
+	to { opacity: 1; transform: translateY(0px); }
+}
 
-	.titlebar {
-		flex-direction: row;
-		align-items: center;
-		padding: $s3;
-		background-color: $fill;
-		box-shadow: $lift;
+.titlebar {
+	flex-direction: row;
+	align-items: center;
+	margin-bottom: $s4;
 
-		.title {
-			margin-left: $s4;
-			font-family: $font-title;
-			font-size: 24px;
-			font-weight: 700;
-			letter-spacing: -0.01em;
-			color: $chalk;
-		}
+	.brick.square {
+		width: 56px;
+		height: 56px;
+		padding: 0px;
 
-		.status {
-			flex-grow: 1;
-			margin-left: $s4;
-			font-size: 14px;
-			color: $dim;
-
-			&.error {
-				color: #FF6A6F;
-			}
-		}
+		i { margin: 0px; }
 	}
 
-	.list {
-		height: 380px;
-		margin-top: $s2;
+	.titles {
+		flex-grow: 1;
 		flex-direction: column;
-		overflow: scroll;
-		padding: $s3;
-		background-color: $fill;
-		box-shadow: $lift;
-
-		.empty {
-			flex-grow: 1;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			padding: $s6;
-
-			i {
-				font-size: 40px;
-				color: rgba(255, 176, 32, 0.55);
-				margin-bottom: $s4;
-			}
-
-			.headline {
-				font-size: 19px;
-				font-weight: 700;
-				color: $chalk;
-			}
-
-			.detail {
-				margin-top: $s2;
-				max-width: 420px;
-				font-size: 15px;
-				line-height: 1.4;
-				text-align: center;
-				color: $dim;
-			}
-		}
-
-		.row {
-			flex-direction: row;
-			align-items: center;
-			flex-shrink: 0;
-			height: 64px;
-			padding: 0px $s3 0px $s4;
-			margin-bottom: $s2;
-			cursor: pointer;
-			background-color: $steel;
-			transition: background-color 0.12s ease-out;
-
-			&:hover {
-				background-color: #2A3044;
-
-				.join {
-					background-color: $chalk;
-				}
-			}
-
-			.cell {
-				font-size: 15px;
-				color: $dim;
-			}
-
-			.name {
-				flex-grow: 1;
-				flex-direction: column;
-
-				.primary {
-					font-size: 17px;
-					font-weight: 700;
-					color: $chalk;
-				}
-
-				.secondary {
-					margin-top: 2px;
-					font-size: 13px;
-					color: $faint;
-				}
-			}
-
-			.state {
-				width: 170px;
-			}
-
-			.players {
-				width: 64px;
-				font-family: $font-mono;
-				color: $chalk;
-			}
-
-			.join {
-				width: 40px;
-				height: 40px;
-				justify-content: center;
-				align-items: center;
-				background-color: $amber;
-				transition: background-color 0.12s ease-out;
-
-				i {
-					font-size: 20px;
-					color: $void;
-				}
-			}
-
-			&.full {
-				cursor: default;
-
-				.join {
-					background-color: $strike;
-
-					i { color: rgba(242, 245, 248, 0.75); }
-				}
-
-				.players { color: $strike; }
-			}
-		}
+		margin: 0px $s4;
 	}
 
-	.button {
-		width: 40px;
-		height: 40px;
-		justify-content: center;
+	.title {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 30px;
+		color: $ink;
+	}
+
+	.status {
+		font-size: 14px;
+		color: $ink-soft;
+
+		&.error { color: $coral-deep; }
+	}
+}
+
+.list {
+	flex-direction: column;
+	max-height: 440px;
+	overflow: scroll;
+}
+
+.empty {
+	flex-direction: column;
+	align-items: center;
+	padding: $s6 $s4;
+	border-radius: 20px;
+	background-color: $paper-deep;
+
+	i {
+		font-family: "Material Icons";
+		font-size: 48px;
+		color: $ink-faint;
+		margin-bottom: $s2;
+	}
+
+	.headline {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 22px;
+		color: $ink;
+	}
+
+	.detail {
+		font-size: 15px;
+		color: $ink-soft;
+		text-align: center;
+	}
+}
+
+.row {
+	flex-direction: row;
+	align-items: center;
+	padding: $s3 $s4;
+	margin-bottom: $s2;
+	border-radius: 18px;
+	background-color: $paper-deep;
+	border-bottom: 5px solid $paper-edge;
+	cursor: pointer;
+	transition: all 0.08s ease-out;
+
+	&:hover {
+		transform: translateY(-2px);
+		background-color: #FFFDF6;
+
+		.join { background-color: $mint; border-bottom-color: $mint-deep; }
+	}
+
+	&:active { transform: translateY(2px); }
+
+	&.full {
+		opacity: 0.55;
+		cursor: default;
+	}
+
+	.cell { margin-right: $s3; }
+
+	.name {
+		flex-grow: 1;
+		flex-direction: column;
+	}
+
+	.primary {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 19px;
+		color: $ink;
+	}
+
+	.secondary {
+		font-size: 13px;
+		color: $ink-soft;
+	}
+
+	.state {
+		font-size: 14px;
+		color: $ink-soft;
+	}
+
+	.players {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 18px;
+		color: $ink;
+	}
+
+	.join {
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
 		align-items: center;
-		flex-shrink: 0;
-		cursor: pointer;
-		background-color: $steel;
-		transition: background-color 0.12s ease-out;
+		justify-content: center;
+		background-color: $paper;
+		border-bottom: 4px solid $paper-edge;
 
 		i {
-			font-size: 20px;
-			color: $chalk;
-		}
-
-		&:hover {
-			background-color: #2A3044;
-		}
-
-		&.refresh {
-			background-color: $amber;
-
-			i { color: $void; }
-
-			&:hover { background-color: $chalk; }
-		}
-
-		&.busy {
-			pointer-events: none;
-			background-color: $steel;
-
-			i { color: $faint; }
+			font-family: "Material Icons";
+			font-size: 26px;
+			color: $ink;
 		}
 	}
+}
 
-	.footnote {
-		margin-top: $s3;
-		font-size: 13px;
-		color: $faint;
-	}
+.footnote {
+	margin-top: $s3;
+	font-size: 13px;
+	color: $ink-faint;
 }
