@@ -282,6 +282,8 @@ ResultsPanel {
 
 	.delta {
 		margin-left: $s5;
+		white-space: nowrap;
+		flex-shrink: 0;
 		padding: $s1 $s4;
 		border-radius: $radius-pill;
 		font-family: $font-title;

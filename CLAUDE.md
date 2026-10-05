@@ -220,6 +220,32 @@ Still out: matchmaking, custom models, particle systems (effects are built from 
 emissive tints), purchasable or player-selectable cosmetics (rank perks are earned, not picked),
 external downloads.
 
+**Status after the 2026-10-05 pass** (verified in the editor over MCP, with temporary host-owned
+bots that were removed again):
+
+- New components, all created at runtime by `RoundManager.OnAwake` or `TntPlayer.OnAwake`:
+  `ProfileStore` + `Ranks` (`Code/Profile/`), `MatchScore`, `AbilitySystem`, and per player
+  `PlayerStatus`, `PlayerAbilities`, `PlayerCosmetics` (`Code/Abilities/`). `Sfx` holds every
+  sound path. UI: `LoadoutPanel`, `ProfilePanel`, `HowToPanel`, `AbilityChip`, world-space
+  `Nameplate`; `GameUi` routes menu pages (`GameUi.MenuPage`) and the in-session loadout overlay.
+- One door for knockdowns: `PlayerImpacts.TryKnockDown` (collisions and abilities). One door for
+  floor changes from abilities: `TileDecay.ForceCollapse` / `TileDecay.Restore` (batched broadcast,
+  snapshot-safe). Movement from abilities goes through owner RPCs on `TntPlayer`
+  (`Launch`, `TeleportTo`, `RewindNow`), statuses through `PlayerStatus.Apply` (host broadcast,
+  local clocks). `TntPlayer.FindLocal` is the one definition of "this machine's player".
+- All 30 abilities were cast and checked in play; collisions, results, RP and the rank-up card
+  were exercised in full bot rounds. Results and rank points are keyed by player object id —
+  two players may share a Steam name.
+- Rank is owner-authoritative (`[Sync] RankPoints` from the local profile), which follows from
+  storing it locally: a modified client can show any rank. `Services.Stats` is the place to make
+  it authoritative once the game is published.
+- Not verified with two real clients (WinNAT port issue above still applies): ability replication
+  on remote screens, late-join snapshots of scores and mines, remote rank perks.
+- UI style rules learned the hard way are in memory (`sbox-scss-limits`,
+  `sbox-render-audio-findings`): every `<label>` carries class `label`; absolute children need a
+  `position: relative` container; emissive pastels blow out, so effects use a matte copy with
+  full tint.
+
 ## Working style
 
 - **One component per turn.** Write it, explain what to test, stop.
