@@ -336,7 +336,8 @@ public sealed class ArenaGenerator : Component
 
 		// Pastel needs exact colours: auto exposure saw a bright sky and pulled the whole frame down a
 		// stop, and the filmic curve then greyed what was left — the palette read as dusk, not candy.
-		// Fixed exposure and a neutral curve put the floor and sky colours on screen as authored.
+		// Fixed exposure and ACES — which kept the pastels saturated where AgX and the filmic curve
+		// greyed them — put the floor and sky colours on screen close to how they're authored.
 		var tonemap = camera.GameObject.GetOrAddComponent<Tonemapping>();
 		tonemap.AutoExposureEnabled = false;
 		tonemap.Mode = Tonemapping.TonemappingMode.ACES;

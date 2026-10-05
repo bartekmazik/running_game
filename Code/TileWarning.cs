@@ -34,6 +34,12 @@ public sealed class TileWarning : Component
 		_warned[packed] = (Time.Now, duration);
 	}
 
+	/// <summary>
+	/// The arena was reset: drop every warning. A tile an ability doomed just before the reset
+	/// would otherwise keep glowing at full heat for the whole next round, its collapse cancelled.
+	/// </summary>
+	public void Clear() => _warned.Clear();
+
 	/// <summary>The tile was rebuilt (Patch, Bridge): stop painting it.</summary>
 	public void Forget( int packed )
 	{

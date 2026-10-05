@@ -30,8 +30,11 @@ public sealed class PlayerImpacts : Component
 	/// </summary>
 	const float ImpactSpeed = 235f;
 
-	/// <summary>Forces within this fraction of each other count as even — both go down.</summary>
-	const float EvenMargin = 0.12f;
+	/// <summary>
+	/// Forces within this fraction of each other count as a dead heat — both go down. Kept tight:
+	/// the brief is that the weaker hit falls, and this only covers what nobody could call.
+	/// </summary>
+	const float EvenMargin = 0.05f;
 
 	/// <summary>An even collision only floors both if each side was really moving.</summary>
 	const float MutualShare = 150f;
@@ -115,7 +118,7 @@ public sealed class PlayerImpacts : Component
 		victim.BeginRagdoll( launch, duration );
 		_immuneUntil[victim] = duration + Immunity;
 
-		_score?.RecordKnockdown( attacker, victim );
+		_score.RecordKnockdown( attacker, victim );
 		return true;
 	}
 

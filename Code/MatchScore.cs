@@ -66,7 +66,7 @@ public sealed class MatchScore : Component
 	{
 		if ( Networking.IsActive && !Networking.IsHost ) return;
 		if ( player is null || !player.IsValid() || amount == 0 ) return;
-		if ( GetComponent<RoundManager>()?.State == RoundManager.RoundState.Waiting ) return;
+		if ( GetComponent<RoundManager>().State == RoundManager.RoundState.Waiting ) return;
 
 		var total = PointsOf( player ) + amount;
 		BroadcastAward( player.GameObject.Id, total, amount, reason );
@@ -78,7 +78,7 @@ public sealed class MatchScore : Component
 		if ( Networking.IsActive && !Networking.IsHost ) return;
 
 		RecordHit( attacker, victim );
-		if ( attacker is null ) return;
+		if ( attacker is null || !attacker.IsValid() ) return;
 
 		BroadcastKnockdown( attacker.GameObject.Id );
 		Award( attacker, KnockdownPoints, "Knockdown" );
@@ -128,6 +128,37 @@ public sealed class MatchScore : Component
 	void BroadcastKnockdown( Guid playerId )
 	{
 		_knockdowns[playerId] = (_knockdowns.TryGetValue( playerId, out var k ) ? k : 0) + 1;
+		Revision++;
+	}
+
+	/// <summary>
+	/// Host: hand a late joiner the board as it stands. Totals only — no popups, which belong to
+	/// the moment a point was earned.
+	/// </summary>
+	public void SendSnapshotTo( Connection connection )
+	{
+		if ( Networking.IsActive && !Networking.IsHost ) return;
+		if ( _points.Count == 0 && _knockdowns.Count == 0 ) return;
+
+		var ids = _points.Keys.Union( _knockdowns.Keys ).ToArray();
+		var points = ids.Select( id => _points.TryGetValue( id, out var p ) ? p : 0 ).ToArray();
+		var knockdowns = ids.Select( id => _knockdowns.TryGetValue( id, out var k ) ? k : 0 ).ToArray();
+
+		using ( Rpc.FilterInclude( connection ) )
+		{
+			ApplySnapshot( ids, points, knockdowns );
+		}
+	}
+
+	[Rpc.Broadcast( NetFlags.HostOnly )]
+	void ApplySnapshot( Guid[] ids, int[] points, int[] knockdowns )
+	{
+		for ( var i = 0; i < ids.Length; i++ )
+		{
+			_points[ids[i]] = points[i];
+			_knockdowns[ids[i]] = knockdowns[i];
+		}
+
 		Revision++;
 	}
 

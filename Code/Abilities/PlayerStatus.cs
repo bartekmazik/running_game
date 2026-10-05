@@ -28,7 +28,7 @@ public enum StatusKind
 /// </summary>
 public sealed class PlayerStatus : Component
 {
-	const int KindCount = 14;
+	const int KindCount = (int)StatusKind.Vortex + 1;
 
 	readonly TimeUntil[] _until = new TimeUntil[KindCount];
 	readonly bool[] _active = new bool[KindCount];
@@ -42,12 +42,19 @@ public sealed class PlayerStatus : Component
 	public bool Has( StatusKind kind )
 	{
 		var i = (int)kind;
-		if ( !_active[i] ) return false;
-		if ( !_until[i] ) return true;
+		return _active[i] && !_until[i];
+	}
 
-		_active[i] = false;
-		Revision++;
-		return false;
+	/// <summary>Retire expired statuses once, here, so reading one never changes anything.</summary>
+	protected override void OnUpdate()
+	{
+		for ( var i = 0; i < KindCount; i++ )
+		{
+			if ( !_active[i] || !_until[i] ) continue;
+
+			_active[i] = false;
+			Revision++;
+		}
 	}
 
 	/// <summary>Seconds left on a status, 0 if it isn't active.</summary>

@@ -107,7 +107,7 @@ public static class AbilityCatalog
 		AbilityId.Blink => new( id, "Blink", AbilityKind.Help, 12f, "flash_on", "Teleport five tiles forward." ),
 		AbilityId.Rewind => new( id, "Rewind", AbilityKind.Help, 20f, "history", "Snap back to where you stood 3s ago." ),
 		AbilityId.Updraft => new( id, "Updraft", AbilityKind.Help, 22f, "north", "A gust strong enough to reach the floor above." ),
-		AbilityId.Giant => new( id, "Giant", AbilityKind.Help, 20f, "open_in_full", "Grow for 5s: you win every collision." ),
+		AbilityId.Giant => new( id, "Giant", AbilityKind.Help, 20f, "open_in_full", "Grow for 5s: you hit twice as hard and run a little faster." ),
 
 		AbilityId.Shockwave => new( id, "Shockwave", AbilityKind.Harm, 18f, "radio_button_checked", "Knock down everyone close around you." ),
 		AbilityId.Shove => new( id, "Shove", AbilityKind.Harm, 9f, "front_hand", "Knock down whoever is right in front of you." ),

@@ -89,8 +89,6 @@ public sealed class PlayerAbilities : Component
 	/// <summary>Owner: follow the profile — a loadout changed on the results screen applies next cast.</summary>
 	void SyncLoadout()
 	{
-		if ( _profile is null ) return;
-
 		if ( First != _profile.First ) First = _profile.First;
 		if ( Second != _profile.Second ) Second = _profile.Second;
 	}
@@ -133,8 +131,7 @@ public sealed class PlayerAbilities : Component
 		var id = InSlot( slot );
 		if ( !AbilityCatalog.IsValid( id ) ) return;
 
-		var system = Scene.Get<AbilitySystem>();
-		if ( system is null || !system.Execute( _player, id, aim ) )
+		if ( !Scene.Get<AbilitySystem>().Execute( _player, id, aim ) )
 		{
 			DenyCast( slot );
 			return;

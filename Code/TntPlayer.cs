@@ -37,9 +37,6 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	/// </summary>
 	public const float FootprintRadius = 12f;
 
-	/// <summary>Default time a knocked-down player stays a ragdoll. Hard hits last longer (PlayerImpacts).</summary>
-	public const float RagdollDuration = 1.3f;
-
 	/// <summary>
 	/// False once eliminated.
 	///
@@ -282,7 +279,7 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 		// Our own player: publish the rank from this machine's profile. Everyone else reads it.
 		if ( !IsProxy )
-			RankPoints = Scene.Get<ProfileStore>()?.Profile.RankPoints ?? 0;
+			RankPoints = Scene.Get<ProfileStore>().Profile.RankPoints;
 	}
 
 	/// <summary>
@@ -451,13 +448,15 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 			_controller.Punch( Vector3.Up * velocity.z );
 	}
 
-	/// <summary>Host → owner: put the body somewhere else. Blink and Swap.</summary>
+	/// <summary>
+	/// Host → owner: put the body somewhere else. Blink, Swap and Rewind. Ignored mid-ragdoll: the
+	/// ragdoll is a local physics copy on every machine, and only the owner would see it end early.
+	/// </summary>
 	[Rpc.Owner]
 	public void TeleportTo( Vector3 position )
 	{
-		if ( !IsAlive ) return;
+		if ( !IsAlive || IsRagdolled ) return;
 
-		EndRagdoll();
 		WorldPosition = position;
 		Transform.ClearInterpolation();
 		_controller.Velocity = Vector3.Zero;
@@ -490,12 +489,10 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	/// its rank, so this is where rank points actually change hands.
 	/// </summary>
 	[Rpc.Owner]
-	public void ReceiveRoundResult( int delta, int place, int players, int knockdowns )
+	public void ReceiveRoundResult( int delta, int place, int knockdowns )
 	{
 		var store = Scene.Get<ProfileStore>();
-		if ( store is null ) return;
-
-		store.ApplyRoundResult( delta, place, players, knockdowns );
+		store.ApplyRoundResult( delta, place, knockdowns );
 		RankPoints = store.Profile.RankPoints;
 	}
 
@@ -557,15 +554,18 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		var camera = Scene.Camera;
 		if ( !camera.IsValid() ) return;
 
-		var local = TntPlayer.FindLocal( Scene );
-		if ( local is null ) return;
-
 		var distance = camera.WorldPosition.Distance( position );
 		var falloff = (1f - distance / 900f).Clamp( 0f, 1f );
 		if ( falloff <= 0f ) return;
 
-		local._shake = MathF.Max( local._shake, 5f * strength * falloff );
-		local._fovPunch = MathF.Max( local._fovPunch, 9f * strength * falloff );
+		FindLocal( Scene )?.Shake( strength * falloff );
+	}
+
+	/// <summary>Kick this machine's camera: <paramref name="amount"/> 0..1+, the stronger kick wins.</summary>
+	public void Shake( float amount )
+	{
+		_shake = MathF.Max( _shake, 5f * amount );
+		_fovPunch = MathF.Max( _fovPunch, 9f * amount );
 	}
 
 	/// <summary>Owner: decay shake and FOV punch on the camera this machine is driving.</summary>

@@ -62,7 +62,7 @@ public sealed class ProfileStore : Component
 	/// Called on the owner when the host reports the end of a ranked round. Applies the RP change,
 	/// updates lifetime stats, saves, and notes a rank-up for the results screen.
 	/// </summary>
-	public void ApplyRoundResult( int delta, int place, int players, int knockdowns )
+	public void ApplyRoundResult( int delta, int place, int knockdowns )
 	{
 		var before = Ranks.Step( Profile.RankPoints );
 

@@ -273,7 +273,7 @@ public sealed class TileDecay : Component
 	{
 		var warning = GetComponent<TileWarning>();
 		foreach ( var index in packed )
-			warning?.Warn( index, delay );
+			warning.Warn( index, delay );
 	}
 
 	/// <summary>
@@ -317,7 +317,7 @@ public sealed class TileDecay : Component
 			var tile = _arena.GetTile( floor, x, y );
 			if ( tile is null ) continue;
 
-			warning?.Forget( index );
+			warning.Forget( index );
 			_arena.RestoreTile( floor, x, y );
 			tile.Enabled = true;
 

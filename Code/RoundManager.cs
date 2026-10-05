@@ -281,7 +281,10 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 		// Their arena is generated locally and starts pristine, so hand them the current
 		// collapsed set. Costs nothing when the arena is intact — no message goes out.
+		// Same for the scoreboard and any mines already planted.
 		_decay.SendSnapshotTo( connection );
+		_score.SendSnapshotTo( connection );
+		_abilities.SendSnapshotTo( connection );
 
 		Log.Info( $"Round: spawned player for {connection.DisplayName}" );
 	}
@@ -373,10 +376,10 @@ public sealed class RoundManager : Component, Component.INetworkListener
 
 		// Pushed, shoved or sabotaged in the last few seconds? Whoever did it gets the credit.
 		var by = _score.ClaimElimination( player );
-		if ( by is not null && by.IsValid() )
+		if ( by is not null )
 			_score.Award( by, MatchScore.EliminationPoints, "Elimination" );
 
-		AnnounceElimination( player.DisplayName, player.GameObject.Id, AliveCount, by is not null && by.IsValid() ? by.DisplayName : "" );
+		AnnounceElimination( player.DisplayName, player.GameObject.Id, AliveCount, by?.DisplayName ?? "" );
 	}
 
 	void TickWaiting()
@@ -493,7 +496,10 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		var results = order.Select( p => p.DisplayName ).ToArray();
 		var points = order.Select( p => _score.PointsOf( p ) ).ToArray();
 		var knockdowns = order.Select( p => _score.KnockdownsOf( p ) ).ToArray();
-		var rank = order.Select( p => p.RankPoints ).ToArray();
+		var deltas = order.Select( ( p, i ) => ranked ? Ranks.Delta( i + 1, order.Count, points[i] ) : 0 ).ToArray();
+
+		// The table shows everyone's rank after this round, the same number their owner will save.
+		var rank = order.Select( ( p, i ) => System.Math.Max( 0, p.RankPoints + deltas[i] ) ).ToArray();
 
 		SetState( RoundState.Ended );
 		AnnounceResults( results, points, knockdowns, rank, duration, ranked && results.Length > 0 ? results[0] : "", ranked );
@@ -502,10 +508,7 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		if ( ranked )
 		{
 			for ( var i = 0; i < order.Count; i++ )
-			{
-				var delta = Ranks.Delta( i + 1, order.Count, points[i] );
-				order[i].ReceiveRoundResult( delta, i + 1, order.Count, knockdowns[i] );
-			}
+				order[i].ReceiveRoundResult( deltas[i], i + 1, knockdowns[i] );
 		}
 
 		_restartAt = RestartDelay;
@@ -538,6 +541,7 @@ public sealed class RoundManager : Component, Component.INetworkListener
 	{
 		_arena.ResetAll();
 		_decay.ResetAll();
+		GetComponent<TileWarning>().Clear();
 	}
 
 	void SetState( RoundState next )
@@ -579,7 +583,7 @@ public sealed class RoundManager : Component, Component.INetworkListener
 		_playersAtRoundStart = players;
 		_eliminatedIds.Clear();
 		_fellAt.Clear();
-		Scene.Get<ProfileStore>()?.ClearLastDelta();
+		Scene.Get<ProfileStore>().ClearLastDelta();
 
 		Log.Info( $"Round: started with {players} player(s)" );
 	}

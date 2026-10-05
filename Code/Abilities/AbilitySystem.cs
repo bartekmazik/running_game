@@ -20,6 +20,8 @@ public sealed class AbilitySystem : Component
 
 	const float AreaRadius = 300f;
 
+	const float BlackoutRadius = AreaRadius + 150f;
+
 	const int MaxMinesPerPlayer = 2;
 	const float MineLife = 25f;
 	const float MineTriggerRadius = 44f;
@@ -181,7 +183,7 @@ public sealed class AbilitySystem : Component
 				return AreaStatus( caster, id, StatusKind.Ice, 3f, AreaRadius, forward );
 
 			case AbilityId.Blackout:
-				return AreaStatus( caster, id, StatusKind.Blackout, 3f, AreaRadius + 150f, forward );
+				return AreaStatus( caster, id, StatusKind.Blackout, 3f, BlackoutRadius, forward );
 
 			case AbilityId.Confuse:
 				return TargetStatus( caster, id, StatusKind.Confused, 3f, forward );
@@ -219,13 +221,15 @@ public sealed class AbilitySystem : Component
 	/// closest one at all. Being able to land a cast without pixel aim matters in a game where
 	/// you're also sprinting for your life.
 	/// </summary>
-	TntPlayer NearestEnemy( TntPlayer caster, Vector3 forward, float range )
+	TntPlayer NearestEnemy( TntPlayer caster, Vector3 forward, float range, bool standingOnly = false )
 	{
 		TntPlayer best = null;
 		var bestScore = float.MaxValue;
 
 		foreach ( var enemy in Enemies( caster ) )
 		{
+			if ( standingOnly && enemy.IsRagdolled ) continue;
+
 			var offset = enemy.WorldPosition - caster.WorldPosition;
 			var distance = offset.Length;
 			if ( distance > range ) continue;
@@ -242,22 +246,37 @@ public sealed class AbilitySystem : Component
 	}
 
 	/// <summary>
-	/// A harmful ability reaching <paramref name="target"/>. A Bubble Shield eats it — the shield
-	/// pops and nothing else happens. Otherwise the hit is remembered for elimination credit and
-	/// worth a few points.
+	/// A Bubble Shield eats one harmful ability: true means it was there, it popped, and the
+	/// ability does nothing to this target.
 	/// </summary>
-	bool Lands( TntPlayer caster, TntPlayer target )
+	bool Shielded( TntPlayer target )
 	{
-		if ( target.Status.Has( StatusKind.Shield ) )
-		{
-			target.Status.Clear( StatusKind.Shield );
-			PlayFx( AbilityId.BubbleShield, target.WorldPosition, Vector3.Forward, target.WorldPosition, true );
-			return false;
-		}
+		if ( !target.Status.Has( StatusKind.Shield ) ) return false;
 
-		_score?.RecordHit( caster, target );
-		_score?.Award( caster, MatchScore.AbilityHitPoints, "Hit" );
+		target.Status.Clear( StatusKind.Shield );
+		PlayFx( AbilityId.BubbleShield, target.WorldPosition, Vector3.Forward, target.WorldPosition, true );
 		return true;
+	}
+
+	/// <summary>
+	/// A non-knockdown effect actually landed: remember who did it for the elimination credit, and
+	/// score it. Knockdowns credit themselves through PlayerImpacts, so they never come here.
+	/// </summary>
+	void Credit( TntPlayer caster, TntPlayer target )
+	{
+		_score.RecordHit( caster, target );
+		_score.Award( caster, MatchScore.AbilityHitPoints, "Hit" );
+	}
+
+	/// <summary>The 3x3 block of tiles centred on [floor, cx, cy], clipped to the grid.</summary>
+	List<int> Square( int floor, int cx, int cy )
+	{
+		var tiles = new List<int>();
+		for ( var dx = -1; dx <= 1; dx++ )
+			for ( var dy = -1; dy <= 1; dy++ )
+				AddTile( tiles, floor, cx + dx, cy + dy );
+
+		return tiles;
 	}
 
 	// ---------------------------------------------------------------------------------------------
@@ -268,12 +287,7 @@ public sealed class AbilitySystem : Component
 		if ( !_arena.TryGetFloorBelow( caster.WorldPosition, out var floor ) ) return false;
 		if ( !_arena.TryGetColumn( caster.WorldPosition, out var cx, out var cy ) ) return false;
 
-		var tiles = new List<int>();
-		for ( var dx = -1; dx <= 1; dx++ )
-			for ( var dy = -1; dy <= 1; dy++ )
-				AddTile( tiles, floor, cx + dx, cy + dy );
-
-		_decay.Restore( tiles );
+		_decay.Restore( Square( floor, cx, cy ) );
 		var centre = _arena.TileTop( floor, cx, cy );
 		PlayFx( AbilityId.Patch, centre, forward, centre );
 		return true;
@@ -320,7 +334,7 @@ public sealed class AbilitySystem : Component
 		{
 			var offset = enemy.WorldPosition - origin;
 			if ( offset.Length > 240f || MathF.Abs( offset.z ) > 80f ) continue;
-			if ( !Lands( caster, enemy ) ) continue;
+			if ( Shielded( enemy ) ) continue;
 
 			var away = offset.WithZ( 0f ).IsNearZeroLength ? forward : offset.WithZ( 0f ).Normal;
 			_impacts.TryKnockDown( enemy, away * 480f + Vector3.Up * 260f, 1.5f, caster );
@@ -340,10 +354,12 @@ public sealed class AbilitySystem : Component
 			var offset = enemy.WorldPosition - origin;
 			if ( offset.Length > 170f || MathF.Abs( offset.z ) > 70f ) continue;
 			if ( offset.WithZ( 0f ).Normal.Dot( forward ) < AimCone ) continue;
-			if ( !Lands( caster, enemy ) ) continue;
+
+			// A shove that pops a shield still counts as a cast — something was in reach.
+			hitAny = true;
+			if ( Shielded( enemy ) ) continue;
 
 			_impacts.TryKnockDown( enemy, forward * 560f + Vector3.Up * 220f, 1.4f, caster );
-			hitAny = true;
 		}
 
 		if ( !hitAny ) return false;
@@ -358,11 +374,12 @@ public sealed class AbilitySystem : Component
 		if ( target is null ) return false;
 
 		var from = target.WorldPosition;
-		if ( Lands( caster, target ) )
+		if ( !Shielded( target ) && !target.IsRagdolled )
 		{
 			var toCaster = (caster.WorldPosition - from).WithZ( 0f );
 			var pull = MathF.Min( toCaster.Length * 1.6f, 640f );
 			target.Launch( toCaster.Normal * pull + Vector3.Up * 220f );
+			Credit( caster, target );
 		}
 
 		PlayFx( AbilityId.Hook, caster.WorldPosition, forward, from );
@@ -394,21 +411,22 @@ public sealed class AbilitySystem : Component
 
 	void Detonate( BombFlight bomb )
 	{
-		var tiles = new List<int>();
-		for ( var dx = -1; dx <= 1; dx++ )
-			for ( var dy = -1; dy <= 1; dy++ )
-				AddTile( tiles, bomb.Floor, bomb.X + dx, bomb.Y + dy );
+		_decay.ForceCollapse( Square( bomb.Floor, bomb.X, bomb.Y ), 0.05f );
 
-		_decay.ForceCollapse( tiles, 0.05f );
+		// The thrower may have left during the fuse; the bomb still goes off, credited to nobody.
+		var owner = bomb.Owner.IsValid() ? bomb.Owner : null;
 
-		foreach ( var enemy in Scene.GetAll<TntPlayer>().Where( p => p.IsAlive ).ToList() )
+		foreach ( var player in Scene.GetAll<TntPlayer>().Where( p => p.IsAlive ).ToList() )
 		{
-			var offset = enemy.WorldPosition - bomb.Target;
+			var offset = player.WorldPosition - bomb.Target;
 			if ( offset.Length > BombRadius ) continue;
-			if ( enemy != bomb.Owner && !Lands( bomb.Owner, enemy ) ) continue;
+
+			// Your own bomb throws you too — but no shield pops, and nobody scores for it.
+			var own = player == owner;
+			if ( !own && Shielded( player ) ) continue;
 
 			var away = offset.WithZ( 0f ).IsNearZeroLength ? Vector3.Forward : offset.WithZ( 0f ).Normal;
-			_impacts.TryKnockDown( enemy, away * 380f + Vector3.Up * 340f, 1.5f, enemy == bomb.Owner ? null : bomb.Owner );
+			_impacts.TryKnockDown( player, away * 380f + Vector3.Up * 340f, 1.5f, own ? null : owner );
 		}
 	}
 
@@ -419,14 +437,10 @@ public sealed class AbilitySystem : Component
 		if ( !_arena.TryGetFloorBelow( target.WorldPosition, out var floor ) ) return false;
 		if ( !_arena.TryGetColumn( target.WorldPosition, out var cx, out var cy ) ) return false;
 
-		if ( Lands( caster, target ) )
+		if ( !Shielded( target ) )
 		{
-			var tiles = new List<int>();
-			for ( var dx = -1; dx <= 1; dx++ )
-				for ( var dy = -1; dy <= 1; dy++ )
-					AddTile( tiles, floor, cx + dx, cy + dy );
-
-			_decay.ForceCollapse( tiles, 0.6f );
+			_decay.ForceCollapse( Square( floor, cx, cy ), 0.6f );
+			Credit( caster, target );
 		}
 
 		PlayFx( AbilityId.Sabotage, caster.WorldPosition, forward, target.WorldPosition );
@@ -456,9 +470,10 @@ public sealed class AbilitySystem : Component
 		foreach ( var enemy in Enemies( caster ).ToList() )
 		{
 			if ( enemy.WorldPosition.Distance( origin ) > radius ) continue;
-			if ( !Lands( caster, enemy ) ) continue;
+			if ( Shielded( enemy ) ) continue;
 
 			enemy.Status.Apply( kind, seconds );
+			Credit( caster, enemy );
 		}
 
 		PlayFx( id, origin, forward, origin + Vector3.Up * radius );
@@ -470,8 +485,11 @@ public sealed class AbilitySystem : Component
 		var target = NearestEnemy( caster, forward, TargetRange );
 		if ( target is null ) return false;
 
-		if ( Lands( caster, target ) )
+		if ( !Shielded( target ) )
+		{
 			target.Status.Apply( kind, seconds );
+			Credit( caster, target );
+		}
 
 		PlayFx( id, caster.WorldPosition, forward, target.WorldPosition );
 		return true;
@@ -479,16 +497,19 @@ public sealed class AbilitySystem : Component
 
 	bool Swap( TntPlayer caster, Vector3 forward )
 	{
-		var target = NearestEnemy( caster, forward, 900f );
+		// Never a ragdoll: the body is a local physics copy on every machine, so moving its owner
+		// mid-tumble would leave every other screen showing it in the old place.
+		var target = NearestEnemy( caster, forward, 900f, standingOnly: true );
 		if ( target is null ) return false;
 
 		var mine = caster.WorldPosition;
 		var theirs = target.WorldPosition;
 
-		if ( Lands( caster, target ) )
+		if ( !Shielded( target ) )
 		{
 			caster.TeleportTo( theirs + Vector3.Up * 4f );
 			target.TeleportTo( mine + Vector3.Up * 4f );
+			Credit( caster, target );
 		}
 
 		PlayFx( AbilityId.Swap, mine, forward, theirs );
@@ -500,7 +521,7 @@ public sealed class AbilitySystem : Component
 		var target = NearestEnemy( caster, forward, TargetRange );
 		if ( target is null ) return false;
 
-		if ( Lands( caster, target ) )
+		if ( !Shielded( target ) )
 		{
 			var sideways = (target.WorldPosition - caster.WorldPosition).WithZ( 0f );
 			var push = sideways.IsNearZeroLength ? forward : sideways.Normal;
@@ -519,9 +540,10 @@ public sealed class AbilitySystem : Component
 		{
 			var offset = enemy.WorldPosition - centre;
 			if ( offset.WithZ( 0f ).Length > 380f || MathF.Abs( offset.z ) > 90f ) continue;
-			if ( !Lands( caster, enemy ) ) continue;
+			if ( Shielded( enemy ) ) continue;
 
 			enemy.Status.Apply( StatusKind.Vortex, 2f, centre );
+			Credit( caster, enemy );
 		}
 
 		PlayFx( AbilityId.Vortex, centre, forward, centre );
@@ -593,7 +615,7 @@ public sealed class AbilitySystem : Component
 
 			RemoveMine( mine );
 
-			if ( Lands( mine.Owner, victim ) )
+			if ( !Shielded( victim ) )
 			{
 				var away = (victim.WorldPosition - mine.Position).WithZ( 0f );
 				var push = away.IsNearZeroLength ? Vector3.Forward : away.Normal;
@@ -753,7 +775,7 @@ public sealed class AbilitySystem : Component
 				break;
 
 			case AbilityId.Blackout:
-				AbilityFx.Ring( from, AreaRadius + 150f, AbilityFx.Ink, 0.6f );
+				AbilityFx.Ring( from, BlackoutRadius, AbilityFx.Ink, 0.6f );
 				break;
 
 			case AbilityId.Swap:
@@ -770,6 +792,18 @@ public sealed class AbilitySystem : Component
 			case AbilityId.Mine:
 				AbilityFx.Ring( from, 40f, AbilityFx.Coral, 0.3f );
 				break;
+		}
+	}
+
+	/// <summary>Host: show a late joiner the mines already planted — they're invisible traps otherwise.</summary>
+	public void SendSnapshotTo( Connection connection )
+	{
+		if ( Networking.IsActive && !Networking.IsHost ) return;
+
+		using ( Rpc.FilterInclude( connection ) )
+		{
+			foreach ( var mine in _mines )
+				ShowMine( mine.Id, mine.Position );
 		}
 	}
 
