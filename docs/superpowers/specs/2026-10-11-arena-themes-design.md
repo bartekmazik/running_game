@@ -177,7 +177,7 @@ moves from corner posts to a plaque on each wall and drops the Kenney floor patt
 1. Palette, Painter, MeshKit; themed tile models with ceiling undersides; floor textures for all
    eight themes; `_ui.scss` floor tokens updated.
 2. Tower shell: walls with collision, cornices, glass roof, facade, lights, lava shaft; frame,
-   posts, edge ring and clouds-inside-the-tower removed; signs moved to walls.
+   posts and edge ring removed (the cloud ring outside stays); signs moved to walls.
 3. Props: floors 1–2. 4. Floors 3–4. 5. Floors 5–6. 6. Floors 7–8.
 7. Menu orbit framing of the new facade.
 8. UI pass (separate design round): palette, information hierarchy.
