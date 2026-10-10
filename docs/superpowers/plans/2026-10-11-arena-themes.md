@@ -193,7 +193,45 @@ public sealed class SpikeProbe : Component
 
 - [ ] **Step 5: Record and remove** — write findings into this plan below, save memory `sbox-procedural-mesh` (type reference) with the five answers, delete `SpikeProbe.cs` and the `AddComponent` line, confirm `compile_status` clean. No commit of the probe.
 
-**Spike findings:** (filled in by Step 5)
+**Spike findings:** (filled in by Step 5 — 2026-10-11, editor 26.09.29; evidence in `.superpowers/sdd/2026-10-11-arena-themes/task-0-report.md`)
+
+1. **Winding: CCW seen from the front.** Indices `0,1,2, 0,2,3` over a=bottom-left, b=bottom-right,
+   c=top-right, d=top-left (as seen by the viewer) render from −X and are back-face culled from +X
+   (nothing visible). Single-sided; a two-sided wall needs a second, reversed quad.
+2. **`Vertex.Layout`: compiles and renders, but is obsolete** (CS0618 "use CreateVertexBuffer without
+   layout"). Use the non-obsolete overload instead — verified rendering identically:
+   `mesh.CreateVertexBuffer( verts.Count, verts );` (`List<Vertex>`). Vertex ctor used:
+   `new Vertex( pos, normal, tangentAsVector3 /* = +U direction */, new Vector4( u, v, 0, 0 ) )`,
+   V grows downward (v=0 at the top of the image).
+3. **Normal map: hemi-octahedral, tangent-space +Y = image UP, either param name.**
+   - `material.Set( "Normal", tex )` and `material.Set( "g_tNormal", tex )` behave identically.
+   - The shader always decodes hemi-oct RG: plain RGB data comes out rotated 45° (top bevels lit
+     from the upper-left etc.), so RGB is wrong.
+   - Green direction: with `dy` = height difference along image rows (row+1 minus row−1, i.e. down),
+     the normal is `new Vector3( -dx, +dy, 1f ).Normal` — the brief's `-dy` lit the bricks upside down.
+   - Working encode (RGBA8888, B = roughness byte, only 200 ≈ 0.8 tried — not verified that B drives
+     roughness):
+     ```csharp
+     var n = new Vector3( -dx, dy, 1f ).Normal;
+     var sum = MathF.Abs( n.x ) + MathF.Abs( n.y ) + n.z;
+     var ox = n.x / sum; var oy = n.y / sum;
+     target[o + 0] = (byte)(((ox + oy) * 0.5f + 0.5f) * 255f);
+     target[o + 1] = (byte)(((ox - oy) * 0.5f + 0.5f) * 255f);
+     target[o + 2] = 200; // roughness
+     target[o + 3] = 255;
+     ```
+   - For `Painter`: change the caller to `EncodeNormal( new Vector3( -dx, dy, 1f ).Normal, ... )` and
+     replace the RGB body of `EncodeNormal` with the hemi-oct body above.
+4. **Glass: not usable.** `SetFeature( "F_TRANSLUCENT", 1 )` on a `dev_nonmetal_rough70` copy (with or
+   without `g_flOpacityScale = 0.4`) does turn on alpha blending (texture alpha × opacity) — opaque
+   geometry drawn *before* it shows through tinted. But it is not ordered after opaque geometry: the
+   floor tiles, the cloud ring and some panels behind it paint straight over it, so it reads as a
+   hole/grey card, not a pane. A copy of the shipped `materials/dev/primary_white_trans.vmat` (complex,
+   F_TRANSLUCENT compiled in) + `g_flOpacityScale` showed the same floor-overwrite. `g_flOpacityScale`
+   alone: fully opaque. **Decision: no translucent panes — build glass as opaque painted
+   "sky-tinted" panels or leave the frame open** (Task 6 roof: open lattice or opaque panes).
+5. **`Mesh.Bounds` is settable** — `mesh.Bounds = BBox.FromPositionAndSize( center, size );` compiles and
+   the meshes render (no culling glitches seen). `ModelBuilder.WithViewBounds( BBox )` also exists.
 
 ---
 
