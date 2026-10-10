@@ -68,17 +68,18 @@ $help-deep: $mint-deep;
 $harm: $coral;
 $harm-deep: $coral-deep;
 
-// Floor identity colours — the same values as ArenaGenerator.FloorColor(), top floor first, so the
-// title tower, the depth ladder and the arena itself all agree.
-$floor0: #FFCC61;
-$floor1: #FFA375;
-$floor2: #FA8FB2;
-$floor3: #D18AEB;
-$floor4: #9E94FA;
-$floor5: #75B8FA;
-$floor6: #61D1D1;
-$floor7: #7ADB94;
+// Floor identity colours — mirror of Palette.FloorHue (Code/Art/Palette.cs) — change both together.
+$floor0: #A9CF95;
+$floor1: #A7CBE8;
+$floor2: #F0CF8A;
+$floor3: #9FB0DA;
+$floor4: #C99BB0;
+$floor5: #C9A26B;
+$floor6: #8F86AD;
+$floor7: #E07E58;
 $lava: #EB3861;
+$warn: #FF8A4C;
+$paper-shade: #E2D3B8;
 
 // --- Shape & depth ------------------------------------------------------------------------
 

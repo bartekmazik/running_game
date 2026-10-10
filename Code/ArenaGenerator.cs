@@ -53,26 +53,9 @@ public sealed class ArenaGenerator : Component
 	const float PillarRise = 90f;
 
 	/// <summary>
-	/// One identity colour per floor, top to bottom: a walk around the pastel colour wheel from warm
-	/// butter on top to cool mint just above the lava, so depth reads from hue alone. The HUD's depth
-	/// ladder and the menu use the same values (_ui.scss $floor0..$floor7), so they can't disagree.
-	///
-	/// A switch rather than a static array: editor hotload keeps static arrays alive across code
-	/// reloads, so edited colours never showed up until the editor restarted.
-	///
-	/// Every channel stays at or below 1 — ModelRenderer.Tint is 8-bit and wraps above it.
+	/// One identity colour per floor, top to bottom. The values live in <see cref="Palette"/>.
 	/// </summary>
-	public static Color FloorColor( int floor ) => floor switch
-	{
-		0 => new Color( 1.00f, 0.80f, 0.38f ), // butter
-		1 => new Color( 1.00f, 0.64f, 0.46f ), // peach
-		2 => new Color( 0.98f, 0.56f, 0.70f ), // bubblegum
-		3 => new Color( 0.82f, 0.54f, 0.92f ), // lilac
-		4 => new Color( 0.62f, 0.58f, 0.98f ), // lavender
-		5 => new Color( 0.46f, 0.72f, 0.98f ), // sky
-		6 => new Color( 0.38f, 0.82f, 0.82f ), // aqua
-		_ => new Color( 0.48f, 0.86f, 0.58f ), // mint
-	};
+	public static Color FloorColor( int floor ) => Palette.FloorHue( floor );
 
 	/// <summary>
 	/// Outermost ring of every floor — reads as "edge" before you reach it. Tints the candy-stripe
@@ -81,7 +64,7 @@ public sealed class ArenaGenerator : Component
 	static readonly Color EdgeColor = new Color( 1.00f, 0.52f, 0.50f );
 
 	/// <summary>What a stepped-on tile heats towards during its <see cref="Arena.DecayDelay"/>.</summary>
-	public static readonly Color WarnColor = new Color( 1.0f, 0.36f, 0.20f );
+	public static Color WarnColor => Palette.Warn;
 
 	/// <summary>Cream rails and posts — the "toy" frame the floors sit in.</summary>
 	static readonly Color FrameColor = new Color( 0.98f, 0.94f, 0.86f );
