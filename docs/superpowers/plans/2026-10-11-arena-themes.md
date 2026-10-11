@@ -829,7 +829,23 @@ Added 2026-10-11 after the user asked for a "very realistic" look and chose **st
 - [ ] **Step 4: Visual check (temporary, uncommitted).** A 1024² flagstone test (3 irregular stones from rounded rects with height + bevel, HeightNoise for chisel texture, Cavity 0.5 radius 6, EdgeWear 0.4, RoughnessNoise 0.2, Mottle with 6 octaves) on 4 floor-0 tiles; screenshots straight down and at a grazing angle under the moving PointLight. It must read as stone: dark joints, lighter worn edges, varied sheen.
 - [ ] **Step 5:** Remove temp code (`git checkout -- Code/ArenaGenerator.cs` afterwards), `compile_status` clean, commit `Painter: roughness channel, cavity and edge wear for realistic surfaces`.
 
-**Roughness finding:** (filled in by Step 1)
+**Added mid-task (2026-10-11, user: "irregular elements are key" to realism):**
+- `void Polygon( Vector2[] points, Color color, float alpha = 1f, float height = float.NaN, float bevel = 0f, float roughness = float.NaN )` — exact-SDF fill of any simple polygon (convex or concave), wrapping.
+- `Rect(…)` gains a trailing `float angle = 0f` (degrees about the centre, clockwise in the image).
+- `static Vector2[] Blob( Vector2 center, Vector2 halfSize, int corners, float jitter, int seed )` — seeded irregular superellipse outline for `Polygon` (stones, chipped blocks); radii only shrink, so a blob stays inside its box.
+- Step 4 used 9 Blob stones of different sizes, turned ±3.5°, uneven joints, instead of 3 rounded rects.
+
+**Roughness finding:** **B drives per-pixel roughness — verified 2026-10-11.** Two 128² flat materials on
+copies of `dev_nonmetal_rough70`, identical except normal-map B = 20 vs 240, side by side on floor 0 under a
+low PointLight: with the light over the B=20 tile it shows a tight bright specular spot (plus a soft warm
+reflection that stays put when the light moves); moved the same distance over the B=240 tile, that tile shows only a faint
+broad brightening (`.superpowers/sdd/2026-10-11-arena-themes/task-3b-roughness.png`, `-right.png`).
+Consistent with the shipped files: `dev_nonmetal_rough30.vmat_c` and `rough70.vmat_c` share the same colour
+texture hash and differ only in the normal texture (compiled `HemiOctIsoRoughness_RG_B`). No material
+parameter needed; `g_flRoughnessScaleFactor` exists in `complex.shader_c` but was not required.
+**Performance finding:** local builds compile with `DEBUG` defined and optimisations off, so editor timings
+are ~2.4× a published (release) build (same loops measured debug vs `/optimize+` on this machine). The
+Step 3 surface takes ~235 ms in the editor after optimisation (was ~340 ms); estimated ~100 ms released.
 
 ---
 
