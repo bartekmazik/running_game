@@ -42,12 +42,70 @@ public sealed class WorkshopTheme : ArenaTheme
 	const float BossHalfLength = 27f;
 	const float BossHalfWidth = 7f;
 
+	/// <summary>Structural front layer only (pipes, gauges, cage lamps and lights come in Tasks 6b and 9).</summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 64f, Corner = 28f, Cornice = 24f, Skirting = 10f, SkirtingDepth = 4f } );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// Plain corrugated sheet: galvanised zinc with spangle, a lapped seam riveted at uneven spacing,
+	/// grime running down the troughs, white rust here and there.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		// Full surface in Task 6b.
+		const int Pitch = 32;
+		var painter = new Painter( WallSize, Zinc, 0.45f );
+		var random = new Random( Seed + 600 );
+		var relief = new float[WallSize * WallSize];
+		for ( var y = 0; y < WallSize; y++ )
+		for ( var x = 0; x < WallSize; x++ )
+			relief[y * WallSize + x] = 0.5f + 0.5f * MathF.Cos( x * MathF.Tau / Pitch );
+		painter.AddHeight( relief, 1f );
+
+		painter.Mottle( 0.05f, 64, Seed + 601, 2 );
+		painter.Blend( Ramp( painter.Noise( 5, Seed + 602, 4 ), 0.6f, 0.85f, 0.5f ), ZincLight );
+
+		var streaks = painter.Noise( 64, Seed + 603, 2 );
+		var grime = new float[WallSize * WallSize];
+		for ( var y = 0; y < WallSize; y++ )
+		for ( var x = 0; x < WallSize; x++ )
+		{
+			var s = Streak( streaks, WallSize, x, y / 40f );
+			var trough = 1f - relief[y * WallSize + x];
+			grime[y * WallSize + x] = s > 0.55f ? MathF.Min( (s - 0.55f) * 3f, 1f ) * trough * 0.35f : 0f;
+		}
+		painter.Blend( grime, Grime );
+
+		var seam = WallSize / 2 + 20;
+		painter.Rect( 0f, seam, WallSize, 6f, ZincDark, height: 1.3f, bevel: 2f, roughness: 0.5f );
+		for ( var x = random.Next( 40 ); x < WallSize - 20; x += 120 + random.Next( 60 ) )
+			painter.Circle( x + 0.5f, seam + 12f, 4f, ZincLight, height: 1.6f, bevel: 3f, roughness: 0.3f );
+
+		painter.Blend( Ramp( painter.Noise( 7, Seed + 604, 4 ), 0.72f, 0.9f, 0.25f ), WhiteRust, roughness: 0.85f );
+		painter.ShadeFromHeight( 0.12f, 0.18f );
+		painter.Cavity( 0.3f, 6 );
+		painter.Grain( 0.01f, Seed + 605 );
+		return painter.Bake( "arena_5_wall", Painter.Matte, 4f );
+	}
+
+	/// <summary>Plain painted steel: posts and beams with rivets along the post edges.</summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		// Full surface in Task 6b.
+		return PaintTrimAtlas( "arena_5_trim", SteelShade, Grime, 0.5f, 0f, Seed + 700, painter =>
+		{
+			var (top, height) = TrimRows( TrimBand.Pilaster );
+			for ( var x = 12; x < TrimSize; x += 42 )
+			{
+				painter.Circle( x, top + height * 0.16f, 3.2f, Steel, height: 1.25f, bevel: 2.5f, roughness: 0.35f );
+				painter.Circle( x + 21, top + height * 0.84f, 3.2f, Steel, height: 1.25f, bevel: 2.5f, roughness: 0.35f );
+			}
+		} );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		const int cell = FloorSize / 2;
 		const float pitch = cell / (float)Lattice;
@@ -124,7 +182,7 @@ public sealed class WorkshopTheme : ArenaTheme
 		painter.Cavity( 0.55f, 3 );
 		painter.EdgeWear( 0.75f, 3, Seed + 34 );
 		painter.Grain( 0.012f, Seed + 35 );
-		return painter.ToMaterial( "arena_5_floor", Painter.Matte, 6f );
+		return painter.Bake( "arena_5_floor", Painter.Matte, 6f );
 	}
 
 	/// <summary>
@@ -206,7 +264,7 @@ public sealed class WorkshopTheme : ArenaTheme
 	/// (sheet-metal panels are stiffened that way), the edge is hemmed and screwed, and white rust
 	/// blooms in soft patches.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		const int Hem = 7;
@@ -255,7 +313,7 @@ public sealed class WorkshopTheme : ArenaTheme
 		painter.Mottle( 0.04f, 3, Seed + 521, 4 );
 		painter.Cavity( 0.4f, 3 );
 		painter.Grain( 0.01f, Seed + 522 );
-		return painter.ToMaterial( "arena_5_ceiling", Painter.Matte, 3f );
+		return painter.Bake( "arena_5_ceiling", Painter.Matte, 3f );
 	}
 
 	/// <summary>Spangle grains and the cross-break crease, in one pass over the ceiling.</summary>

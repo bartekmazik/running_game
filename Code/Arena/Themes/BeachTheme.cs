@@ -26,15 +26,167 @@ public sealed class BeachTheme : ArenaTheme
 	static Color Stripe => Palette.Hex( 0xE9A39A );
 	static Color Thread => Palette.Hex( 0xB7A68C );
 
+	/// <summary>Beach-hut paint: chalky pastels in the palette's band, and a sun-bleached white.</summary>
+	static Color HutWhite => Palette.Hex( 0xF0EBE0 );
+	static readonly uint[] HutPastels = { 0xA9D3C4, 0xEBB3A6, 0xF0D696, 0xA3C9D9 };
+
+	/// <summary>Bare timber where the paint has worn through: silver-grey, sea-weathered.</summary>
+	static Color Driftwood => Palette.Hex( 0xB9B2A6 );
+	static Color NailHead => Palette.Hex( 0x6B6660 );
+	static Color Rust => Palette.Hex( 0x9C6B4A );
+
 	/// <summary>Grit on the sand: shell cream, slate, pink shell, driftwood brown, basalt.</summary>
 	static readonly uint[] Grit = { 0xEFE3D0, 0xA9A39A, 0xE3B3A3, 0x9C7B5B, 0x5A5550 };
 
+	/// <summary>
+	/// The structural front layer: painted posts, a top plate, skirting. Awnings, surfboards, the life
+	/// ring and palm fronds come in Task 8; lights in 6b.
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 70f, Corner = 28f, Cornice = 24f, Skirting = 12f, SkirtingDepth = 4f } );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// Beach-hut weatherboard: lapped planks of uneven width, painted in runs of two to four boards per
+	/// colour — chalky pastels between bands of white — each lap throwing a dark line under it. The
+	/// paint is worn through to silver-grey timber where water runs and along the laps, salt-bleached
+	/// in broad patches; every plank has a butt joint somewhere and a nail at each stud, rusting.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		const float Ppu = WallSize / 208f;
+		var painter = new Painter( WallSize, Driftwood, 0.85f );
+		var random = new Random( Seed + 600 );
+		float Next() => (float)random.NextDouble();
+
+		var tops = new System.Collections.Generic.List<float>();
+		var y = 0f;
+		while ( y < WallSize - 1f )
+		{
+			tops.Add( y );
+			var board = (16f + Next() * 4f) * Ppu;
+			if ( WallSize - (y + board) < 15f * Ppu ) board = WallSize - y;
+			y += board;
+		}
+		tops.Add( WallSize );
+		var boards = tops.Count - 1;
+
+		// Runs of boards share a paint; white between the pastels.
+		var palette = new Color[boards + 1];
+		palette[0] = new Color( 0f, 0f, 0f, 0f );
+		var pastel = random.Next( HutPastels.Length );
+		var white = Next() < 0.5f;
+		var run = 0;
+		for ( var b = 0; b < boards; b++ )
+		{
+			if ( run == 0 )
+			{
+				white = !white;
+				if ( !white ) pastel = (pastel + 1 + random.Next( HutPastels.Length - 1 )) % HutPastels.Length;
+				run = 2 + random.Next( 3 );
+			}
+			run--;
+			var paint = white ? HutWhite : Palette.Hex( HutPastels[pastel] );
+			palette[b + 1] = Mix( paint, HutWhite, Next() * 0.15f );
+		}
+
+		var wear = painter.Noise( 24, Seed + 601, 4 );
+		var grainField = painter.Noise( 6, Seed + 602, 2 );
+		var index = new byte[WallSize * WallSize];
+		var relief = new float[WallSize * WallSize];
+		var bare = new float[WallSize * WallSize];
+		var lap = new float[WallSize * WallSize];
+		var joints = new float[boards];
+		for ( var b = 0; b < boards; b++ ) joints[b] = Next() * WallSize;
+
+		for ( var b = 0; b < boards; b++ )
+		{
+			var top = (int)tops[b]; var bottom = (int)tops[b + 1];
+			var height = bottom - top;
+			for ( var py = top; py < bottom; py++ )
+			{
+				var t = (py - top + 0.5f) / height;
+				for ( var px = 0; px < WallSize; px++ )
+				{
+					var i = py * WallSize + px;
+					index[i] = (byte)(b + 1);
+
+					// Lapped board: thin at the top, thick at the foot, then a shadowed step down to the next.
+					var shadow = t > 0.93f;
+					var g = StreakX( grainField, WallSize, px, py + b * 53, 37 ) - 0.5f;
+					relief[i] = shadow ? 0.25f : 0.5f + t * 0.5f + g * 0.05f;
+					if ( shadow ) lap[i] = 0.55f;
+
+					// Worn paint: more along the laps and around the butt joint, where water sits.
+					var dj = MathF.Abs( px - joints[b] ); dj = MathF.Min( dj, WallSize - dj );
+					var exposure = wear[i] + MathF.Max( 0f, t - 0.6f ) * 0.45f + MathF.Max( 0f, 1f - dj / 30f ) * 0.3f;
+					bare[i] = exposure > 0.74f ? MathF.Min( (exposure - 0.74f) * 3f, 1f ) * 0.6f : 0f;
+				}
+			}
+		}
+
+		painter.Blend( index, palette );
+		painter.AddHeight( relief, 1f );
+		painter.Blend( bare, Driftwood, roughness: 0.9f );
+		painter.Blend( lap, Mix( Driftwood, Palette.Ink, 0.3f ) );
+
+		// Each plank's butt joint: a dark hairline gap where two lengths meet.
+		for ( var b = 0; b < boards; b++ )
+			painter.Line( new Vector2( joints[b], tops[b] ), new Vector2( joints[b], tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
+
+		// Salt bleaching in broad patches.
+		painter.Blend( Ramp( painter.Noise( 4, Seed + 603, 4 ), 0.55f, 0.85f, 0.25f ), HutWhite );
+
+		// Nails at every stud, about 24 units apart but never on a grid, each with a faint rust halo.
+		var studs = new System.Collections.Generic.List<float>();
+		for ( var x = Next() * 40f; x < WallSize - 30f; x += (24f + (Next() - 0.5f) * 8f) * Ppu ) studs.Add( x );
+		for ( var b = 0; b < boards; b++ )
+		{
+			var ny = tops[b + 1] - (tops[b + 1] - tops[b]) * 0.22f;
+			foreach ( var x in studs )
+			{
+				var nx = x + (Next() - 0.5f) * 4f;
+				if ( Next() < 0.4f ) painter.Circle( nx, ny + (Next() - 0.5f) * 3f, 3f + Next() * 3f, Rust, 0.08f );
+				painter.Circle( nx, ny, 1.8f, NailHead, 0.9f, height: 1.05f, bevel: 1f, roughness: 0.5f );
+			}
+			painter.Circle( joints[b] - 6f, ny, 1.8f, NailHead, 0.9f );
+			painter.Circle( joints[b] + 6f, ny, 1.8f, NailHead, 0.9f );
+		}
+
+		painter.Mottle( 0.04f, 6, Seed + 604, 4 );
+		painter.RoughnessNoise( 0.05f, 8, Seed + 605, 3 );
+		painter.Cavity( 0.35f, 4 );
+		painter.EdgeWear( 0.3f, 3, Seed + 606 );
+		painter.Grain( 0.012f, Seed + 607 );
+		return painter.Bake( "arena_2_wall", Painter.Matte, 5f );
+	}
+
+	/// <summary>Weathered white-painted timber, flaking to driftwood grey; the slab edge a worn deck board.</summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		return PaintTrimAtlas( "arena_2_trim", HutWhite, Driftwood, 0.7f, 0.12f, Seed + 700, painter =>
+		{
+			var random = new Random( Seed + 701 );
+			float Next() => (float)random.NextDouble();
+			TintBand( painter, TrimBand.SlabEdge, Mix( Driftwood, SandDark, 0.3f ), 0.85f, NosingProfile, Mix( Driftwood, Palette.Ink, 0.4f ), 0.5f );
+			GrainRows( painter, TrimRows( TrimBand.SlabEdge ).Top, TrimRows( TrimBand.SlabEdge ).Height, Mix( Driftwood, Palette.Ink, 0.3f ), 0.5f, Seed + 702 );
+
+			foreach ( var band in new[] { TrimBand.Cornice, TrimBand.Pilaster, TrimBand.Skirting } )
+			{
+				var (top, height) = TrimRows( band );
+				var flakes = 5 + random.Next( 5 );
+				for ( var f = 0; f < flakes; f++ )
+				{
+					var at = new Vector2( Next() * TrimSize, top + 4f + Next() * (height - 8f) );
+					painter.Polygon( Organic( at, new Vector2( 3f + Next() * 9f, 1.5f + Next() * 4f ), 0.9f, random.Next(), Next() * 0.4f, 16 ), Driftwood,
+						alpha: 0.45f, roughness: 0.9f );
+				}
+			}
+		} );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		const int cell = FloorSize / 2;
 		var painter = new Painter( FloorSize, Mix( SandShade, SandDark, 0.6f ), 0.95f );
@@ -80,7 +232,7 @@ public sealed class BeachTheme : ArenaTheme
 		painter.RoughnessNoise( 0.05f, 8, Seed + 34, 3 );
 		painter.Cavity( 0.2f, 8 );
 		painter.Grain( 0.02f, Seed + 35 );
-		return painter.ToMaterial( "arena_2_floor", Painter.Matte, 6f );
+		return painter.Bake( "arena_2_floor", Painter.Matte, 6f );
 	}
 
 	/// <summary>
@@ -232,7 +384,7 @@ public sealed class BeachTheme : ArenaTheme
 	/// pattern runs on from tile to tile. Basket weave in height, soft sagging folds, sun-faded
 	/// patches and stitched panel seams.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		const int StripeWidth = 32;
@@ -272,6 +424,6 @@ public sealed class BeachTheme : ArenaTheme
 		painter.Mottle( 0.05f, 3, Seed + 522, 5 );
 		painter.Cavity( 0.3f, 3 );
 		painter.Grain( 0.015f, Seed + 523 );
-		return painter.ToMaterial( "arena_2_ceiling", Painter.Matte, 3f );
+		return painter.Bake( "arena_2_ceiling", Painter.Matte, 3f );
 	}
 }

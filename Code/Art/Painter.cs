@@ -699,11 +699,12 @@ public sealed class Painter
 	}
 
 	/// <summary>
-	/// Bakes colour, height and roughness into textures on a copy of the base material; tint amount
-	/// is 1 so ModelRenderer.Tint carries each floor's hue. Roughness travels in the normal map's blue
-	/// channel, where the shader reads it per pixel.
+	/// Bakes colour, height and roughness into the bytes of a colour texture and a normal texture
+	/// (roughness travels in the normal map's blue channel, where the shader reads it per pixel).
+	/// Touches nothing but this canvas, so it runs on a worker thread: the arena paints its surfaces
+	/// side by side and uploads them afterwards on the main thread (<see cref="PaintedSurface.Upload"/>).
 	/// </summary>
-	public Material ToMaterial( string name, string baseMaterial, float normalStrength )
+	public PaintedSurface Bake( string name, string baseMaterial, float normalStrength )
 	{
 		var size = Size;
 		var color = new byte[size * size * 4];
@@ -743,10 +744,42 @@ public sealed class Painter
 			}
 		}
 
-		var colorTexture = Texture.Create( size, size, ImageFormat.RGBA8888 ).WithName( name + "_color" ).WithData( color ).WithMips().Finish();
-		var normalTexture = Texture.Create( size, size, ImageFormat.RGBA8888 ).WithName( name + "_normal" ).WithData( normal ).WithMips().Finish();
+		return new PaintedSurface( name, baseMaterial, size, color, normal );
+	}
+}
 
-		var material = Material.Load( baseMaterial ).CreateCopy( name );
+/// <summary>
+/// One painted surface as plain bytes — what a <see cref="Painter"/> hands over from a worker thread.
+/// Textures and materials are engine resources and are only made on the main thread, by <see cref="Upload"/>.
+/// </summary>
+public sealed class PaintedSurface
+{
+	public string Name { get; }
+	public string BaseMaterial { get; }
+	public int Size { get; }
+
+	readonly byte[] _color;
+	readonly byte[] _normal;
+
+	public PaintedSurface( string name, string baseMaterial, int size, byte[] color, byte[] normal )
+	{
+		Name = name;
+		BaseMaterial = baseMaterial;
+		Size = size;
+		_color = color;
+		_normal = normal;
+	}
+
+	/// <summary>
+	/// The surface's two textures on a copy of its base material; tint amount is 1 so
+	/// ModelRenderer.Tint carries each renderer's tint in full. Main thread only.
+	/// </summary>
+	public Material Upload()
+	{
+		var colorTexture = Texture.Create( Size, Size, ImageFormat.RGBA8888 ).WithName( Name + "_color" ).WithData( _color ).WithMips().Finish();
+		var normalTexture = Texture.Create( Size, Size, ImageFormat.RGBA8888 ).WithName( Name + "_normal" ).WithData( _normal ).WithMips().Finish();
+
+		var material = Material.Load( BaseMaterial ).CreateCopy( Name );
 		material.Set( "Color", colorTexture );
 		material.Set( "Normal", normalTexture );
 		material.Set( "g_flModelTintAmount", 1f );

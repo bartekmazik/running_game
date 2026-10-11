@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
 
-/// <summary>What a theme needs to know about the room it dresses. Grows with the room builder (Task 6).</summary>
-public sealed class FloorContext
-{
-	public int Floor { get; init; }
+/// <summary>The four surfaces every theme paints, each an independent job for <see cref="ArenaTheme.Bake"/>.</summary>
+public enum ThemeSurface { Floor, Ceiling, Wall, Trim }
 
-	/// <summary>World height of this floor's tile tops.</summary>
-	public float TileTopZ { get; init; }
-}
+/// <summary>
+/// The rows of a theme's trim atlas. Every band but <see cref="Infill"/> spans the full width and is
+/// painted seamless across it, so a moulding runs any length: faces tile the band along their run at
+/// <see cref="ArenaTheme.TrimRepeat"/> and fit it across. Infill is four pictures side by side
+/// (window panes, blinds) that are fitted to one face each.
+/// </summary>
+public enum TrimBand { Cornice, Skirting, Pilaster, SlabEdge, Stock, Infill }
 
 /// <summary>
 /// One floor's room: the surfaces it paints at load and, later, the props it builds. The eight
@@ -25,6 +27,15 @@ public abstract class ArenaTheme
 
 	/// <summary>Ceiling resolution: 2x2 cells of 256 px, one cell per tile underside, seen from 160+ units away.</summary>
 	protected const int CeilingSize = 512;
+
+	/// <summary>Wall resolution: one <see cref="WallRepeat"/> square, floor to ceiling, about five pixels per unit.</summary>
+	protected const int WallSize = 1024;
+
+	/// <summary>Trim atlas resolution: <see cref="TrimRepeat"/> units of moulding per 512 px, four pixels per unit.</summary>
+	protected const int TrimSize = 512;
+
+	/// <summary>World units one horizontal repeat of the trim atlas spans along a moulding.</summary>
+	public const float TrimRepeat = 128f;
 
 	/// <summary>
 	/// World units one floor cell spans: the tile's top face plus both chamfers laid flat at their
@@ -52,20 +63,54 @@ public abstract class ArenaTheme
 	/// </summary>
 	public Material Ceiling { get; private set; }
 
+	/// <summary>
+	/// The room's wall face behind the pilasters, tiled every <see cref="WallRepeat"/> units along the
+	/// wall; vertically one repeat spans tile top to ceiling, so a wall can be composed floor to ceiling.
+	/// </summary>
+	public Material Wall { get; private set; }
+
+	/// <summary>Mouldings, posts, skirting, slab edge and infill pictures, one atlas laid out by <see cref="TrimBand"/>.</summary>
+	public Material Trim { get; private set; }
+
+	/// <summary>World units per horizontal repeat of <see cref="Wall"/>, and the height its one vertical repeat spans.</summary>
+	public virtual float WallRepeat => 208f;
+
 	/// <summary>Interior light colour (HDR allowed) used by the room builder and props.</summary>
 	public abstract Color LightColor { get; }
 
-	/// <summary>How many textures <see cref="Paint"/> produced, for the one startup timing line.</summary>
-	public int SurfaceCount => (FloorSurface is null ? 0 : 1) + (Ceiling is null ? 0 : 1);
+	/// <summary>How many textures this theme holds, for the one startup timing line.</summary>
+	public int SurfaceCount => (FloorSurface is null ? 0 : 1) + (Ceiling is null ? 0 : 1) + (Wall is null ? 0 : 1) + (Trim is null ? 0 : 1);
 
-	public void Paint()
+	/// <summary>
+	/// Paints one surface into plain bytes. Safe on any thread: every surface paints its own canvas
+	/// from its own seeded random streams and touches no engine resource, so the arena paints all of
+	/// them side by side and gets the same pixels whatever the order. Null where a room has none.
+	/// </summary>
+	public PaintedSurface Bake( ThemeSurface surface ) => surface switch
 	{
-		FloorSurface = PaintFloor();
-		Ceiling = PaintCeiling();
+		ThemeSurface.Floor => PaintFloor(),
+		ThemeSurface.Ceiling => PaintCeiling(),
+		ThemeSurface.Wall => PaintWall(),
+		_ => PaintTrim(),
+	};
+
+	/// <summary>Uploads a baked surface and keeps its material. Main thread only.</summary>
+	public void Apply( ThemeSurface surface, PaintedSurface baked )
+	{
+		var material = baked?.Upload();
+		switch ( surface )
+		{
+			case ThemeSurface.Floor: FloorSurface = material; break;
+			case ThemeSurface.Ceiling: Ceiling = material; break;
+			case ThemeSurface.Wall: Wall = material; break;
+			default: Trim = material; break;
+		}
 	}
 
-	protected abstract Material PaintFloor();
-	protected abstract Material PaintCeiling();
+	protected abstract PaintedSurface PaintFloor();
+	protected abstract PaintedSurface PaintCeiling();
+	protected abstract PaintedSurface PaintWall();
+	protected abstract PaintedSurface PaintTrim();
 
 	/// <summary>Dress the room: wall face layer, alcove props, ceiling props, lights.</summary>
 	public abstract void Dress( FloorContext room );
@@ -84,7 +129,7 @@ public abstract class ArenaTheme
 	/// <summary>Top-left pixel of atlas cell 0..3 (column = cell % 2, row = cell / 2), matching <see cref="Cell"/>.</summary>
 	protected static Vector2 CellOrigin( int cell, int atlasSize ) => new( (cell % 2) * atlasSize / 2, (cell / 2) * atlasSize / 2 );
 
-	protected static Color Mix( Color a, Color b, float t ) => new( a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t );
+	public static Color Mix( Color a, Color b, float t ) => new( a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t );
 
 	/// <summary>
 	/// A well-mixed hash of three integers, for properties of things a surface computes per pixel —
@@ -217,7 +262,7 @@ public abstract class ArenaTheme
 	/// between samples. Neighbouring rows read neighbouring noise rows, so features keep their width
 	/// across and become streaks along — wood grain, yarn, brushed metal.
 	/// </summary>
-	protected static float Streak( float[] noise, int size, int row, float along )
+	public static float Streak( float[] noise, int size, int row, float along )
 	{
 		var offset = ((row % size) + size) % size * size;
 		var p0 = (int)MathF.Floor( along );
@@ -293,7 +338,7 @@ public abstract class ArenaTheme
 	}
 
 	/// <summary>Turns a noise field into a soft mask in place: 0 below <paramref name="from"/>, <paramref name="scale"/> above <paramref name="to"/>, smooth between.</summary>
-	protected static float[] Ramp( float[] field, float from, float to, float scale = 1f )
+	public static float[] Ramp( float[] field, float from, float to, float scale = 1f )
 	{
 		var inverse = 1f / (to - from);
 		for ( var i = 0; i < field.Length; i++ )
@@ -329,6 +374,335 @@ public abstract class ArenaTheme
 				var t = 1f - MathF.Sqrt( dx * dx + dy * dy ) * inverse;
 				mask[row + x] *= t <= 0f ? 0f : t * t * (3f - 2f * t);
 			}
+		}
+	}
+
+	/// <summary>Pixel rows of a trim band: top row and height.</summary>
+	public static (int Top, int Height) TrimRows( TrimBand band ) => band switch
+	{
+		TrimBand.Cornice => (0, 96),
+		TrimBand.Skirting => (96, 64),
+		TrimBand.Pilaster => (160, 96),
+		TrimBand.SlabEdge => (256, 48),
+		TrimBand.Stock => (304, 48),
+		_ => (352, 160),
+	};
+
+	/// <summary>
+	/// A band as a UV region, inset from its top and bottom rows so the first few mips never bleed the
+	/// neighbouring band in (a sage bar picked up the terracotta slab edge as a pink fringe at two pixels).
+	/// </summary>
+	public static Rect TrimRegion( TrimBand band )
+	{
+		const float Inset = 5f;
+		var (top, height) = TrimRows( band );
+		return new Rect( 0f, (top + Inset) / TrimSize, 1f, (height - Inset * 2f) / TrimSize );
+	}
+
+	/// <summary>Infill picture 0..3: a 128 × 160 px cell of the infill band, inset two pixels all round.</summary>
+	public static Rect InfillCell( int index )
+	{
+		var (top, height) = TrimRows( TrimBand.Infill );
+		return new Rect( (index * 128 + 2f) / TrimSize, (top + 2f) / TrimSize, 124f / TrimSize, (height - 4f) / TrimSize );
+	}
+
+	/// <summary>
+	/// Paints a band's base: one colour over its rows, a height profile across it (t = 0 at the band's
+	/// top row, 1 at its bottom — a moulding's cross-section) and a roughness. The profile is what
+	/// makes a flat box face read as a moulding: the normal map lights its steps and coves.
+	/// </summary>
+	protected static void PaintBand( Painter painter, TrimBand band, Color color, Func<float, float> profile, float roughness )
+	{
+		var (top, height) = TrimRows( band );
+		painter.Fill( 0, top, TrimSize, height, color, roughness: roughness );
+		var relief = new float[TrimSize * TrimSize];
+		for ( var y = 0; y < height; y++ )
+		{
+			var h = profile( (y + 0.5f) / height );
+			var row = (top + y) * TrimSize;
+			for ( var x = 0; x < TrimSize; x++ ) relief[row + x] = h;
+		}
+		painter.AddHeight( relief, 1f );
+	}
+
+	/// <summary>
+	/// Shades a band by its own profile: rows sitting low in it (a cove, the shadow under a bead) move
+	/// toward <paramref name="shade"/>, so mouldings read even under flat ambient light.
+	/// </summary>
+	protected static void ShadeBand( Painter painter, TrimBand band, Func<float, float> profile, Color shade, float amount )
+	{
+		var (top, height) = TrimRows( band );
+		var weight = new float[TrimSize * TrimSize];
+		for ( var y = 0; y < height; y++ )
+		{
+			var w = Math.Clamp( (1f - profile( (y + 0.5f) / height )) * amount, 0f, 1f );
+			var row = (top + y) * TrimSize;
+			for ( var x = 0; x < TrimSize; x++ ) weight[row + x] = w;
+		}
+		painter.Blend( weight, shade );
+	}
+
+	/// <summary>
+	/// Wood grain along rows <paramref name="top"/>..+<paramref name="height"/>: growth rings as seen on
+	/// a sawn face — continuous thin late-wood lines running the length of the piece, bent by a slow
+	/// smooth field so their spacing opens and closes, each line sharp on one side and fading into the
+	/// early wood on the other. Never dashes: thresholded noise read as tiger stripes (4a review).
+	/// Seamless across the texture's wrap, since mouldings tile along their run.
+	/// </summary>
+	protected static void GrainRows( Painter painter, int top, int height, Color lateWood, float strength, int seed )
+	{
+		var size = painter.Size;
+		var bend = painter.Noise( 3, seed, 3 );
+		var fade = painter.Noise( 8, seed + 1, 2 );
+		var weight = new float[size * size];
+		for ( var y = top; y < top + height; y++ )
+		{
+			var row = y * size;
+			for ( var x = 0; x < size; x++ )
+			{
+				var i = row + x;
+				var ring = y / 7f + bend[i] * 5f;
+				var f = ring - MathF.Floor( ring );
+				var line = f < 0.16f ? 1f - f / 0.16f : 0f;
+				weight[i] = line * strength * (0.45f + fade[i] * 0.8f);
+			}
+		}
+		painter.Blend( weight, lateWood );
+	}
+
+	/// <summary>
+	/// A noise field read as streaks along x that stay seamless across the texture's wrap: straight
+	/// along x, so the field's own wrap carries over the edge (its period sets the streak length), and
+	/// each pixel row from a row <paramref name="spread"/> apart, so features stay thin across. For
+	/// surfaces that tile — walls and trims — where <see cref="Streak"/>'s stretch would leave a seam.
+	/// </summary>
+	public static float StreakX( float[] noise, int size, int x, int y, int spread )
+	{
+		var column = ((x % size) + size) % size;
+		var row = (int)((uint)(y * spread) % (uint)size);
+		return noise[row * size + column];
+	}
+
+	/// <summary>
+	/// Crown moulding across a cornice band, top (t = 0, against the ceiling) to bottom: a flat fillet,
+	/// a deep cove, a round bead, then the fascia with a small drip step at its foot.
+	/// </summary>
+	protected static float CorniceProfile( float t )
+	{
+		if ( t < 0.14f ) return 1f;
+		if ( t < 0.42f ) { var c = (t - 0.14f) / 0.28f; return 0.55f + 0.45f * (1f - MathF.Sin( c * MathF.PI )) * (c < 0.5f ? 1f : 0.85f); }
+		if ( t < 0.56f ) { var b = (t - 0.42f) / 0.14f; return 0.75f + 0.25f * MathF.Sin( b * MathF.PI ); }
+		if ( t < 0.62f ) return 0.62f;
+		if ( t < 0.92f ) return 0.82f;
+		return 0.7f;
+	}
+
+	/// <summary>Skirting board across its band: a rounded top bead, a shallow step, then the flat board.</summary>
+	protected static float SkirtingProfile( float t )
+	{
+		if ( t < 0.22f ) return 0.75f + 0.25f * MathF.Sin( t / 0.22f * MathF.PI );
+		if ( t < 0.3f ) return 0.68f;
+		return 0.8f;
+	}
+
+	/// <summary>A post's face across its width: chamfered arrises and a shallow sunk panel down the middle.</summary>
+	protected static float PostProfile( float t )
+	{
+		var edge = Step( 0f, 0.1f, MathF.Min( t, 1f - t ) );
+		var panel = Step( 0.24f, 0.3f, MathF.Min( t, 1f - t ) );
+		return 0.55f + 0.45f * edge - 0.12f * panel;
+	}
+
+	/// <summary>The slab edge: a rounded nosing along the top, then the flat edge of the floor.</summary>
+	protected static float NosingProfile( float t ) => t < 0.3f ? 0.7f + 0.3f * MathF.Sin( (t / 0.3f) * MathF.PI * 0.5f + MathF.PI * 0.5f ) : 0.75f;
+
+	/// <summary>
+	/// A trim atlas in one material: every band in <paramref name="body"/> with its moulding profile
+	/// and the profile's coves shaded toward <paramref name="shade"/>, then <paramref name="details"/>
+	/// (a theme's own paint, nail heads, windows in the infill band), then <paramref name="grain"/>
+	/// (0 for none) of wood grain along the run, mottle, cavity and worn arrises.
+	/// </summary>
+	protected PaintedSurface PaintTrimAtlas( string name, Color body, Color shade, float roughness, float grain, int seed, Action<Painter> details = null )
+	{
+		var painter = new Painter( TrimSize, body, roughness );
+		PaintBand( painter, TrimBand.Cornice, body, CorniceProfile, roughness );
+		PaintBand( painter, TrimBand.Skirting, Mix( body, shade, 0.15f ), SkirtingProfile, roughness );
+		PaintBand( painter, TrimBand.Pilaster, body, PostProfile, roughness );
+		PaintBand( painter, TrimBand.SlabEdge, Mix( body, shade, 0.3f ), NosingProfile, roughness );
+		PaintBand( painter, TrimBand.Stock, body, _ => 0.8f, roughness );
+		PaintBand( painter, TrimBand.Infill, body, _ => 0.8f, roughness );
+		ShadeBand( painter, TrimBand.Cornice, CorniceProfile, shade, 0.7f );
+		ShadeBand( painter, TrimBand.Skirting, SkirtingProfile, shade, 0.5f );
+		ShadeBand( painter, TrimBand.Pilaster, PostProfile, shade, 0.4f );
+		details?.Invoke( painter );
+
+		if ( grain > 0f ) GrainRows( painter, 0, TrimSize, Mix( body, shade, 0.8f ), grain, seed + 1 );
+		painter.HeightNoise( 0.08f, 32, seed + 2, 3 );
+		painter.Mottle( 0.05f, 6, seed + 3, 4 );
+		painter.RoughnessNoise( 0.06f, 8, seed + 4, 3 );
+		painter.Cavity( 0.4f, 3 );
+		painter.EdgeWear( 0.35f, 3, seed + 5 );
+		painter.Grain( 0.012f, seed + 6 );
+		return painter.Bake( name, Painter.Matte, 4f );
+	}
+
+	/// <summary>Recolours a band without touching its relief, then re-shades it by its profile.</summary>
+	protected static void TintBand( Painter painter, TrimBand band, Color color, float roughness, Func<float, float> profile, Color shade, float amount )
+	{
+		var (top, height) = TrimRows( band );
+		painter.Fill( 0, top, TrimSize, height, color, roughness: roughness );
+		ShadeBand( painter, band, profile, shade, amount );
+	}
+
+	/// <summary>The pixel rectangle of infill picture <paramref name="index"/> (128 × 160).</summary>
+	protected static (int X, int Y, int Width, int Height) InfillPixels( int index ) => (index * 128, TrimRows( TrimBand.Infill ).Top, 128, 160);
+
+	/// <summary>
+	/// Windows set into the wall face of some bays: a picture from the trim's infill band (frosted
+	/// glass, blinds) fitted to the opening, a frame and a sill in another infill cell, an optional
+	/// glazing cross. All of it stands inside the recess, in front of the wall face and behind the
+	/// collider plane. Which bays get one is seeded per room, so every machine agrees.
+	/// </summary>
+	protected void AddWindows( FloorContext room, List<Bay> bays, Rect glass, Rect frame, float sill, float height, float maxWidth, float chance, bool cross, int seed )
+	{
+		var random = new Random( seed );
+		var skin = new Skin( Trim, frame );
+		const float Rail = 4f;
+		const float Depth = 5f;
+		const float Face = FloorContext.Recess;
+
+		foreach ( var bay in bays )
+		{
+			if ( bay.Width < 90f || random.NextDouble() > chance ) continue;
+
+			var side = bay.Side;
+			var facing = room.WallFacing( side );
+			var width = MathF.Min( maxWidth, bay.Width - 36f );
+			var u = bay.Middle;
+			var top = sill + height;
+			// Every piece reaches Embed behind the wall face, so it never meets the face along a crack.
+			Vector3 At( float along, float v, float depth ) => room.OnWall( side, u + along, v, Face + FloorContext.Embed - depth * 0.5f );
+
+			room.WallPicture( side, Trim, glass, u - width * 0.5f, u + width * 0.5f, sill, top, Face - 0.5f, false );
+			const float Frame = Depth + FloorContext.Embed;
+			room.Kit.BevelBox( skin, At( 0f, top - Rail * 0.5f, Frame ), new Vector3( Frame, width, Rail ), 0.6f, facing );
+			room.Kit.BevelBox( skin, At( 0f, sill + Rail * 0.5f, Frame ), new Vector3( Frame, width, Rail ), 0.6f, facing );
+			room.Kit.BevelBox( skin, At( -(width - Rail) * 0.5f, sill + height * 0.5f, Frame ), new Vector3( Frame, Rail, height - Rail * 2f ), 0.6f, facing );
+			room.Kit.BevelBox( skin, At( (width - Rail) * 0.5f, sill + height * 0.5f, Frame ), new Vector3( Frame, Rail, height - Rail * 2f ), 0.6f, facing );
+			room.Kit.BevelBox( skin, At( 0f, sill - 1.5f, Frame + 5f ), new Vector3( Frame + 5f, width + 8f, 3f ), 0.6f, facing );
+
+			if ( !cross ) continue;
+			room.Kit.BevelBox( skin, At( 0f, sill + height * 0.5f, 3f + FloorContext.Embed ), new Vector3( 3f + FloorContext.Embed, 2.5f, height - Rail * 2f ), 0.4f, facing );
+			room.Kit.BevelBox( skin, At( 0f, sill + height * 0.55f, 3f + FloorContext.Embed ), new Vector3( 3f + FloorContext.Embed, width - Rail * 2f, 2.5f ), 0.4f, facing );
+		}
+	}
+
+	/// <summary>Smooth step from 0 at <paramref name="a"/> to 1 at <paramref name="b"/> (either order).</summary>
+	protected static float Step( float a, float b, float t )
+	{
+		var x = Math.Clamp( (t - a) / (b - a), 0f, 1f );
+		return x * x * (3f - 2f * x);
+	}
+
+	/// <summary>The dimensions of a room's structural front layer, in world units.</summary>
+	protected readonly struct FrontStyle
+	{
+		/// <summary>Average post width (each post varies ±15 %).</summary>
+		public float Post { get; init; }
+
+		/// <summary>The wider pier in the middle of every wall, where the floor plaque hangs.</summary>
+		public float Pier { get; init; }
+
+		/// <summary>Width of a corner post's face on each of its two walls.</summary>
+		public float Corner { get; init; }
+
+		/// <summary>Height of the cornice beam under the ceiling.</summary>
+		public float Cornice { get; init; }
+
+		/// <summary>Skirting height above the ledge, and how far it stands off the wall face.</summary>
+		public float Skirting { get; init; }
+		public float SkirtingDepth { get; init; }
+	}
+
+	/// <summary>A recess between two posts on one wall: u from <see cref="From"/> to <see cref="To"/>.</summary>
+	public readonly struct Bay
+	{
+		public int Side { get; init; }
+		public float From { get; init; }
+		public float To { get; init; }
+		public float Width => To - From;
+		public float Middle => (From + To) * 0.5f;
+	}
+
+	/// <summary>Average post spacing, centre to centre; the irregularity rule jitters every gap ±30 %.</summary>
+	const float PostSpacing = 210f;
+
+	/// <summary>
+	/// The structural front layer every room shares, in the theme's own trim: a post at every corner,
+	/// a wider pier mid-wall, posts between them at jittered spacing — a different stream per wall and
+	/// per half, so no two walls and no two halves mirror — a cornice beam along the top, skirting in
+	/// every bay. Posts and cornice stand in the <see cref="FloorContext.Recess"/> between the wall
+	/// face and the collider plane; the bays between them are the alcoves later props sit in.
+	/// Returns the bays, so a theme can fill some (windows, panels).
+	/// </summary>
+	protected List<Bay> BuildFrontLayer( FloorContext room, FrontStyle style )
+	{
+		var bays = new List<Bay>();
+		var post = TrimRegion( TrimBand.Pilaster );
+		var stock = TrimRegion( TrimBand.Stock );
+		var cornice = TrimRegion( TrimBand.Cornice );
+		var skirting = TrimRegion( TrimBand.Skirting );
+		var beam = FloorContext.ClearHeight - style.Cornice;
+		const float Span = FloorContext.Span;
+		const float Half = FloorContext.HalfSpan;
+		const float Recess = FloorContext.Recess;
+		const float Deep = Recess + FloorContext.Embed;
+
+		for ( var side = 0; side < 4; side++ )
+		{
+			var posts = new List<(float From, float To)> { (0f, style.Corner) };
+			var pier = style.Pier * 0.5f;
+			AddPosts( posts, style.Corner, Half - pier, style.Post, new Random( Seed * 13 + side * 7919 + 3 ) );
+			posts.Add( (Half - pier, Half + pier) );
+			AddPosts( posts, Half + pier, Span - style.Corner, style.Post, new Random( Seed * 17 + side * 6151 + 11 ) );
+
+			// The corner this wall owns runs on to the wall face of the next, filling the corner square.
+			posts.Add( (Span - style.Corner, Span + Deep) );
+
+			foreach ( var (from, to) in posts )
+				room.WallBox( side, Trim, post, stock, true, from, to, FloorContext.LedgeTop, beam, 0f, Deep, BoxFaces.Front | BoxFaces.Ends );
+
+			for ( var k = 0; k + 1 < posts.Count; k++ )
+			{
+				var bay = new Bay { Side = side, From = posts[k].To, To = posts[k + 1].From };
+				bays.Add( bay );
+				room.WallBox( side, Trim, skirting, stock, false, bay.From, bay.To, FloorContext.LedgeTop, FloorContext.LedgeTop + style.Skirting,
+					Recess - style.SkirtingDepth, Deep, BoxFaces.Front | BoxFaces.Top );
+			}
+
+			// Sides 0 and 2 run through both corner squares, 1 and 3 stop at them, so no two beams overlap.
+			var (u0, u1) = side % 2 == 0 ? (-Deep, Span + Deep) : (0f, Span);
+			room.WallBox( side, Trim, cornice, stock, false, u0, u1, beam, FloorContext.ClearHeight, 0f, Deep, BoxFaces.Front | BoxFaces.Bottom );
+		}
+
+		return bays;
+	}
+
+	/// <summary>Posts between <paramref name="from"/> and <paramref name="to"/>: gaps jittered ±30 % and rescaled to fit exactly, widths ±15 %.</summary>
+	static void AddPosts( List<(float From, float To)> posts, float from, float to, float width, Random random )
+	{
+		var length = to - from;
+		var segments = Math.Max( 1, (int)MathF.Round( length / PostSpacing ) );
+		var weights = new float[segments];
+		var sum = 0f;
+		for ( var k = 0; k < segments; k++ ) sum += weights[k] = 1f + ((float)random.NextDouble() - 0.5f) * 0.6f;
+
+		var at = from;
+		for ( var k = 0; k + 1 < segments; k++ )
+		{
+			at += length * weights[k] / sum;
+			var half = width * (0.85f + (float)random.NextDouble() * 0.3f) * 0.5f;
+			posts.Add( (at - half, at + half) );
 		}
 	}
 }

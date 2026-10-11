@@ -38,12 +38,66 @@ public sealed class ForgeTheme : ArenaTheme
 	/// <summary>Column spacing in pixels: about 17 units, a 40 cm column.</summary>
 	const float ColumnSpacing = 150f;
 
+	/// <summary>Structural front layer only (forge mouths, lava seams and lights come in Tasks 6b and 10).</summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		BuildFrontLayer( room, new FrontStyle { Post = 36f, Pier = 80f, Corner = 38f, Cornice = 30f, Skirting = 12f, SkirtingDepth = 6f } );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// Plain dark rock: broad lumps and hollows, faint strata, browner and lighter patches. Also the
+	/// face of the lava shaft below the floor.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		// Full surface in Task 6b.
+		var painter = new Painter( WallSize, RockDark, 0.9f );
+
+		// A jumble of broken faces, each its own tone and set at its own depth, so the rock reads as
+		// rock even where only ambient light reaches it.
+		var random = new Random( Seed + 610 );
+		float Next() => (float)random.NextDouble();
+		var tones = new[] { Rock, RockLight, RockDark, Basalt, Mix( Rock, BasaltBrown, 0.4f ) };
+		for ( var f = 0; f < 260; f++ )
+		{
+			var centre = new Vector2( Next() * WallSize, Next() * WallSize );
+			var half = new Vector2( 30f + Next() * 70f, 24f + Next() * 50f );
+			var face = Mix( Mix( tones[random.Next( tones.Length )], tones[random.Next( tones.Length )], Next() ), Rock, 0.35f );
+			painter.Polygon( Painter.Blob( centre, half, 5 + random.Next( 4 ), 1f, random.Next() ), face, height: 0.5f + Next() * 0.7f, bevel: 5f + Next() * 10f, roughness: 0.85f + Next() * 0.1f );
+		}
+		painter.Blend( Ramp( painter.Noise( 4, Seed + 600, 4 ), 0.5f, 0.8f, 0.3f ), RockLight );
+		painter.Blend( Ramp( painter.Noise( 6, Seed + 601, 4 ), 0.55f, 0.85f, 0.3f ), RockDark );
+		painter.Blend( Ramp( painter.Noise( 3, Seed + 602, 3 ), 0.6f, 0.9f, 0.3f ), BasaltBrown );
+
+		var strata = painter.Noise( 4, Seed + 603, 2 );
+		var bands = new float[WallSize * WallSize];
+		for ( var y = 0; y < WallSize; y++ )
+		for ( var x = 0; x < WallSize; x++ )
+			bands[y * WallSize + x] = StreakX( strata, WallSize, x, y, 3 ) - 0.5f;
+		painter.AddHeight( bands, 0.35f );
+
+		painter.HeightNoise( 1.6f, 4, Seed + 604, 5 );
+		painter.HeightNoise( 0.6f, 24, Seed + 605, 3 );
+		painter.HeightNoise( 0.25f, 96, Seed + 607, 2 );
+		painter.ShadeFromHeight( 0.35f, 0.4f );
+
+		// Until the forge has lights of its own (6b) it is lit by ambient alone, where only colour reads:
+		// grit and small facets in the colour as well as the relief.
+		painter.Mottle( 0.12f, 32, Seed + 608, 3 );
+		painter.Mottle( 0.08f, 128, Seed + 609, 2 );
+		painter.Cavity( 0.6f, 4 );
+		painter.Grain( 0.015f, Seed + 606 );
+		return painter.Bake( "arena_7_wall", Painter.Matte, 9f );
+	}
+
+	/// <summary>Plain dark basalt blocks.</summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		// Full surface in Task 6b.
+		return PaintTrimAtlas( "arena_7_trim", Basalt, Mix( BasaltShade, Soot, 0.5f ), 0.85f, 0f, Seed + 700 );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		var painter = new Painter( FloorSize, Fissure, 0.85f );
 		var random = new Random( Seed );
@@ -73,7 +127,7 @@ public sealed class ForgeTheme : ArenaTheme
 		painter.Cavity( 0.5f, 4 );
 		painter.EdgeWear( 0.3f, 3, Seed + 34 );
 		painter.Grain( 0.015f, Seed + 35 );
-		return painter.ToMaterial( "arena_7_floor", Painter.Matte, 7f );
+		return painter.Bake( "arena_7_floor", Painter.Matte, 7f );
 	}
 
 	/// <summary>
@@ -195,7 +249,7 @@ public sealed class ForgeTheme : ArenaTheme
 	/// rock reads faceted even in flat light), a few long tapered fissures cut mostly in height, soot,
 	/// and a handful of ember glints lodged in the fissures — tiny, soft and few.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		var painter = new Painter( CeilingSize, Soot, 0.9f );
@@ -245,7 +299,7 @@ public sealed class ForgeTheme : ArenaTheme
 		painter.Mottle( 0.08f, 6, Seed + 513, 3 );
 		painter.Cavity( 0.5f, 4 );
 		painter.Grain( 0.015f, Seed + 514 );
-		return painter.ToMaterial( "arena_7_ceiling", Painter.Matte, 5f );
+		return painter.Bake( "arena_7_ceiling", Painter.Matte, 5f );
 	}
 
 	/// <summary>

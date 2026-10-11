@@ -6,8 +6,8 @@
 
 @*
 	Signage hung on the arena itself, built by ArenaGenerator on every machine (local, unnetworked).
-	Two kinds: a floor-number disc on each corner post of every floor, in that floor's colour with its
-	Kenney motif behind the number, and the trophy over the tower — Kenney's gold medal with the
+	Two kinds: a floor plaque centred on every wall of every room — paper, the floor's number in ink,
+	a rim in the floor's identity colour — and the trophy over the tower, Kenney's gold medal with the
 	game's one rule under it. World-space PanelComponents, one per sign; they never rebuild.
 *@
 
@@ -22,8 +22,7 @@
 	}
 	else
 	{
-		<div class="disc" style="background-color: @FloorHex">
-			<div class="motif" style="background-image: url(@PatternUrl)"></div>
+		<div class="plaque" style="border: 26px solid @FloorHex">
 			<label class="number">@FloorNumber</label>
 		</div>
 	}
@@ -48,8 +47,6 @@
 			return $"#{(int)(c.r * 255):X2}{(int)(c.g * 255):X2}{(int)(c.b * 255):X2}";
 		}
 	}
-
-	string PatternUrl => "/" + TileTextures.FloorTexturePath( Floor );
 
 	protected override int BuildHash() => Floor;
 }

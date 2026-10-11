@@ -43,12 +43,69 @@ public sealed class DungeonTheme : ArenaTheme
 	static Color Lime => Palette.Hex( 0x75707A );
 	static Color Soot => Palette.Hex( 0x2E2B33 );
 
+	/// <summary>Structural front layer only (arches, torches and lights come in Tasks 6b and 10).</summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		BuildFrontLayer( room, new FrontStyle { Post = 34f, Pier = 80f, Corner = 36f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 6f } );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// Plain ashlar: courses of different heights, blocks of different lengths and tones (slate, lilac,
+	/// warm grey), pillowed and pitted, set in deep mortar, damp toward the floor.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		// Full surface in Task 6b.
+		const float Ppu = WallSize / 208f;
+		var painter = new Painter( WallSize, Mix( Mortar, Soot, 0.35f ), 0.95f );
+		var random = new Random( Seed + 600 );
+		float Next() => (float)random.NextDouble();
+		var tones = new[] { Granite, GraniteLight, GraniteShade, GraniteWarm, GraniteLilac };
+
+		var y = 0f;
+		while ( y < WallSize - 1f )
+		{
+			var course = (26f + Next() * 14f) * Ppu;
+			if ( WallSize - (y + course) < 22f * Ppu ) course = WallSize - y;
+			var x = Next() * WallSize;
+			var end = x + WallSize;
+			while ( x < end - 1f )
+			{
+				var length = (36f + Next() * 54f) * Ppu;
+				if ( end - (x + length) < 30f * Ppu ) length = end - x;
+				var joint = 6f + Next() * 6f;
+				var stone = Mix( tones[random.Next( tones.Length )], tones[random.Next( tones.Length )], Next() );
+				painter.Rect( x + joint * 0.5f, y + joint * 0.5f, length - joint, course - joint, stone, radius: 4f + Next() * 6f, height: 1f,
+					bevel: 10f + Next() * 6f, roughness: 0.88f, angle: (Next() - 0.5f) * 0.8f );
+				x += length;
+			}
+			y += course;
+		}
+
+		var damp = Ramp( painter.Noise( 6, Seed + 601, 4 ), 0.4f, 0.8f, 0.5f );
+		for ( var py = 0; py < WallSize; py++ )
+		{
+			var low = Math.Clamp( (py / (float)WallSize - 0.6f) * 2.5f, 0f, 1f );
+			for ( var px = 0; px < WallSize; px++ ) damp[py * WallSize + px] *= low;
+		}
+		painter.Blend( damp, Damp, roughness: 0.7f );
+
+		painter.HeightNoise( 0.5f, 16, Seed + 602, 3 );
+		painter.Mottle( 0.08f, 8, Seed + 603, 4 );
+		painter.Cavity( 0.6f, 6 );
+		painter.EdgeWear( 0.3f, 4, Seed + 604 );
+		painter.Grain( 0.015f, Seed + 605 );
+		return painter.Bake( "arena_6_wall", Painter.Matte, 6f );
+	}
+
+	/// <summary>Plain dressed granite.</summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		// Full surface in Task 6b.
+		return PaintTrimAtlas( "arena_6_trim", Mix( Granite, GraniteShade, 0.3f ), Rubble, 0.85f, 0f, Seed + 700 );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		var painter = new Painter( FloorSize, Mortar, 0.5f );
 		var random = new Random( Seed );
@@ -64,7 +121,7 @@ public sealed class DungeonTheme : ArenaTheme
 		painter.Cavity( 0.5f, 5 );
 		painter.EdgeWear( 0.2f, 4, Seed + 34 );
 		painter.Grain( 0.015f, Seed + 35 );
-		return painter.ToMaterial( "arena_6_floor", Painter.Matte, 7f );
+		return painter.Bake( "arena_6_floor", Painter.Matte, 7f );
 	}
 
 	/// <summary>
@@ -217,7 +274,7 @@ public sealed class DungeonTheme : ArenaTheme
 	/// each pillowed (rounded toward the room), pitted, its own tone, set in deep lime mortar whose
 	/// width wanders; soot drifts across the lot.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		const int Stones = 6;
@@ -309,6 +366,6 @@ public sealed class DungeonTheme : ArenaTheme
 		painter.Mottle( 0.12f, 8, Seed + 523, 4 );
 		painter.Cavity( 0.6f, 4 );
 		painter.Grain( 0.015f, Seed + 524 );
-		return painter.ToMaterial( "arena_6_ceiling", Painter.Matte, 5f );
+		return painter.Bake( "arena_6_ceiling", Painter.Matte, 5f );
 	}
 }

@@ -42,12 +42,69 @@ public sealed class LibraryTheme : ArenaTheme
 	const int PlankWidth = 64;
 	const int PlankRatio = 4;
 
+	/// <summary>Structural front layer only (props, lamps and lights come in Tasks 6b and 9).</summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 78f, Corner = 32f, Cornice = 30f, Skirting = 14f, SkirtingDepth = 6f } );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// Plain bookcases: walnut uprights every 52 units, a shelf every 34, books standing in every
+	/// compartment — each its own width, height and muted colour, a few leaning at the row ends —
+	/// against the case's dark back.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		// Full surface in Task 6b.
+		const float Ppu = WallSize / 208f;
+		const int Bay = WallSize / 4;
+		var painter = new Painter( WallSize, Mix( WalnutDeep, WalnutGrain, 0.5f ), 0.85f );
+		var random = new Random( Seed + 600 );
+		float Next() => (float)random.NextDouble();
+		var bindings = new[] { 0x7A4A44u, 0x4F6A55u, 0x48557Au, 0xA88A5Cu, 0xA9864Cu, 0x6E4E6Au };
+
+		for ( var level = 0; level < 6; level++ )
+		{
+			var shelfV = 2f + level * 34f;
+			var bottom = (208f - shelfV) * Ppu;
+			var gap = (34f - 2.5f) * Ppu;
+			for ( var c = 0; c < 4; c++ )
+			{
+				var x = c * Bay + 9f + Next() * 6f;
+				var end = (c + 1) * Bay - 9f;
+				while ( x < end - 18f )
+				{
+					var width = (4f + Next() * 5f) * Ppu;
+					if ( x + width > end ) break;
+					var height = MathF.Min( (22f + Next() * 8f) * Ppu, gap - 4f );
+					var color = Mix( Palette.Hex( bindings[random.Next( bindings.Length )] ), Next() < 0.5f ? Gap : Bare, Next() * 0.3f );
+					var lean = x + width * 2.2f > end || Next() < 0.06f ? (Next() - 0.5f) * 12f : 0f;
+					painter.Rect( x, bottom - height, width - 1.5f, height, color, radius: 1.5f, height: 1f, bevel: 3f, roughness: 0.7f, angle: lean );
+					x += width + (Next() < 0.08f ? Next() * 24f : 0.5f);
+				}
+			}
+
+			painter.Rect( 0f, bottom, WallSize, 2.5f * Ppu, Walnut, height: 1.3f, bevel: 3f, roughness: 0.55f );
+		}
+
+		for ( var c = 0; c < 4; c++ )
+			painter.Rect( c * Bay - 8f, 0f, 16f, WallSize, Walnut, height: 1.4f, bevel: 4f, roughness: 0.55f );
+
+		painter.Mottle( 0.05f, 6, Seed + 601, 4 );
+		painter.Cavity( 0.5f, 5 );
+		painter.EdgeWear( 0.2f, 3, Seed + 602 );
+		painter.Grain( 0.012f, Seed + 603 );
+		return painter.Bake( "arena_4_wall", Painter.Matte, 5f );
+	}
+
+	/// <summary>Plain walnut mouldings and posts.</summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		// Full surface in Task 6b.
+		return PaintTrimAtlas( "arena_4_trim", WalnutLight, WalnutDeep, 0.55f, 0.3f, Seed + 700 );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		const int cell = FloorSize / 2;
 		var painter = new Painter( FloorSize, Oak, 0.35f );
@@ -104,7 +161,7 @@ public sealed class LibraryTheme : ArenaTheme
 		painter.Cavity( 0.4f, 4 );
 		painter.EdgeWear( 0.3f, 3, Seed + 33 );
 		painter.Grain( 0.012f, Seed + 34 );
-		return painter.ToMaterial( "arena_4_floor", Painter.Matte, 6f );
+		return painter.Bake( "arena_4_floor", Painter.Matte, 6f );
 	}
 
 	/// <summary>
@@ -251,7 +308,7 @@ public sealed class LibraryTheme : ArenaTheme
 	/// the recess, and a fielded panel. Beam grain runs along each beam and meets its neighbour in a
 	/// mitre at the corners; panel grain runs one way or the other per bay, with its own figure.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		const int Beam = 24;
@@ -307,7 +364,7 @@ public sealed class LibraryTheme : ArenaTheme
 		painter.RoughnessNoise( 0.06f, 6, Seed + 521, 2 );
 		painter.Cavity( 0.5f, 4 );
 		painter.Grain( 0.012f, Seed + 523 );
-		return painter.ToMaterial( "arena_4_ceiling", Painter.Matte, 4f );
+		return painter.Bake( "arena_4_ceiling", Painter.Matte, 4f );
 	}
 
 	/// <summary>A square inset by <paramref name="inset"/> px from a cell's edges, corners clockwise in the image.</summary>

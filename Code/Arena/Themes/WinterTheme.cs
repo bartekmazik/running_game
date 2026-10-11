@@ -31,12 +31,197 @@ public sealed class WinterTheme : ArenaTheme
 	static Color Knot => Palette.Hex( 0x6A4329 );
 	static Color BoardGap => Palette.Hex( 0x5C4331 );
 
+	/// <summary>Weathered log timber: silvered on the faces, warmer in the checks and knots.</summary>
+	static Color Log => Palette.Hex( 0xAA845E );
+	static Color LogLight => Palette.Hex( 0xC09B73 );
+	static Color LogShade => Palette.Hex( 0x87654A );
+	static Color LogGrain => Palette.Hex( 0x6C4F37 );
+	static Color LogSilver => Palette.Hex( 0xA9A196 );
+
+	/// <summary>Lime chinking between the logs.</summary>
+	static Color Chinking => Palette.Hex( 0xB9AE9C );
+	static Color ChinkingShade => Palette.Hex( 0x968B7A );
+
+	/// <summary>Hewn beams and posts.</summary>
+	static Color Beam => Palette.Hex( 0xA77F5A );
+	static Color BeamShade => Palette.Hex( 0x5E4330 );
+
+	static Color Frost => Palette.Hex( 0xDDEBF5 );
+	static Color FramePaint => Palette.Hex( 0xF1F0EA );
+
+	/// <summary>
+	/// The structural front layer — hewn posts, a top plate, skirting — and frosted windows in about
+	/// half the bays. Icicles, wreaths, skis and the warm bulbs come in Task 7; lights in 6b.
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		var bays = BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 74f, Corner = 34f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 5f } );
+		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 64f, 84f, 70f, 0.45f, true, Seed + 800 );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// Log-cabin wall: eight round logs stacked floor to ceiling, each its own girth and tone, their
+	/// edges wandering along the length; grain running with the log, drying checks along the upper
+	/// shoulder that start and stop, knots in a halo of darker grain, the faces silvered by weather;
+	/// pale lime chinking pressed between them, with a little snow lodged on the top of some logs.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		const int Logs = 8;
+		var painter = new Painter( WallSize, Chinking, 0.92f );
+		var random = new Random( Seed + 600 );
+		float Next() => (float)random.NextDouble();
+
+		var heights = new float[Logs];
+		var total = 0f;
+		for ( var k = 0; k < Logs; k++ ) total += heights[k] = 0.85f + Next() * 0.3f;
+		var centres = new float[Logs];
+		var radii = new float[Logs];
+		var palette = new Color[Logs + 1];
+		palette[0] = new Color( 0f, 0f, 0f, 0f );
+		var checkRow = new float[Logs]; var checkFrom = new float[Logs]; var checkLength = new float[Logs];
+		var at = 0f;
+		for ( var k = 0; k < Logs; k++ )
+		{
+			var h = heights[k] / total * WallSize;
+			centres[k] = at + h * 0.5f;
+			radii[k] = h * 0.5f - 4f - Next() * 4f;
+			at += h;
+			var tone = Next() * 2f - 1f;
+			var wood = tone < 0f ? Mix( Log, LogShade, -tone * 0.6f ) : Mix( Log, LogLight, tone * 0.6f );
+			palette[k + 1] = Mix( wood, LogSilver, Next() * 0.35f );
+			checkRow[k] = -0.55f + Next() * 0.4f;
+			checkFrom[k] = Next() * WallSize;
+			checkLength[k] = 200f + Next() * 500f;
+		}
+
+		var grain = painter.Noise( 6, Seed + 601, 2 );
+		var figure = painter.Noise( 3, Seed + 602, 2 );
+		var wobble = painter.Noise( 8, Seed + 603, 3 );
+		var lodged = painter.Noise( 24, Seed + 604, 3 );
+		var index = new byte[WallSize * WallSize];
+		var relief = new float[WallSize * WallSize];
+		var late = new float[WallSize * WallSize];
+		var snow = new float[WallSize * WallSize];
+		var lit = new float[WallSize * WallSize];
+		var dark = new float[WallSize * WallSize];
+		var shadow = new float[WallSize * WallSize];
+		var log = 0;
+
+		for ( var y = 0; y < WallSize; y++ )
+		{
+			for ( var x = 0; x < WallSize; x++ )
+			{
+				var i = y * WallSize + x;
+				var shift = (wobble[i] - 0.5f) * 10f;
+				while ( log + 1 < Logs && y > (centres[log] + centres[log + 1]) * 0.5f ) log++;
+				var k = log;
+				if ( k > 0 && y + shift < (centres[k - 1] + centres[k]) * 0.5f ) k--;
+				else if ( k + 1 < Logs && y + shift > (centres[k] + centres[k + 1]) * 0.5f ) k++;
+				var t = (y + shift - centres[k]) / radii[k];
+				var a = MathF.Abs( t );
+				if ( a >= 1f )
+				{
+					// Chinking: rough lime, a little sunk, in shadow right under the log above it, with
+					// snow lodged here and there where it meets the top of the log below.
+					relief[i] = 0.25f + (lodged[i] - 0.5f) * 0.2f;
+					if ( t > 0f ) shadow[i] = Math.Clamp( 1f - (t - 1f) * radii[k] / 9f, 0f, 1f ) * 0.6f;
+					else snow[i] = lodged[i] > 0.66f ? MathF.Min( (lodged[i] - 0.66f) * 5f, 1f ) * 0.45f : 0f;
+					continue;
+				}
+
+				index[i] = (byte)(k + 1);
+				relief[i] = 0.2f + MathF.Sqrt( 1f - t * t ) * 1.1f;
+
+				// A round log: its top catches the light, its underside turns into its own shadow.
+				lit[i] = t < -0.3f ? (-0.3f - t) / 0.7f * 0.3f : 0f;
+				dark[i] = t > 0.05f ? MathF.Pow( (t - 0.05f) / 0.95f, 1.4f ) * 0.6f : 0f;
+
+				var s = StreakX( grain, WallSize, x, y + k * 97, 37 );
+				var f = StreakX( figure, WallSize, x, y + k * 31, 5 );
+				late[i] = (s > 0.6f ? MathF.Min( (s - 0.6f) * 7f, 1f ) * 0.45f : 0f) + (f > 0.55f ? (f - 0.55f) * 0.6f : 0f);
+
+				// A drying check: a narrow groove along the log that starts and stops, tapering at both ends.
+				var along = x - checkFrom[k];
+				if ( along < 0f ) along += WallSize;
+				if ( along < checkLength[k] )
+				{
+					var taper = MathF.Min( along, checkLength[k] - along ) / 60f;
+					var width = 0.035f * MathF.Min( taper, 1f );
+					var d = MathF.Abs( t - checkRow[k] - (wobble[i] - 0.5f) * 0.08f );
+					if ( d < width )
+					{
+						relief[i] -= 0.35f * (1f - d / width);
+						late[i] = MathF.Max( late[i], 0.8f );
+					}
+				}
+
+				// Fresh snow along the top shoulder of some logs.
+				if ( t < -0.85f && lodged[i] > 0.7f )
+					snow[i] = MathF.Min( (lodged[i] - 0.7f) * 5f, 1f ) * ((-t - 0.85f) / 0.15f) * 0.5f;
+			}
+		}
+
+		painter.Blend( index, palette );
+		painter.AddHeight( relief, 1f );
+		painter.Blend( late, LogGrain );
+		painter.Blend( Ramp( painter.Noise( 128, Seed + 605, 2 ), 0.5f, 0.8f, 0.25f ), ChinkingShade );
+
+		for ( var k = 0; k < Logs; k++ )
+		{
+			var knots = 1 + random.Next( 3 );
+			for ( var n = 0; n < knots; n++ )
+			{
+				var kx = Next() * WallSize;
+				var ky = centres[k] + (Next() - 0.5f) * radii[k] * 1.1f;
+				var kr = 3f + Next() * 4f;
+				var knotSeed = random.Next();
+				painter.Polygon( Organic( new Vector2( kx, ky ), new Vector2( kr * 4f, kr * 1.8f ), 0.4f, knotSeed, 0f, 24 ), LogGrain, alpha: 0.3f );
+				painter.Polygon( Organic( new Vector2( kx, ky ), new Vector2( kr * 1.3f, kr ), 0.5f, knotSeed + 1, 0f, 20 ), Knot, alpha: 0.85f, roughness: 0.6f );
+			}
+		}
+
+		painter.Blend( lit, LogLight );
+		painter.Blend( dark, Mix( LogShade, LogGrain, 0.6f ) );
+		painter.Blend( shadow, Mix( ChinkingShade, Palette.Ink, 0.35f ) );
+		painter.Blend( snow, SnowLight, roughness: 0.5f );
+		painter.ShadeFromHeight( 0.12f, 0.2f );
+		painter.Mottle( 0.05f, 6, Seed + 606, 4 );
+		painter.RoughnessNoise( 0.06f, 8, Seed + 607, 3 );
+		painter.Cavity( 0.5f, 6 );
+		painter.Grain( 0.012f, Seed + 609 );
+		return painter.Bake( "arena_1_wall", Painter.Matte, 6f );
+	}
+
+	/// <summary>
+	/// Hewn pine beams and posts, grain running with them; the infill band holds the frosted pane
+	/// (frost feathering in from the corners) and the white paint of the window frames.
+	/// </summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		return PaintTrimAtlas( "arena_1_trim", Beam, BeamShade, 0.75f, 0.4f, Seed + 700, painter =>
+		{
+			var (x, y, w, h) = InfillPixels( 0 );
+			painter.Fill( x, y, w, h, Frost, roughness: 0.2f );
+			var frost = painter.Noise( 32, Seed + 701, 4 );
+			var weight = new float[TrimSize * TrimSize];
+			for ( var py = y; py < y + h; py++ )
+			for ( var px = x; px < x + w; px++ )
+			{
+				var cx = MathF.Min( px - x, x + w - 1 - px ) / (w * 0.5f);
+				var cy = MathF.Min( py - y, y + h - 1 - py ) / (h * 0.5f);
+				var corner = 1f - MathF.Sqrt( cx * cx + cy * cy ) * 0.9f;
+				var i = py * TrimSize + px;
+				weight[i] = Math.Clamp( (corner + (frost[i] - 0.5f) * 0.8f - 0.15f) * 2.5f, 0f, 0.9f );
+			}
+			painter.Blend( weight, SnowLight, roughness: 0.6f );
+
+			var frame = InfillPixels( 1 );
+			painter.Fill( frame.X, frame.Y, frame.Width, frame.Height, FramePaint, roughness: 0.5f );
+		} );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		const int cell = FloorSize / 2;
 		var painter = new Painter( FloorSize, Crevice, 0.7f );
@@ -99,7 +284,7 @@ public sealed class WinterTheme : ArenaTheme
 		// grooves read as dirt on fresh snow.
 		painter.AddHeight( ridges, 0.15f );
 		painter.Grain( 0.01f, Seed + 14 );
-		return painter.ToMaterial( "arena_1_floor", Painter.Matte, 7f );
+		return painter.Bake( "arena_1_floor", Painter.Matte, 7f );
 	}
 
 	/// <summary>
@@ -180,7 +365,7 @@ public sealed class WinterTheme : ArenaTheme
 	/// late wood runs in thin, long, slightly wavy lines over a soft broad figure; knots sit in a halo
 	/// of darker grain.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		var painter = new Painter( CeilingSize, BoardGap, 0.9f );
@@ -256,6 +441,6 @@ public sealed class WinterTheme : ArenaTheme
 		painter.Cavity( 0.45f, 4 );
 		painter.EdgeWear( 0.25f, 3, Seed + 512 );
 		painter.Grain( 0.015f, Seed + 513 );
-		return painter.ToMaterial( "arena_1_ceiling", Painter.Matte, 4f );
+		return painter.Bake( "arena_1_ceiling", Painter.Matte, 4f );
 	}
 }

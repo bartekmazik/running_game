@@ -25,15 +25,163 @@ public sealed class OfficeTheme : ArenaTheme
 	static Color Pinhole => Palette.Hex( 0x9C968A );
 	static Color WaterStain => Palette.Hex( 0xB39A6E );
 
+	/// <summary>Partition fabric: a warm grey weave, and the slightly bluer grey of a replaced panel.</summary>
+	static Color Fabric => Palette.Hex( 0xB4B1AA );
+	static Color FabricBlue => Palette.Hex( 0xA6ABB8 );
+	static Color FabricDark => Palette.Hex( 0x8E8B86 );
+	static Color FabricLight => Palette.Hex( 0xC8C5BE );
+
+	static Color Aluminium => Palette.Hex( 0xC7CACE );
+	static Color AluminiumShade => Palette.Hex( 0x8F949B );
+	static Color Plaster => Palette.Hex( 0xE9E5DC );
+	static Color PlasterShade => Palette.Hex( 0xB7B2A8 );
+	static Color Vinyl => Palette.Hex( 0x545966 );
+	static Color PowderCoat => Palette.Hex( 0xEFEFEC );
+	static Color Sky => Palette.Hex( 0xBFD8E8 );
+	static Color Slat => Palette.Hex( 0xE4E4DF );
+
 	/// <summary>Pile rows across the yarn, in pixels: about a third of a unit, close to real loop pile.</summary>
 	const int PileRow = 3;
 
+	/// <summary>
+	/// The structural front layer — plastered columns, a bulkhead beam, a vinyl cove skirting — and
+	/// windows with blinds in about half the bays. Whiteboards, clocks, cabinets and the cooler come
+	/// in Task 8; the panel lights in 6b.
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		var bays = BuildFrontLayer( room, new FrontStyle { Post = 28f, Pier = 72f, Corner = 30f, Cornice = 26f, Skirting = 10f, SkirtingDepth = 3f } );
+		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 48f, 104f, 124f, 0.5f, false, Seed + 800 );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// System partitions, 52-unit modules: aluminium posts with a shadow groove, a dark vinyl kick, a
+	/// lower and an upper fabric panel split by a rail, plaster above to the bulkhead. The fabric is a
+	/// fine weave with a heathered yarn, every panel its own tone (one replaced, a shade bluer), with
+	/// the ghosts of notices that hung there and the pinholes that held them.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		const float Ppu = WallSize / 208f;
+		const int Module = WallSize / 4;
+		int Row( float v ) => (int)MathF.Round( (208f - v) * Ppu );
+		var painter = new Painter( WallSize, Plaster, 0.85f );
+		var random = new Random( Seed + 600 );
+		float Next() => (float)random.NextDouble();
+
+		painter.Fill( 0, 0, WallSize, Row( 153f ), Plaster, height: 0.8f, roughness: 0.85f );
+		painter.Fill( 0, Row( 153f ), WallSize, WallSize - Row( 153f ), Aluminium, height: 0.9f, roughness: 0.35f );
+
+		var replaced = random.Next( 8 );
+		var panels = new[] { (Top: Row( 150f ), Bottom: Row( 99f )), (Top: Row( 96f ), Bottom: Row( 10f )) };
+		for ( var m = 0; m < 4; m++ )
+		{
+			for ( var p = 0; p < 2; p++ )
+			{
+				var (top, bottom) = panels[p];
+				var x0 = m * Module + 9f;
+				var tone = Next() * 2f - 1f;
+				var fabric = m * 2 + p == replaced ? FabricBlue : tone < 0f ? Mix( Fabric, FabricDark, -tone * 0.25f ) : Mix( Fabric, FabricLight, tone * 0.3f );
+				painter.Rect( x0, top + 1f, Module - 18f, bottom - top - 2f, fabric, radius: 2f, height: 0.7f, bevel: 3f, roughness: 0.95f );
+
+				// The ghost of a notice: a paler rectangle where the fabric was kept out of the light, and its pinholes.
+				if ( Next() < 0.35f )
+				{
+					var w = 40f + Next() * 60f; var h = 50f + Next() * 70f;
+					var nx = x0 + 15f + Next() * (Module - 48f - w); var ny = top + 20f + Next() * MathF.Max( 1f, bottom - top - 40f - h );
+					painter.Rect( nx, ny, w, h, FabricLight, alpha: 0.12f );
+					foreach ( var (cx, cy) in new[] { (nx + 3f, ny + 3f), (nx + w - 3f, ny + 3f), (nx + 3f, ny + h - 3f), (nx + w - 3f, ny + h - 3f) } )
+						painter.Circle( cx + (Next() - 0.5f) * 2f, cy + (Next() - 0.5f) * 2f, 0.8f, FabricDark, 0.6f );
+				}
+			}
+
+			// The post between modules, with its shadow groove.
+			var post = m * Module;
+			painter.Rect( post - 9f, Row( 153f ), 18f, WallSize - Row( 153f ), Aluminium, height: 1f, bevel: 3f, roughness: 0.3f );
+			painter.Rect( post - 1.5f, Row( 153f ), 3f, WallSize - Row( 153f ), AluminiumShade, height: 0.6f, roughness: 0.5f );
+		}
+
+		painter.Rect( 0f, Row( 99f ), WallSize, Row( 96f ) - Row( 99f ), Aluminium, height: 1f, bevel: 2f, roughness: 0.3f );
+		painter.Rect( 0f, Row( 153f ), WallSize, Row( 150f ) - Row( 153f ), Aluminium, height: 1f, bevel: 2f, roughness: 0.3f );
+		painter.Fill( 0, Row( 10f ), WallSize, WallSize - Row( 10f ), Vinyl, height: 0.95f, roughness: 0.6f );
+
+		// The weave and its heathered yarn, only on the fabric (the weave pattern is two pixels a thread).
+		var heather = painter.Noise( 256, Seed + 601, 2 );
+		var pills = painter.Noise( 64, Seed + 602, 2 );
+		var weave = new float[WallSize * WallSize];
+		var dark = new float[WallSize * WallSize];
+		var light = new float[WallSize * WallSize];
+		foreach ( var (top, bottom) in panels )
+		{
+			for ( var y = top + 3; y < bottom - 3; y++ )
+			for ( var x = 0; x < WallSize; x++ )
+			{
+				var inModule = x % Module;
+				if ( inModule < 12 || inModule > Module - 12 ) continue;
+				var i = y * WallSize + x;
+				var over = ((x >> 1) + (y >> 1)) & 1;
+				weave[i] = over == 0 ? 0.04f : -0.04f;
+				var tone = (heather[i] - 0.5f) * 1.4f + (pills[i] - 0.5f) * 0.4f;
+				dark[i] = tone < 0f ? MathF.Min( -tone, 1f ) * 0.35f : 0f;
+				light[i] = tone > 0f ? MathF.Min( tone, 1f ) * 0.3f : 0f;
+			}
+		}
+		painter.AddHeight( weave, 1f );
+		painter.Blend( dark, FabricDark );
+		painter.Blend( light, FabricLight );
+
+		painter.HeightNoise( 0.05f, 128, Seed + 603, 2 );
+		painter.Mottle( 0.03f, 6, Seed + 604, 4 );
+		painter.Cavity( 0.35f, 3 );
+		painter.EdgeWear( 0.15f, 3, Seed + 605 );
+		painter.Grain( 0.01f, Seed + 606 );
+		return painter.Bake( "arena_3_wall", Painter.Matte, 4f );
+	}
+
+	/// <summary>
+	/// Plastered columns and bulkhead in off-white, a dark vinyl cove skirting, an aluminium nosing
+	/// on the slab edge; the infill band holds the window blind (twelve slats, pale sky between) and
+	/// the white powder-coat of the frames.
+	/// </summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		return PaintTrimAtlas( "arena_3_trim", Plaster, PlasterShade, 0.85f, 0f, Seed + 700, painter =>
+		{
+			TintBand( painter, TrimBand.Skirting, Vinyl, 0.6f, SkirtingProfile, Mix( Vinyl, Palette.Ink, 0.5f ), 0.5f );
+			TintBand( painter, TrimBand.SlabEdge, Aluminium, 0.35f, NosingProfile, AluminiumShade, 0.6f );
+
+			// The view out — pale sky over a hazy skyline — with the blind let down over the top half.
+			var (x, y, w, h) = InfillPixels( 0 );
+			for ( var row = 0; row < h; row++ )
+				painter.Fill( x, y + row, w, 1, Mix( Color.White, Sky, 0.35f + row / (float)h * 0.65f ), height: 0.2f, roughness: 0.15f );
+			var random = new Random( Seed + 701 );
+			for ( var bx = x; bx < x + w; )
+			{
+				var bw = 8 + random.Next( 18 );
+				var bh = 10 + random.Next( 26 );
+				painter.Fill( bx, y + h - bh, Math.Min( bw, x + w - bx ), bh, Mix( Sky, PlasterShade, 0.45f + (float)random.NextDouble() * 0.2f ), height: 0.2f, roughness: 0.2f );
+				bx += bw + random.Next( 4 );
+			}
+			const int Slats = 12;
+			var blind = h * 0.55f;
+			for ( var k = 0; k < Slats; k++ )
+			{
+				var pitch = blind / Slats;
+				var sy = y + k * pitch + 1f;
+				var slat = Mix( Slat, Color.White, (float)random.NextDouble() * 0.3f );
+				painter.Rect( x, sy, w, pitch - 2f, slat, radius: 1f, height: 1f, bevel: 2f, roughness: 0.35f );
+				painter.Rect( x, sy + (pitch - 2f) * 0.6f, w, (pitch - 2f) * 0.4f, Mix( Slat, PlasterShade, 0.5f ), alpha: 0.35f );
+			}
+			painter.Rect( x, y + blind, w, 5f, Mix( Slat, PlasterShade, 0.3f ), radius: 1f, height: 1.1f, bevel: 2f, roughness: 0.4f );
+			foreach ( var cord in new[] { 30, 98 } )
+				painter.Rect( x + cord, y, 1.5f, blind + 3f, Mix( Slat, PlasterShade, 0.4f ), height: 1.1f, roughness: 0.6f );
+
+			var frame = InfillPixels( 1 );
+			painter.Fill( frame.X, frame.Y, frame.Width, frame.Height, PowderCoat, roughness: 0.4f );
+		} );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		const int cell = FloorSize / 2;
 		var painter = new Painter( FloorSize, Seam, 0.95f );
@@ -125,7 +273,7 @@ public sealed class OfficeTheme : ArenaTheme
 		painter.Cavity( 0.35f, 3 );
 		painter.Cavity( 0.3f, 10 );
 		painter.Grain( 0.02f, Seed + 42 );
-		return painter.ToMaterial( "arena_3_floor", Painter.Matte, 4f );
+		return painter.Bake( "arena_3_floor", Painter.Matte, 4f );
 	}
 
 	/// <summary>
@@ -193,7 +341,7 @@ public sealed class OfficeTheme : ArenaTheme
 	/// and short fissures (never on a grid), a slightly different tone per panel, a dusty one, and a
 	/// water stain with its tide-mark rings on one.
 	/// </summary>
-	protected override Material PaintCeiling()
+	protected override PaintedSurface PaintCeiling()
 	{
 		const int cell = CeilingSize / 2;
 		const int panel = cell / 2;
@@ -245,6 +393,6 @@ public sealed class OfficeTheme : ArenaTheme
 		painter.Mottle( 0.03f, 3, Seed + 520, 5 );
 		painter.Cavity( 0.35f, 3 );
 		painter.Grain( 0.01f, Seed + 521 );
-		return painter.ToMaterial( "arena_3_ceiling", Painter.Matte, 3f );
+		return painter.Bake( "arena_3_ceiling", Painter.Matte, 3f );
 	}
 }

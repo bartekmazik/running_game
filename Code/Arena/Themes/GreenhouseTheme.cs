@@ -25,12 +25,176 @@ public sealed class GreenhouseTheme : ArenaTheme
 	static Color MossLight => Palette.Hex( 0x8E9D74 );
 	static Color Soil => Palette.Hex( 0x5A4434 );
 
+	/// <summary>White-sage paint on the glazing bars and the timber trim.</summary>
+	static Color BarPaint => Palette.Hex( 0xE4EBDD );
+	static Color BarShade => Palette.Hex( 0xAEBBA6 );
+
+	/// <summary>Opaque frosted glass, pale sky-tinted (controller ruling R6: no working translucency).</summary>
+	static Color Glass => Palette.Hex( 0xCADDE0 );
+	static Color GlassLight => Palette.Hex( 0xE0ECEC );
+	static Color Putty => Palette.Hex( 0xC4C7B8 );
+	static Color LapDirt => Palette.Hex( 0x98A391 );
+	static Color Algae => Palette.Hex( 0x93AA82 );
+
+	static Color Brick => Palette.Hex( 0xB46B4C );
+	static Color BrickLight => Palette.Hex( 0xC78564 );
+	static Color BrickDark => Palette.Hex( 0x8E5039 );
+	static Color BrickMortar => Palette.Hex( 0xCDBFA8 );
+
+	/// <summary>Bare timber where the paint has flaked: grey, weathered.</summary>
+	static Color WeatheredWood => Palette.Hex( 0x9C9485 );
+
+	/// <summary>
+	/// The structural front layer: slender painted posts, a plate beam under the roof, skirting. The
+	/// planting beds, ferns and potting shelves come in Task 7; lights in 6b (the room is sun-lit).
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
-		// Room dressing arrives in Task 6.
+		BuildFrontLayer( room, new FrontStyle { Post = 20f, Pier = 64f, Corner = 26f, Cornice = 22f, Skirting = 12f, SkirtingDepth = 4f } );
 	}
 
-	protected override Material PaintFloor()
+	/// <summary>
+	/// A greenhouse side, floor to roof: a brick dwarf wall up to bench height, a painted timber sill,
+	/// then glazing — white-sage bars every 26 units bedded in putty, a vent rail across them, and
+	/// between them panes of opaque frosted glass lapped in uneven courses, each its own tint, with
+	/// grime and a green bloom caught in the laps and condensation gathered at the foot of each pane.
+	/// </summary>
+	protected override PaintedSurface PaintWall()
+	{
+		const float Ppu = WallSize / 208f;
+		const int Column = WallSize / 8;
+		const float Bar = 12f;
+		int Row( float v ) => (int)MathF.Round( (208f - v) * Ppu );
+		var painter = new Painter( WallSize, Glass, 0.15f );
+		var random = new Random( Seed + 600 );
+		float Next() => (float)random.NextDouble();
+
+		var sillTop = Row( 50f );
+		var kneeTop = Row( 44f );
+
+		// Panes, column by column, lapped in courses of uneven height that differ between columns.
+		for ( var c = 0; c < 8; c++ )
+		{
+			var x0 = c * Column + Bar * 0.5f;
+			var width = Column - Bar;
+			var y = 0f;
+			while ( y < sillTop - 1f )
+			{
+				var pane = (19f + Next() * 11f) * Ppu;
+				if ( sillTop - (y + pane) < 12f * Ppu ) pane = sillTop - y;
+				var tint = Mix( Mix( Glass, GlassLight, Next() * 0.6f ), Algae, Next() * Next() * 0.12f );
+				painter.Rect( x0, y, width, pane, tint, height: 0.5f, roughness: 0.1f + Next() * 0.08f );
+
+				// A broad soft highlight across some panes, never the same slant twice.
+				if ( Next() < 0.5f )
+				{
+					var at = x0 + Next() * width;
+					var slant = 20f + Next() * 40f;
+					var thick = 8f + Next() * 18f;
+					painter.Polygon( new[] { new Vector2( at, y + pane ), new Vector2( at + thick, y + pane ), new Vector2( at + thick + slant, y ), new Vector2( at + slant, y ) },
+						GlassLight, alpha: 0.18f + Next() * 0.12f );
+				}
+
+				// Condensation and dirt gather at the foot of the pane, above the lap.
+				var drops = 6 + random.Next( 14 );
+				for ( var d = 0; d < drops; d++ )
+					painter.Circle( x0 + 4f + Next() * (width - 8f), y + pane - 3f - Next() * Next() * 30f, 0.8f + Next() * 1.4f, GlassLight, 0.35f, roughness: 0.05f );
+
+				if ( y + pane < sillTop - 1f )
+				{
+					painter.Rect( x0, y + pane - 4f, width, 4f, Mix( LapDirt, Algae, Next() * 0.5f ), alpha: 0.55f + Next() * 0.25f, height: 0.42f, roughness: 0.6f );
+					painter.Rect( x0, y + pane - 9f, width, 5f, LapDirt, alpha: 0.12f );
+				}
+				y += pane;
+			}
+		}
+
+		// Putty fillets either side of each bar, the bars over them, the vent rail across.
+		for ( var c = 0; c < 8; c++ )
+		{
+			var x = c * Column;
+			painter.Rect( x - Bar * 0.5f - 3f, 0f, Bar + 6f, sillTop, Putty, height: 0.72f, bevel: 2f, roughness: 0.7f );
+			painter.Rect( x - Bar * 0.5f, 0f, Bar, sillTop, Mix( BarPaint, BarShade, Next() * 0.15f ), radius: 2f, height: 1f, bevel: 4f, roughness: 0.45f );
+		}
+		painter.Rect( 0f, Row( 153f ), WallSize, Row( 149f ) - Row( 153f ), BarPaint, height: 1.05f, bevel: 4f, roughness: 0.45f );
+
+		// Sill, then the dwarf wall: a running bond of soft red bricks, every brick its own length and tone.
+		painter.Rect( 0f, sillTop, WallSize, kneeTop - sillTop + 3f, BarPaint, height: 1.2f, bevel: 6f, roughness: 0.5f );
+		painter.Fill( 0, kneeTop + 3, WallSize, WallSize - kneeTop - 3, BrickMortar, height: 0.55f, roughness: 0.95f );
+		var course = 2.9f * Ppu;
+		var row = 0;
+		for ( var by = kneeTop + 3f; by < WallSize - 1f; by += course, row++ )
+		{
+			var x = (row % 2) * 21f + Next() * 6f;
+			var end = x + WallSize;
+			while ( x < end - 1f )
+			{
+				var length = (8f + Next() * 1.4f) * Ppu;
+				if ( end - (x + length) < 20f ) length = end - x;
+				var tone = Next() * 2f - 1f;
+				var brick = tone < 0f ? Mix( Brick, BrickDark, -tone * 0.6f ) : Mix( Brick, BrickLight, tone * 0.6f );
+				painter.Rect( x + 1.2f, by + 1.2f, length - 2.4f, MathF.Min( course, WallSize - by ) - 2.4f, brick, radius: 1.5f, height: 1f, bevel: 2.5f,
+					roughness: 0.88f, angle: (Next() - 0.5f) * 0.5f );
+				x += length;
+			}
+		}
+
+		// Moss creeping up from the foot of the dwarf wall.
+		var moss = Ramp( painter.Noise( 16, Seed + 601, 4 ), 0.45f, 0.7f, 0.8f );
+		for ( var y = 0; y < WallSize; y++ )
+		{
+			var low = Math.Clamp( (y - (WallSize - 70f)) / 60f, 0f, 1f );
+			for ( var x = 0; x < WallSize; x++ ) moss[y * WallSize + x] *= low;
+		}
+		painter.Blend( moss, Mix( Moss, MossLight, 0.3f ), roughness: 0.95f );
+
+		painter.Mottle( 0.03f, 8, Seed + 602, 4 );
+		painter.RoughnessNoise( 0.05f, 8, Seed + 603, 3 );
+		painter.Cavity( 0.4f, 4 );
+		painter.EdgeWear( 0.25f, 3, Seed + 604 );
+		painter.Grain( 0.01f, Seed + 605 );
+		return painter.Bake( "arena_0_wall", Painter.Matte, 5f );
+	}
+
+	/// <summary>
+	/// Painted timber in white-sage, the grain showing faintly through the paint, flaking to bare
+	/// grey wood in places; the slab edge is a course of terracotta brick-on-edge, the floor's clay.
+	/// </summary>
+	protected override PaintedSurface PaintTrim()
+	{
+		return PaintTrimAtlas( "arena_0_trim", BarPaint, BarShade, 0.45f, 0.08f, Seed + 700, painter =>
+		{
+			var random = new Random( Seed + 701 );
+			float Next() => (float)random.NextDouble();
+
+			var (slabTop, slabHeight) = TrimRows( TrimBand.SlabEdge );
+			painter.Fill( 0, slabTop, TrimSize, slabHeight, Mix( ClayShade, Flash, 0.5f ), roughness: 0.9f );
+			for ( var x = 0f; x < TrimSize - 1f; )
+			{
+				var length = 34f + Next() * 16f;
+				if ( TrimSize - (x + length) < 26f ) length = TrimSize - x;
+				var tone = Next() * 2f - 1f;
+				painter.Rect( x + 1.5f, slabTop + 2f, length - 3f, slabHeight - 4f, tone < 0f ? Mix( Clay, ClayShade, -tone * 0.6f ) : Mix( Clay, ClayLight, tone * 0.5f ),
+					radius: 2f, height: 0.95f, bevel: 3f, roughness: 0.85f );
+				x += length;
+			}
+
+			// Flaking: small patches of bare grey timber on the posts, beams and skirting.
+			foreach ( var band in new[] { TrimBand.Cornice, TrimBand.Pilaster, TrimBand.Skirting } )
+			{
+				var (top, height) = TrimRows( band );
+				var flakes = 4 + random.Next( 4 );
+				for ( var f = 0; f < flakes; f++ )
+				{
+					var at = new Vector2( Next() * TrimSize, top + 4f + Next() * (height - 8f) );
+					painter.Polygon( Organic( at, new Vector2( 2f + Next() * 7f, 1.5f + Next() * 3f ), 0.9f, random.Next(), Next() * 0.4f, 16 ), Mix( WeatheredWood, BarPaint, 0.4f ),
+						alpha: 0.5f, roughness: 0.9f );
+				}
+			}
+		} );
+	}
+
+	protected override PaintedSurface PaintFloor()
 	{
 		const int cell = FloorSize / 2;
 		var painter = new Painter( FloorSize, Mix( ClayShade, Flash, 0.6f ), 0.9f );
@@ -159,7 +323,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 		painter.Cavity( 0.5f, 6 );
 		painter.EdgeWear( 0.5f, 4, Seed + 16 );
 		painter.Grain( 0.015f, Seed + 17 );
-		return painter.ToMaterial( "arena_0_floor", Painter.Matte, 8f );
+		return painter.Bake( "arena_0_floor", Painter.Matte, 8f );
 	}
 
 	/// <summary>A tuft of moss (or a crumb of soil): a few overlapping round cushions, each its own green.</summary>
@@ -185,5 +349,5 @@ public sealed class GreenhouseTheme : ArenaTheme
 	/// None: the greenhouse is roofed in glass (built as geometry with the room), and no tile
 	/// underside ever shows this room's ceiling — floor 0's undersides wear the winter room's.
 	/// </summary>
-	protected override Material PaintCeiling() => null;
+	protected override PaintedSurface PaintCeiling() => null;
 }
