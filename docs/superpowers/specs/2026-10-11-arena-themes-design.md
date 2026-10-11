@@ -70,7 +70,9 @@ depth reads before hue does.
 | 8 | Forge | `#E07E58` ember |
 
 Each theme also defines a small material palette (base, light, shade, accent) in its own theme
-file; those values must sit inside the same band. Hex values above are the starting point — final
+file. Under the stylised-realism target (see Textures) those are natural material colours —
+terracotta, pine, sand, wool carpet, oak, steel, granite, basalt — chosen to sit near their floor's
+identity hue so the room still reads as "its" colour, without being saturated pastels. Hex values above are the starting point — final
 values are tuned against in-engine screenshots under the real lighting, and the table in this spec
 is updated with what shipped.
 
@@ -135,10 +137,22 @@ fills, gradients, rounded rects, circles, lines, value-noise/fbm grain, bevel li
 the lights rather than being flat prints. Output: colour + normal texture pair per surface, applied
 to a copy of the matte dev material.
 
-Style target is the user's references (`Assets/gui reference/`): flat colour shapes, a soft
-two-tone shade, a little grain, no photographic noise, no pixel art. Surfaces are full colour (no
-longer greyscale + tint). Resolution 512² for floor and wall surfaces, 256² for trims and props;
-estimated memory under 64 MB for all eight themes.
+**Style target — stylised realism (user, 2026-10-11, superseding the earlier flat-painterly
+target):** "chciałbym aby wyglądało bardzo realistycznie" → chosen option "stylised realism":
+believable materials and light — wood grain, stone, snow with sparkle, metal with real sheen,
+per-pixel roughness, cavity/ambient-occlusion darkening in crevices, wear on edges — with a lot of
+geometric detail, in natural colours that stay inside the palette's bands. Think *It Takes Two* /
+*Fall Guys* with higher material fidelity. KONTEKST.md's pastel arcade direction is softened, not
+dropped: colours stay gentle and coherent, nothing garish, nothing photographic-grey either.
+The ceiling is honest: everything is generated in code, so materials are procedural, not scans.
+
+What this asks of `Painter` beyond colour + height: a **roughness channel** (written into the
+normal texture's B, which the shader's `HemiOctIsoRoughness_RG_B` format reads — to be verified
+in-engine), a **cavity/AO bake** from the height field, multi-octave detail noise, and edge wear.
+
+Surfaces are full colour (no longer greyscale + tint). Resolution 1024² for the floor atlases and
+main wall surfaces, 512² for ceilings and trims; total texture memory ≤ 200 MB and total texture
+generation at startup ≤ 4 s on the user's machine (measured, logged once).
 
 The current `TileTextures.cs` pixel-art painters and the Kenney floor PNGs in
 `Assets/textures/kenney/` become unused and are deleted.

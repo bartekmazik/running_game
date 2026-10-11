@@ -805,6 +805,33 @@ public sealed class MeshKit
 
 ---
 
+### Task 3b: Painter realism (roughness channel, cavity, wear, detail)
+
+Added 2026-10-11 after the user asked for a "very realistic" look and chose **stylised realism**
+(spec, Textures section). Tasks 0–3 stay valid; this extends `Painter` before any surface is painted.
+
+**Files:**
+- Modify: `Code/Art/Painter.cs`
+
+**Interfaces — Consumes:** Task 2 `Painter`. **Produces (additions; existing signatures stay source-compatible):**
+- `Painter( int size, Color fill, float roughness = 0.75f )` — per-pixel roughness channel, filled with `roughness`.
+- `Shape(…)`, `Rect(…)`, `Circle(…)`, `Line(…)` gain an optional trailing `float roughness = float.NaN` — when a number, the shape writes it into the roughness channel with the same coverage as colour.
+- `void RoughnessNoise( float amount, int period, int seed )` — fbm variation of roughness (smudges, polish, wear).
+- `Mottle` / `HeightNoise` gain an optional `int octaves = 4` (max 6) for finer detail at 1024².
+- `void Cavity( float amount, int radius )` — ambient-occlusion bake: blur the height field (separable box blur, wrapping), darken colour where height is below its neighbourhood (`colour *= 1 − amount · clamp( (blur − h) · k )`), and raise roughness slightly there (dust collects in crevices).
+- `void EdgeWear( float amount, int radius, int seed )` — where height is above its neighbourhood (convex edges), lighten colour toward a worn tone and lower roughness slightly, masked by fbm noise so wear is patchy.
+- `ToMaterial( string name, string baseMaterial, float normalStrength )` — writes per-pixel roughness into the normal texture's B channel. The old `roughness` parameter of `ToMaterial` is removed (the constructor carries the fill value); update any caller (there are none outside Painter yet).
+
+- [ ] **Step 1: Verify the roughness channel in-engine (temporary, uncommitted).** Two 128² test materials identical except B = 20 vs 240, on two tiles of floor 0 next to each other, a `PointLight` close and low so a highlight falls across both. Screenshot. Expected: the B=20 tile shows a tight bright highlight, the B=240 tile a broad dim one. If they look identical, B does not drive roughness: try `material.Set( "g_flRoughnessScaleFactor", … )` / inspect `core/materials/dev/dev_nonmetal_rough30.vmat_c` strings for a roughness parameter, and record what works. Record the finding in the plan under this task and in memory `sbox-procedural-mesh`.
+- [ ] **Step 2:** Implement the additions above. Blur must wrap so textures stay seamless. Keep everything deterministic (seeded).
+- [ ] **Step 3: Performance.** Time a 1024² surface with 3 fbm passes (6 octaves) + Cavity + EdgeWear + `ToMaterial` (use `System.Diagnostics.Stopwatch` if allowed by the sandbox, else `RealTime.Now` deltas); log it once. Target ≤ 120 ms per 1024² surface. If over, optimise the hot loops (precompute lattice per row, avoid closures in inner loops) before committing.
+- [ ] **Step 4: Visual check (temporary, uncommitted).** A 1024² flagstone test (3 irregular stones from rounded rects with height + bevel, HeightNoise for chisel texture, Cavity 0.5 radius 6, EdgeWear 0.4, RoughnessNoise 0.2, Mottle with 6 octaves) on 4 floor-0 tiles; screenshots straight down and at a grazing angle under the moving PointLight. It must read as stone: dark joints, lighter worn edges, varied sheen.
+- [ ] **Step 5:** Remove temp code (`git checkout -- Code/ArenaGenerator.cs` afterwards), `compile_status` clean, commit `Painter: roughness channel, cavity and edge wear for realistic surfaces`.
+
+**Roughness finding:** (filled in by Step 1)
+
+---
+
 ### Task 4: Theme framework + themed tiles (all eight floor surfaces)
 
 **Files:**
@@ -872,7 +899,9 @@ Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( A
 
 `SetTileWarning` keeps `MaterialOverride = _glowMaterial` (it now lights the underside too — intended, see spec). `RestoreTile` sets `MaterialOverride = null`, tint and position.
 
-**Floor surface recipes** (512², 2×2 atlas → each cell 256 px = one 56-unit tile; every cell draws a 6-px darker rim + 3-px light bevel so tiles read as separate blocks; all `Mottle(0.04, 4, seed)` + `Grain(0.02, seed)`; colours from the theme's own 4-colour palette inside the FloorHue band):
+**Realism rules for every surface in this and later tasks (stylised realism, spec Textures section):** paint real structure in height (joints, grain, chips, weave, ripples) with bevels; then `Cavity` (0.35–0.6), `EdgeWear` where the material wears (stone, wood, metal, terracotta — not snow), `RoughnessNoise`, `Mottle` with 5–6 octaves for large-scale colour variation, `Grain` ≤ 0.02. Per-material roughness: snow 0.55 with sparkle flecks at 0.15, ice 0.2, terracotta glaze 0.35 / body 0.8, sand 0.9, carpet 0.95, polished oak 0.35, steel plate on `Painter.Metal` 0.45, granite 0.7 with wet-ish joints 0.5, basalt 0.8. Colours are natural material colours chosen near the floor's identity hue (spec Palette section); the hexes below are starting points, tuned on screenshots. Log total texture generation time once at startup (spec budget ≤ 4 s).
+
+**Floor surface recipes** (1024², 2×2 atlas → each cell 512 px = one 56-unit tile; every cell has a real bevelled block edge in height + a darker joint so tiles read as separate blocks; colours from the theme's own palette):
 
 | Floor | Cell art | Base / light / shade / accent |
 |---|---|---|
@@ -885,7 +914,7 @@ Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( A
 | Dungeon | Flagstones: 2–3 irregular stones per cell (Voronoi from 3 seeded points), moss in joints | `#8D8798` / `#A49FAE` / `#6F6A7A` / moss `#7FA06A` |
 | Forge | Basalt: hex-ish columns tops, dark, thin ember cracks (`Palette.Lava` at 60%) — the only floor allowed a danger colour, because it sits on the lava | `#4A4250` / `#5E5566` / `#352F3A` / `Palette.Lava` |
 
-Ceilings (seen from below; 256²): Greenhouse — none (glass roof; tiles of floor 0 have floor 1's ceiling under them). Winter — pine boards `#C9A27A`. Beach — sailcloth stripes `#F4ECDC`/`#E9A39A`. Office — 2×2 acoustic ceiling tiles `#E8E4DA` with pinholes. Library — dark walnut coffers `#6E4F3E`. Workshop — galvanised sheet `#8E959C`. Dungeon — rough stone `#5E5866`. Forge — rock `#3B3440` with ember glints. (Floor 7's tile undersides face the lava shaft and use the Forge ceiling.)
+Ceilings (seen from below; 512², same realism rules): Greenhouse — none (glass roof; tiles of floor 0 have floor 1's ceiling under them). Winter — pine boards `#C9A27A`. Beach — sailcloth stripes `#F4ECDC`/`#E9A39A`. Office — 2×2 acoustic ceiling tiles `#E8E4DA` with pinholes. Library — dark walnut coffers `#6E4F3E`. Workshop — galvanised sheet `#8E959C`. Dungeon — rough stone `#5E5866`. Forge — rock `#3B3440` with ember glints. (Floor 7's tile undersides face the lava shaft and use the Forge ceiling.)
 
 Walls and trims for each theme are painted in this task as simple, correct first versions (base colour + one structural pattern each: glazing grid, log courses, planks, partition panels, bookcase grid, corrugation, ashlar, rock) so Task 6 has something to build; Tasks 7–10 refine them with the props.
 
