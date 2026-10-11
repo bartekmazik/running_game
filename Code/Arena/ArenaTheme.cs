@@ -86,11 +86,19 @@ public abstract class ArenaTheme
 	protected virtual float WallModule => 0f;
 
 	/// <summary>
-	/// True where the wall pattern has no fixed height (weatherboard): each length then also starts it
-	/// at its own height, so the laps never line up across a post. False where the pattern is composed
-	/// floor to ceiling (a dwarf wall, a partition rail, shelves).
+	/// How far up a length of wall wearing <see cref="Walls"/>[<paramref name="wall"/>] starts its
+	/// pattern, in world units, drawn from <paramref name="random"/>. 0 (and no draw) by default: most
+	/// patterns are composed floor to ceiling (a dwarf wall, a partition rail, shelves). A pattern with
+	/// no fixed height (weatherboard) returns its own per length, so laps never line up across a post —
+	/// and can use it to place or hide a feature of the texture behind the cornice or the skirting.
 	/// </summary>
-	protected virtual bool WallShiftsVertically => false;
+	protected virtual float WallLift( int wall, Random random ) => 0f;
+
+	/// <summary>
+	/// Most a bay's pattern is stretched along the wall so a bay a little wider than
+	/// <see cref="WallRepeat"/> shows it once instead of repeating its first strip at its far end.
+	/// </summary>
+	const float MaxWallStretch = 1.1f;
 
 	/// <summary>Mouldings, posts, skirting, slab edge and infill pictures, one atlas laid out by <see cref="TrimBand"/>.</summary>
 	public Material Trim { get; private set; }
@@ -715,6 +723,7 @@ public abstract class ArenaTheme
 	protected List<Bay> BuildFrontLayer( FloorContext room, FrontStyle style )
 	{
 		var bays = new List<Bay>();
+		var postsBySide = new List<(float From, float To)>[4];
 		var post = TrimRegion( TrimBand.Pilaster );
 		var stock = TrimRegion( TrimBand.Stock );
 		var cornice = TrimRegion( TrimBand.Cornice );
@@ -739,7 +748,7 @@ public abstract class ArenaTheme
 			foreach ( var (from, to) in posts )
 				room.WallBox( side, Trim, post, stock, true, from, to, FloorContext.LedgeTop, beam, 0f, Deep, BoxFaces.Front | BoxFaces.Ends );
 
-			BuildWallFace( room, side, posts );
+			postsBySide[side] = posts;
 
 			for ( var k = 0; k + 1 < posts.Count; k++ )
 			{
@@ -754,6 +763,12 @@ public abstract class ArenaTheme
 			room.WallBox( side, Trim, cornice, stock, false, u0, u1, beam, FloorContext.ClearHeight, 0f, Deep, BoxFaces.Front | BoxFaces.Bottom );
 		}
 
+		// The wall faces go on in order round the room — each wall's far end meets the next one's
+		// start: +X, −Y, −X, +Y — with the walls each length wears carried over the corners.
+		var huts = new List<int>();
+		foreach ( var side in new[] { 0, 3, 2, 1 } )
+			BuildWallFace( room, side, postsBySide[side], huts, side == 1 );
+
 		return bays;
 	}
 
@@ -764,30 +779,73 @@ public abstract class ArenaTheme
 	/// repeats every <see cref="WallRepeat"/> units never shows the same strip in two bays (with one
 	/// start per wall, bays about a repeat wide all showed the same bands, 6a review): on a module
 	/// edge where the pattern has one (<see cref="WallModule"/>), at its own height where it may
-	/// (<see cref="WallShiftsVertically"/>), and in its own one of the <see cref="Walls"/>, never the
-	/// same as the length before. Faces of neighbouring walls meet only along the corner edges, so the
-	/// end lengths run through both corners.
+	/// (<see cref="WallLift"/>), stretched by up to <see cref="MaxWallStretch"/> where the bay is wider
+	/// than a repeat (not for a modular pattern, whose module would no longer fit), and in its own one
+	/// of the <see cref="Walls"/> (<see cref="PickWall"/>). Faces of neighbouring walls meet only along
+	/// the corner edges, so the end lengths run through both corners.
 	/// </summary>
-	void BuildWallFace( FloorContext room, int side, List<(float From, float To)> posts )
+	void BuildWallFace( FloorContext room, int side, List<(float From, float To)> posts, List<int> huts, bool closing )
 	{
 		const float Recess = FloorContext.Recess;
 		var random = new Random( Seed * 19 + room.Floor * 211 + side * 4099 + 5 );
 		var bottom = room.BottomZ - room.TileTopZ;
 		var start = -Recess;
-		var wall = Walls.Length > 1 ? random.Next( Walls.Length ) : 0;
 		for ( var k = 1; k < posts.Count; k++ )
 		{
 			var end = k < posts.Count - 1 ? (posts[k].From + posts[k].To) * 0.5f : FloorContext.Span + Recess;
+			var bay = posts[k].From - posts[k - 1].To;
+			var span = WallModule > 0f ? WallRepeat : WallRepeat * Math.Clamp( bay / WallRepeat, 1f, MaxWallStretch );
 			var offset = WallModule > 0f
 				? ModuleOffset( posts[k - 1].To, posts[k].From, random )
-				: (float)random.NextDouble() * WallRepeat;
-			var lift = WallShiftsVertically ? (float)random.NextDouble() * WallRepeat : 0f;
-			if ( k > 1 && Walls.Length > 1 ) wall = (wall + 1 + random.Next( Walls.Length - 1 )) % Walls.Length;
+				: (float)random.NextDouble() * span;
+			var wall = PickWall( huts, closing ? posts.Count - k : 0, random );
+			var lift = WallLift( wall, random );
 
 			room.WallFace( side, Walls[wall], start, end, bottom, FloorContext.ClearHeight, Recess, false,
-				( u, v ) => new Vector2( (u + offset) / WallRepeat, (WallRepeat - v + lift) / WallRepeat ) );
+				( u, v ) => new Vector2( (u + offset) / span, (WallRepeat - v + lift) / WallRepeat ) );
 			start = end;
 		}
+	}
+
+	/// <summary>
+	/// Which of the <see cref="Walls"/> the next length wears (no draw when there is one): never one
+	/// of the previous two lengths', which run on round the corners in <paramref name="huts"/>, so
+	/// neither a corner nor an A-B-A-B run repeats a wall. The last two lengths round the room
+	/// (<paramref name="beforeEnd"/> 1 and 2) also keep clear of the first two, which they meet
+	/// round the closing corner; and no choice may complete a second full round of a cycle of three
+	/// or four (A-B-C-D-A-B-C-D reads as a pattern, not a row of huts). Those two give way, cycle
+	/// first, when nothing else is left.
+	/// </summary>
+	int PickWall( List<int> huts, int beforeEnd, Random random )
+	{
+		if ( Walls.Length == 1 ) return 0;
+
+		bool Recent( int wall, int back ) => huts.Count >= back && huts[^back] == wall;
+		bool Closing( int wall ) => huts.Count > 1 && (beforeEnd == 1 && (huts[0] == wall || huts[1] == wall) || beforeEnd == 2 && huts[0] == wall);
+		bool Cycle( int wall )
+		{
+			for ( var period = 3; period <= 4; period++ )
+			{
+				if ( huts.Count < period * 2 - 1 ) continue;
+				var repeats = huts[^period] == wall;
+				for ( var back = 1; repeats && back < period; back++ ) repeats = huts[^back] == huts[^(back + period)];
+				if ( repeats ) return true;
+			}
+			return false;
+		}
+
+		var candidates = new List<int>();
+		for ( var strict = 3; strict >= 0 && candidates.Count == 0; strict-- )
+			for ( var wall = 0; wall < Walls.Length; wall++ )
+			{
+				if ( Recent( wall, 1 ) || strict >= 1 && Recent( wall, 2 ) ) continue;
+				if ( strict >= 2 && Closing( wall ) || strict >= 3 && Cycle( wall ) ) continue;
+				candidates.Add( wall );
+			}
+
+		var pick = candidates[random.Next( candidates.Count )];
+		huts.Add( pick );
+		return pick;
 	}
 
 	/// <summary>

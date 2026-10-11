@@ -45,42 +45,82 @@ public sealed class BeachTheme : ArenaTheme
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
-		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 70f, Corner = 28f, Cornice = 24f, Skirting = 12f, SkirtingDepth = 4f } );
+		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 70f, Corner = 28f, Cornice = TopPlate, Skirting = Skirting, SkirtingDepth = 4f } );
 	}
+
+	/// <summary>Height of the top plate under the ceiling and of the skirting: between them is the wall a hut shows.</summary>
+	const float TopPlate = 24f;
+	const float Skirting = 12f;
 
 	/// <summary>One hut per pastel: every length of wall between two posts is a hut of its own (ruling R26).</summary>
 	public override int WallCount => HutPastels.Length;
 
-	/// <summary>Weatherboard has no fixed height, so every hut's laps start at their own (no lines across the posts).</summary>
-	protected override bool WallShiftsVertically => true;
-
 	/// <summary>
-	/// One beach hut's weatherboard (ruling R26): lapped planks of uneven width running the whole
-	/// length, all in the hut's one pastel (<paramref name="variant"/> picks it), each board only a
-	/// shade off the next. Each board is butt-jointed once, anywhere along it, without changing colour.
-	/// In every other hut one board was replaced and painted later in another pastel, faded toward the
-	/// hut's own. The paint is weathered: thinned along the grain so the timber shows through, flaking
-	/// to silver-grey driftwood along the laps and at the joints, salt-bleached in broad patches; a nail
-	/// at each stud, rusting. Each hut lays its boards from its own stream, so no two share a board line.
+	/// Weatherboard has no fixed height, so every hut's laps start at their own and never line up
+	/// across a post. The height also decides, per hut, whether its replaced board shows: about half
+	/// the huts put it somewhere between the skirting and the top plate, the rest behind one of them
+	/// (the texture repeats every <see cref="ArenaTheme.WallRepeat"/>, so the band hidden behind the top
+	/// plate runs on into the one behind the skirting). So a replaced board is a one-off of some huts,
+	/// not a mark of every hut of a colour (6a re-review, ruling R28).
 	/// </summary>
-	protected override PaintedSurface PaintWall( int variant )
+	protected override float WallLift( int wall, Random random )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		var painter = new Painter( WallSize, Driftwood, 0.85f );
-		var random = new Random( Seed + 600 + variant * 31 );
-		float Next() => (float)random.NextDouble();
-		float Wrap( float x ) => (x % WallSize + WallSize) % WallSize;
+		var (tops, replaced) = Boards( wall );
+		var top = tops[replaced] / Ppu;
+		var foot = tops[replaced + 1] / Ppu;
+		var height = foot - top;
 
+		var shows = random.NextDouble() < 0.5;
+		var (low, high) = shows
+			? (FloorContext.LedgeTop + Skirting + 2f, WallRepeat - TopPlate - 2f)
+			: (WallRepeat - TopPlate + 1f, WallRepeat + FloorContext.LedgeTop + Skirting - 1f);
+		var bottom = low + (float)random.NextDouble() * (high - height - low);
+
+		// Texture rows run down from the top: a row at t units lands at v = WallRepeat + lift − t.
+		return ((bottom - WallRepeat + foot) % WallRepeat + WallRepeat) % WallRepeat;
+	}
+
+	/// <summary>
+	/// One hut's boards: the pixel row each starts at (plus the texture's foot) and which one was
+	/// replaced. Its own stream, so the painter and <see cref="WallLift"/> agree on it.
+	/// </summary>
+	(List<float> Tops, int Replaced) Boards( int variant )
+	{
+		const float Ppu = WallSize / WallRepeat;
+		var random = new Random( Seed + 600 + variant * 31 );
 		var tops = new List<float>();
 		var y = 0f;
 		while ( y < WallSize - 1f )
 		{
 			tops.Add( y );
-			var board = (16f + Next() * 4f) * Ppu;
+			var board = (16f + (float)random.NextDouble() * 4f) * Ppu;
 			if ( WallSize - (y + board) < 15f * Ppu ) board = WallSize - y;
 			y += board;
 		}
 		tops.Add( WallSize );
+		return (tops, 1 + random.Next( tops.Count - 3 ));
+	}
+
+	/// <summary>
+	/// One beach hut's weatherboard (ruling R26): lapped planks of uneven width running the whole
+	/// length, all in the hut's one pastel (<paramref name="variant"/> picks it), each board only a
+	/// shade off the next. Each board is butt-jointed once, anywhere along it, without changing colour.
+	/// One board was replaced and painted later in another pastel, faded toward the hut's own; whether
+	/// a hut shows it is up to its height (<see cref="WallLift"/>). The paint is weathered: thinned
+	/// along the grain so the timber shows through, flaking to silver-grey driftwood along the laps and
+	/// at the joints, salt-bleached in broad patches; a nail at each stud, rusting. Each hut lays its
+	/// boards from its own stream, so no two share a board line.
+	/// </summary>
+	protected override PaintedSurface PaintWall( int variant )
+	{
+		const float Ppu = WallSize / WallRepeat;
+		var painter = new Painter( WallSize, Driftwood, 0.85f );
+		var random = new Random( Seed + 650 + variant * 31 );
+		float Next() => (float)random.NextDouble();
+		float Wrap( float x ) => (x % WallSize + WallSize) % WallSize;
+
+		var (tops, replaced) = Boards( variant );
 		var boards = tops.Count - 1;
 
 		// The hut's paint, a shade different on every board; entry 0 leaves pixels alone, the last is the replaced board.
@@ -96,8 +136,6 @@ public sealed class BeachTheme : ArenaTheme
 		// bay wider than the gap between them.
 		var joints = new List<float>[boards];
 		for ( var b = 0; b < boards; b++ ) joints[b] = new List<float> { Next() * WallSize };
-		// Only every other hut has one, so a replaced board is never the thing every hut shares.
-		var replaced = variant % 2 == 0 ? 1 + random.Next( boards - 2 ) : -1;
 
 		float JointDistance( int b, float x )
 		{
@@ -140,13 +178,13 @@ public sealed class BeachTheme : ArenaTheme
 
 					// Paint thinned along the grain, so the timber's figure shows through it.
 					var s = StreakX( thin, WallSize, px, py + b * 29, 61 );
-					through[i] = s > 0.5f ? MathF.Min( (s - 0.5f) * 2.5f, 1f ) * 0.22f : 0f;
+					through[i] = s > 0.42f ? MathF.Min( (s - 0.42f) * 2.2f, 1f ) * 0.34f : 0f;
 
 					// Flaking: crisp-edged patches, more along the laps and around the joints, where water sits;
 					// the newer replaced board has had less time to weather.
 					var dj = JointDistance( b, px );
 					var exposure = wear[i] + MathF.Max( 0f, t - 0.6f ) * 0.45f + MathF.Max( 0f, 1f - dj / 30f ) * 0.3f - (patched ? 0.08f : 0f);
-					bare[i] = exposure > 0.76f ? MathF.Min( (exposure - 0.76f) * 7f, 1f ) * 0.6f : 0f;
+					bare[i] = exposure > 0.745f ? MathF.Min( (exposure - 0.745f) * 7f, 1f ) * 0.65f : 0f;
 				}
 			}
 		}
