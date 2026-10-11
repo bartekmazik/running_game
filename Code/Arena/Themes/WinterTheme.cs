@@ -65,7 +65,7 @@ public sealed class WinterTheme : ArenaTheme
 	/// shoulder that start and stop, knots in a halo of darker grain, the faces silvered by weather;
 	/// pale lime chinking pressed between them, with a little snow lodged on the top of some logs.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		const int Logs = 8;
 		var painter = new Painter( WallSize, Chinking, 0.92f );

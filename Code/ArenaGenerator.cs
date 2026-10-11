@@ -230,7 +230,11 @@ public sealed class ArenaGenerator : Component
 		// The big 1024² surfaces first, so no worker is left starting one at the end.
 		foreach ( var surface in new[] { ThemeSurface.Floor, ThemeSurface.Wall, ThemeSurface.Ceiling, ThemeSurface.Trim } )
 			foreach ( var theme in _themes )
-				Job( () => theme.Bake( surface ), baked => theme.Apply( surface, baked ) );
+				for ( var variant = 0; variant < (surface == ThemeSurface.Wall ? theme.WallCount : 1); variant++ )
+				{
+					var v = variant;
+					Job( () => theme.Bake( surface, v ), baked => theme.Apply( surface, baked, v ) );
+				}
 
 		Job( TowerBuilder.PaintFacade, baked => _facade = baked.Upload() );
 		Job( TowerBuilder.PaintFacadeDetail, baked => _facadeDetail = baked.Upload() );

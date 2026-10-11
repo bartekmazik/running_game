@@ -53,7 +53,7 @@ public sealed class DungeonTheme : ArenaTheme
 	/// Plain ashlar: courses of different heights, blocks of different lengths and tones (slate, lilac,
 	/// warm grey), pillowed and pitted, set in deep mortar, damp toward the floor.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		// Full surface in Task 6b.
 		const float Ppu = WallSize / WallRepeat;

@@ -40,6 +40,9 @@ public sealed class OfficeTheme : ArenaTheme
 	static Color Sky => Palette.Sky;
 	static Color Slat => Palette.Hex( 0xE4E4DF );
 
+	/// <summary>The partition module: four per wall repeat, so bays start on a whole panel.</summary>
+	protected override float WallModule => WallRepeat / 4f;
+
 	/// <summary>Pile rows across the yarn, in pixels: about a third of a unit, close to real loop pile.</summary>
 	const int PileRow = 3;
 
@@ -61,7 +64,7 @@ public sealed class OfficeTheme : ArenaTheme
 	/// panel: anything one-off in a 208-unit repeat comes back in every bay, 6a review / R18), with
 	/// the faint ghosts of notices that hung there and the pinholes that held them.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
 		const int Module = WallSize / 4;

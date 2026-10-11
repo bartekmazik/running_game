@@ -66,8 +66,31 @@ public abstract class ArenaTheme
 	/// <summary>
 	/// The room's wall face behind the pilasters, tiled every <see cref="WallRepeat"/> units along the
 	/// wall; vertically one repeat spans tile top to ceiling, so a wall can be composed floor to ceiling.
+	/// One per <see cref="WallCount"/>: a theme whose bays are painted differently (a row of beach huts)
+	/// paints several and each length of wall wears one. The face is laid only by
+	/// <see cref="BuildFrontLayer"/>, so a theme's <see cref="Dress"/> must call it or the room has no wall.
 	/// </summary>
-	public Material Wall { get; private set; }
+	public Material[] Walls { get; private set; }
+
+	/// <summary>The first (for most themes the only) wall surface.</summary>
+	public Material Wall => Walls[0];
+
+	/// <summary>How many wall surfaces the theme paints; each is its own job for <see cref="Bake"/>.</summary>
+	public virtual int WallCount => 1;
+
+	/// <summary>
+	/// Width of the wall pattern's module in world units (partition panels, bookcase bays), or 0 for a
+	/// pattern without one. With a module, every length of wall face starts its pattern on a module
+	/// edge chosen so that no bay ends in a sliver of a module against a post.
+	/// </summary>
+	protected virtual float WallModule => 0f;
+
+	/// <summary>
+	/// True where the wall pattern has no fixed height (weatherboard): each length then also starts it
+	/// at its own height, so the laps never line up across a post. False where the pattern is composed
+	/// floor to ceiling (a dwarf wall, a partition rail, shelves).
+	/// </summary>
+	protected virtual bool WallShiftsVertically => false;
 
 	/// <summary>Mouldings, posts, skirting, slab edge and infill pictures, one atlas laid out by <see cref="TrimBand"/>.</summary>
 	public Material Trim { get; private set; }
@@ -86,33 +109,38 @@ public abstract class ArenaTheme
 	/// from its own seeded random streams and touches no engine resource, so the arena paints all of
 	/// them side by side and gets the same pixels whatever the order. Null where a room has none.
 	/// </summary>
-	public PaintedSurface Bake( ThemeSurface surface ) => surface switch
+	public PaintedSurface Bake( ThemeSurface surface, int variant = 0 ) => surface switch
 	{
 		ThemeSurface.Floor => PaintFloor(),
 		ThemeSurface.Ceiling => PaintCeiling(),
-		ThemeSurface.Wall => PaintWall(),
+		ThemeSurface.Wall => PaintWall( variant ),
 		_ => PaintTrim(),
 	};
 
 	/// <summary>Uploads a baked surface and keeps its material. Main thread only.</summary>
-	public void Apply( ThemeSurface surface, PaintedSurface baked )
+	public void Apply( ThemeSurface surface, PaintedSurface baked, int variant = 0 )
 	{
 		var material = baked?.Upload();
 		switch ( surface )
 		{
 			case ThemeSurface.Floor: FloorSurface = material; break;
 			case ThemeSurface.Ceiling: Ceiling = material; break;
-			case ThemeSurface.Wall: Wall = material; break;
+			case ThemeSurface.Wall: (Walls ??= new Material[WallCount])[variant] = material; break;
 			default: Trim = material; break;
 		}
 	}
 
 	protected abstract PaintedSurface PaintFloor();
 	protected abstract PaintedSurface PaintCeiling();
-	protected abstract PaintedSurface PaintWall();
+
+	/// <summary>Wall surface <paramref name="variant"/> of <see cref="WallCount"/>; a theme with one wall only ever gets 0.</summary>
+	protected abstract PaintedSurface PaintWall( int variant );
 	protected abstract PaintedSurface PaintTrim();
 
-	/// <summary>Dress the room: wall face layer, alcove props, ceiling props, lights.</summary>
+	/// <summary>
+	/// Dress the room: wall face layer, alcove props, ceiling props, lights. Must call
+	/// <see cref="BuildFrontLayer"/>, which also lays the wall face behind the posts.
+	/// </summary>
 	public abstract void Dress( FloorContext room );
 
 	public static Rect Cell( int column, int row, int cells ) => new( column / (float)cells, row / (float)cells, 1f / cells, 1f / cells );
@@ -734,8 +762,11 @@ public abstract class ArenaTheme
 	/// at the middle of a post — hidden inside it, since a post's front and ends run from the collider
 	/// plane to behind the face. Every length starts the wall's pattern somewhere else, so a wall that
 	/// repeats every <see cref="WallRepeat"/> units never shows the same strip in two bays (with one
-	/// start per wall, bays about a repeat wide all showed the same bands, 6a review). Faces of
-	/// neighbouring walls meet only along the corner edges, so the end lengths run through both corners.
+	/// start per wall, bays about a repeat wide all showed the same bands, 6a review): on a module
+	/// edge where the pattern has one (<see cref="WallModule"/>), at its own height where it may
+	/// (<see cref="WallShiftsVertically"/>), and in its own one of the <see cref="Walls"/>, never the
+	/// same as the length before. Faces of neighbouring walls meet only along the corner edges, so the
+	/// end lengths run through both corners.
 	/// </summary>
 	void BuildWallFace( FloorContext room, int side, List<(float From, float To)> posts )
 	{
@@ -743,14 +774,37 @@ public abstract class ArenaTheme
 		var random = new Random( Seed * 19 + room.Floor * 211 + side * 4099 + 5 );
 		var bottom = room.BottomZ - room.TileTopZ;
 		var start = -Recess;
+		var wall = Walls.Length > 1 ? random.Next( Walls.Length ) : 0;
 		for ( var k = 1; k < posts.Count; k++ )
 		{
 			var end = k < posts.Count - 1 ? (posts[k].From + posts[k].To) * 0.5f : FloorContext.Span + Recess;
-			var offset = (float)random.NextDouble() * WallRepeat;
-			room.WallFace( side, Wall, start, end, bottom, FloorContext.ClearHeight, Recess, false,
-				( u, v ) => new Vector2( (u + offset) / WallRepeat, (WallRepeat - v) / WallRepeat ) );
+			var offset = WallModule > 0f
+				? ModuleOffset( posts[k - 1].To, posts[k].From, random )
+				: (float)random.NextDouble() * WallRepeat;
+			var lift = WallShiftsVertically ? (float)random.NextDouble() * WallRepeat : 0f;
+			if ( k > 1 && Walls.Length > 1 ) wall = (wall + 1 + random.Next( Walls.Length - 1 )) % Walls.Length;
+
+			room.WallFace( side, Walls[wall], start, end, bottom, FloorContext.ClearHeight, Recess, false,
+				( u, v ) => new Vector2( (u + offset) / WallRepeat, (WallRepeat - v + lift) / WallRepeat ) );
 			start = end;
 		}
+	}
+
+	/// <summary>
+	/// A pattern start for the bay <paramref name="from"/>..<paramref name="to"/> that puts a module
+	/// edge where no module is cut to a sliver: whole modules from the bay's start when the part left
+	/// over is at least half a module (it ends the bay), otherwise the leftover plus one module split
+	/// between the two ends. Which of the repeat's modules comes first is random.
+	/// </summary>
+	float ModuleOffset( float from, float to, Random random )
+	{
+		var module = WallModule;
+		var width = to - from;
+		var whole = MathF.Floor( width / module );
+		var left = width - whole * module;
+		var edge = from + (left >= module * 0.5f || whole < 1f ? 0f : (left + module) * 0.5f);
+		var first = random.Next( (int)MathF.Round( WallRepeat / module ) ) * module;
+		return ((first - edge) % WallRepeat + WallRepeat) % WallRepeat;
 	}
 
 	/// <summary>Posts between <paramref name="from"/> and <paramref name="to"/>: gaps jittered ±30 % and rescaled to fit exactly, widths ±15 %.</summary>

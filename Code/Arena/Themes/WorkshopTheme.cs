@@ -52,7 +52,7 @@ public sealed class WorkshopTheme : ArenaTheme
 	/// Plain corrugated sheet: galvanised zinc with spangle, a lapped seam riveted at uneven spacing,
 	/// grime running down the troughs, white rust here and there.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		// Full surface in Task 6b.
 		const int Pitch = 32;

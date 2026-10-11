@@ -59,7 +59,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 	/// between them panes of opaque frosted glass lapped in uneven courses, each its own tint, with
 	/// grime and a green bloom caught in the laps and condensation gathered at the foot of each pane.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
 		const int Column = WallSize / 8;

@@ -53,7 +53,7 @@ public sealed class LibraryTheme : ArenaTheme
 	/// compartment — each its own width, height and muted colour, a few leaning at the row ends —
 	/// against the case's dark back.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		// Full surface in Task 6b.
 		const float Ppu = WallSize / WallRepeat;

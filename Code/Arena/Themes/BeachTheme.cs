@@ -4,7 +4,8 @@ using System.Collections.Generic;
 /// <summary>
 /// Floor 3 (index 2): a beach hut. Underfoot, blocks of sand with wind ripples — steep on the lee
 /// side, darker heavy grains in the troughs — shell grit, a starfish, a scallop. Overhead (the
-/// undersides of the winter floor), striped sailcloth.
+/// undersides of the winter floor), striped sailcloth. Round the walls, a row of weatherboard huts,
+/// one pastel each.
 /// </summary>
 public sealed class BeachTheme : ArenaTheme
 {
@@ -47,22 +48,28 @@ public sealed class BeachTheme : ArenaTheme
 		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 70f, Corner = 28f, Cornice = 24f, Skirting = 12f, SkirtingDepth = 4f } );
 	}
 
+	/// <summary>One hut per pastel: every length of wall between two posts is a hut of its own (ruling R26).</summary>
+	public override int WallCount => HutPastels.Length;
+
+	/// <summary>Weatherboard has no fixed height, so every hut's laps start at their own (no lines across the posts).</summary>
+	protected override bool WallShiftsVertically => true;
+
 	/// <summary>
-	/// Beach-hut weatherboard: lapped planks of uneven width, each lap throwing a dark line under it.
-	/// Every plank is laid in lengths, butt-jointed near one of three uneven stretches across the
-	/// repeat, and every stretch was painted on its own — runs of two to four boards per colour, chalky
-	/// pastels mostly between bands of white, starting at a different board in each stretch — so the bands
-	/// break and shift at the joints and no bay shows the same stack of colours (a single paint per
-	/// board ran the same stripes round the whole room, 6a review). The paint is worn through to
-	/// silver-grey timber where water runs, along the laps and at the joints, salt-bleached in broad
-	/// patches, with a nail at each stud, rusting.
+	/// One beach hut's weatherboard (ruling R26): lapped planks of uneven width running the whole
+	/// length, all in the hut's one pastel (<paramref name="variant"/> picks it), each board only a
+	/// shade off the next. Each board is butt-jointed once, anywhere along it, without changing colour.
+	/// In every other hut one board was replaced and painted later in another pastel, faded toward the
+	/// hut's own. The paint is weathered: thinned along the grain so the timber shows through, flaking
+	/// to silver-grey driftwood along the laps and at the joints, salt-bleached in broad patches; a nail
+	/// at each stud, rusting. Each hut lays its boards from its own stream, so no two share a board line.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
 		var painter = new Painter( WallSize, Driftwood, 0.85f );
-		var random = new Random( Seed + 600 );
+		var random = new Random( Seed + 600 + variant * 31 );
 		float Next() => (float)random.NextDouble();
+		float Wrap( float x ) => (x % WallSize + WallSize) % WallSize;
 
 		var tops = new List<float>();
 		var y = 0f;
@@ -76,81 +83,40 @@ public sealed class BeachTheme : ArenaTheme
 		tops.Add( WallSize );
 		var boards = tops.Count - 1;
 
-		// Three stretches of uneven width across the repeat; each paints its boards in its own runs,
-		// white between most of the pastels, from its own starting point.
-		const int Stretches = 3;
-		var bounds = new float[Stretches];
-		var first = Next() * WallSize;
-		for ( var z = 0; z < Stretches; z++ ) bounds[z] = first + z * WallSize / (float)Stretches + (Next() - 0.5f) * 150f;
+		// The hut's paint, a shade different on every board; entry 0 leaves pixels alone, the last is the replaced board.
+		var paint = Palette.Hex( HutPastels[variant] );
+		var palette = new Color[boards + 2];
+		palette[0] = new Color( 0f, 0f, 0f, 0f );
+		for ( var b = 0; b < boards; b++ ) palette[b + 1] = Mix( paint, HutWhite, Next() * 0.1f );
+		var other = (variant + 1 + random.Next( HutPastels.Length - 1 )) % HutPastels.Length;
+		palette[boards + 1] = Mix( Mix( Palette.Hex( HutPastels[other] ), paint, 0.45f ), HutWhite, 0.3f + Next() * 0.15f );
 
-		// Paint per stretch and board: an index into HutPastels, or −1 for white.
-		var paints = new int[Stretches, boards];
-		for ( var z = 0; z < Stretches; z++ )
-		{
-			var pastel = random.Next( HutPastels.Length );
-			var white = Next() < 0.5f;
-			var run = 1 + random.Next( 4 );
-			for ( var b = 0; b < boards; b++ )
-			{
-				if ( run == 0 )
-				{
-					// White after most pastel runs, never two whites running; each stretch decides on its own.
-					white = !white && Next() < 0.6f;
-					if ( !white ) pastel = (pastel + 1 + random.Next( HutPastels.Length - 1 )) % HutPastels.Length;
-					run = 2 + random.Next( 3 );
-				}
-				run--;
-				paints[z, b] = white ? -1 : pastel;
-			}
-		}
-
-		// Each board's lengths: a butt joint near every stretch boundary where the paint changes (a
-		// length runs on through where both stretches gave it the same colour), and at least one per
-		// board. Every length fades on its own. Joints are kept relative to the board's first one, so
-		// finding a pixel's length is a walk along a short sorted list.
-		var palette = new List<Color> { new Color( 0f, 0f, 0f, 0f ) };
+		// One butt joint per board, anywhere along it. The replaced board runs the hut's whole length
+		// like the rest: a stretch of one would come round again in every repeat, and so twice in a
+		// bay wider than the gap between them.
 		var joints = new List<float>[boards];
-		var lengths = new List<byte>[boards];
-		for ( var b = 0; b < boards; b++ )
-		{
-			joints[b] = new List<float>();
-			lengths[b] = new List<byte>();
-			for ( var z = 0; z < Stretches; z++ )
-			{
-				var previous = paints[(z + Stretches - 1) % Stretches, b];
-				if ( z > 0 && previous == paints[z, b] && joints[b].Count > 0 ) continue;
-				joints[b].Add( bounds[z] + (Next() - 0.5f) * 80f );
-				var paint = paints[z, b] < 0 ? HutWhite : Palette.Hex( HutPastels[paints[z, b]] );
-				palette.Add( Mix( paint, HutWhite, Next() * 0.15f ) );
-				lengths[b].Add( (byte)(palette.Count - 1) );
-			}
-		}
-
-		int LengthAt( int b, float x )
-		{
-			var list = joints[b];
-			var rel = ((x - list[0]) % WallSize + WallSize) % WallSize;
-			var k = 0;
-			while ( k + 1 < list.Count && list[k + 1] - list[0] <= rel ) k++;
-			return lengths[b][k];
-		}
+		for ( var b = 0; b < boards; b++ ) joints[b] = new List<float> { Next() * WallSize };
+		// Only every other hut has one, so a replaced board is never the thing every hut shares.
+		var replaced = variant % 2 == 0 ? 1 + random.Next( boards - 2 ) : -1;
 
 		float JointDistance( int b, float x )
 		{
 			var nearest = float.MaxValue;
 			foreach ( var joint in joints[b] )
 			{
-				var d = MathF.Abs( ((x - joint) % WallSize + WallSize) % WallSize );
+				var d = Wrap( x - joint );
 				nearest = MathF.Min( nearest, MathF.Min( d, WallSize - d ) );
 			}
 			return nearest;
 		}
 
-		var wear = painter.Noise( 24, Seed + 601, 4 );
+		var wear = painter.Noise( 24, Seed + 601 + variant, 4 );
 		var grainField = painter.Noise( 6, Seed + 602, 2 );
+		var thin = painter.Noise( 4, Seed + 608 + variant, 3 );
 		var index = new byte[WallSize * WallSize];
 		var relief = new float[WallSize * WallSize];
 		var bare = new float[WallSize * WallSize];
+		var through = new float[WallSize * WallSize];
 		var lap = new float[WallSize * WallSize];
 
 		for ( var b = 0; b < boards; b++ )
@@ -163,7 +129,8 @@ public sealed class BeachTheme : ArenaTheme
 				for ( var px = 0; px < WallSize; px++ )
 				{
 					var i = py * WallSize + px;
-					index[i] = (byte)LengthAt( b, px );
+					var patched = b == replaced;
+					index[i] = (byte)(patched ? boards + 1 : b + 1);
 
 					// Lapped board: thin at the top, thick at the foot, then a shadowed step down to the next.
 					var shadow = t > 0.93f;
@@ -171,29 +138,32 @@ public sealed class BeachTheme : ArenaTheme
 					relief[i] = shadow ? 0.25f : 0.5f + t * 0.5f + g * 0.05f;
 					if ( shadow ) lap[i] = 0.55f;
 
-					// Worn paint: more along the laps and around the butt joint, where water sits.
+					// Paint thinned along the grain, so the timber's figure shows through it.
+					var s = StreakX( thin, WallSize, px, py + b * 29, 61 );
+					through[i] = s > 0.5f ? MathF.Min( (s - 0.5f) * 2.5f, 1f ) * 0.22f : 0f;
+
+					// Flaking: crisp-edged patches, more along the laps and around the joints, where water sits;
+					// the newer replaced board has had less time to weather.
 					var dj = JointDistance( b, px );
-					var exposure = wear[i] + MathF.Max( 0f, t - 0.6f ) * 0.45f + MathF.Max( 0f, 1f - dj / 30f ) * 0.3f;
-					bare[i] = exposure > 0.74f ? MathF.Min( (exposure - 0.74f) * 3f, 1f ) * 0.6f : 0f;
+					var exposure = wear[i] + MathF.Max( 0f, t - 0.6f ) * 0.45f + MathF.Max( 0f, 1f - dj / 30f ) * 0.3f - (patched ? 0.08f : 0f);
+					bare[i] = exposure > 0.76f ? MathF.Min( (exposure - 0.76f) * 7f, 1f ) * 0.6f : 0f;
 				}
 			}
 		}
 
-		painter.Blend( index, palette.ToArray() );
+		painter.Blend( index, palette );
 		painter.AddHeight( relief, 1f );
-		painter.Blend( bare, Driftwood, roughness: 0.9f );
+		painter.Blend( through, Driftwood );
+		painter.Blend( bare, Mix( Driftwood, HutWhite, 0.3f ), roughness: 0.9f );
 		painter.Blend( lap, Mix( Driftwood, Palette.Ink, 0.3f ) );
 
 		// The butt joints: a dark hairline gap where two lengths meet.
 		for ( var b = 0; b < boards; b++ )
 			foreach ( var joint in joints[b] )
-			{
-				var x = (joint % WallSize + WallSize) % WallSize;
-				painter.Line( new Vector2( x, tops[b] ), new Vector2( x, tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
-			}
+				painter.Line( new Vector2( Wrap( joint ), tops[b] ), new Vector2( Wrap( joint ), tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
 
 		// Salt bleaching in broad patches.
-		painter.Blend( Ramp( painter.Noise( 4, Seed + 603, 4 ), 0.55f, 0.85f, 0.25f ), HutWhite );
+		painter.Blend( Ramp( painter.Noise( 4, Seed + 603 + variant, 4 ), 0.55f, 0.85f, 0.25f ), HutWhite );
 
 		// Nails at every stud, about 24 units apart but never on a grid, each with a faint rust halo.
 		var studs = new List<float>();
@@ -209,18 +179,17 @@ public sealed class BeachTheme : ArenaTheme
 			}
 			foreach ( var joint in joints[b] )
 			{
-				var x = (joint % WallSize + WallSize) % WallSize;
-				painter.Circle( x - 6f, ny, 1.8f, NailHead, 0.9f );
-				painter.Circle( x + 6f, ny, 1.8f, NailHead, 0.9f );
+				painter.Circle( Wrap( joint ) - 6f, ny, 1.8f, NailHead, 0.9f );
+				painter.Circle( Wrap( joint ) + 6f, ny, 1.8f, NailHead, 0.9f );
 			}
 		}
 
-		painter.Mottle( 0.04f, 6, Seed + 604, 4 );
+		painter.Mottle( 0.04f, 6, Seed + 604 + variant, 4 );
 		painter.RoughnessNoise( 0.05f, 8, Seed + 605, 3 );
 		painter.Cavity( 0.35f, 4 );
-		painter.EdgeWear( 0.3f, 3, Seed + 606 );
-		painter.Grain( 0.012f, Seed + 607 );
-		return painter.Bake( "arena_2_wall", Painter.Matte, 5f );
+		painter.EdgeWear( 0.3f, 3, Seed + 606 + variant );
+		painter.Grain( 0.012f, Seed + 607 + variant );
+		return painter.Bake( $"arena_2_wall_{variant}", Painter.Matte, 5f );
 	}
 
 	/// <summary>Weathered white-painted timber, flaking to driftwood grey; the slab edge a worn deck board.</summary>

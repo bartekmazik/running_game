@@ -48,7 +48,7 @@ public sealed class ForgeTheme : ArenaTheme
 	/// Plain dark rock: broad lumps and hollows, faint strata, browner and lighter patches. Also the
 	/// face of the lava shaft below the floor.
 	/// </summary>
-	protected override PaintedSurface PaintWall()
+	protected override PaintedSurface PaintWall( int variant )
 	{
 		// Full surface in Task 6b.
 		var painter = new Painter( WallSize, RockDark, 0.9f );
