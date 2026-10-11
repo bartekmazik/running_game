@@ -1,9 +1,10 @@
 using System;
 
 /// <summary>
-/// Floor 4 (index 3): an office. Underfoot, loop-pile carpet tiles with striated two-tone yarn,
-/// laid quarter-turned, flattened along the walking paths, with the stains every office floor
-/// collects. Overhead (the undersides of the beach floor), fissured acoustic ceiling tiles.
+/// Floor 4 (index 3): an office. Underfoot, loop-pile carpet tiles in heathered yarn with fleck
+/// dashes, laid quarter-turned so each tile shades differently, flattened along the walking paths,
+/// with the faint stains every office floor collects. Overhead (the undersides of the beach floor),
+/// fissured acoustic ceiling tiles.
 /// </summary>
 public sealed class OfficeTheme : ArenaTheme
 {
@@ -39,19 +40,43 @@ public sealed class OfficeTheme : ArenaTheme
 		var random = new Random( Seed );
 		float Next() => (float)random.NextDouble();
 
-		// Cut carpet tiles are square, but never laid perfectly: a pixel or three of gap that varies,
-		// a fraction of a degree of skew.
+		// Pile-direction shading, the hallmark of quarter-turned carpet tiles: the same carpet reads
+		// clearly lighter or darker per tile depending on which way its pile lies to the eye.
+		var tones = new[] { 0.55f, -0.45f, 0.15f, -0.75f };
+
+		// Cut tiles are square but never laid perfectly: the seam at the chamfer's foot varies by a
+		// pixel or two, and each tile sits a fraction of a degree askew. The pile runs on over the arris.
 		for ( var c = 0; c < 4; c++ )
 		{
 			var min = CellOrigin( c, FloorSize );
-			var tone = Next() * 2f - 1f;
-			var carpet = tone < 0f ? Mix( Carpet, CarpetShade, -tone * 0.35f ) : Mix( Carpet, CarpetLight, tone * 0.3f );
-			var left = 3f + Next() * 4f; var top = 3f + Next() * 4f;
-			var right = 3f + Next() * 4f; var bottom = 3f + Next() * 4f;
-			painter.Rect( min.x + left, min.y + top, cell - left - right, cell - top - bottom, carpet, radius: 3f, height: 1f, bevel: 8f, roughness: 0.95f, angle: (Next() - 0.5f) * 0.5f );
+			var tone = tones[c] + (Next() - 0.5f) * 0.1f;
+			var carpet = tone < 0f ? Mix( Carpet, CarpetShade, -tone * 0.7f ) : Mix( Carpet, CarpetLight, tone * 0.6f );
+			var left = 2f + Next() * 2.5f; var top = 2f + Next() * 2.5f;
+			var right = 2f + Next() * 2.5f; var bottom = 2f + Next() * 2.5f;
+			painter.Fill( (int)min.x, (int)min.y, cell, cell, Mix( carpet, Seam, 0.5f ), height: 0.75f );
+			var middle = new Vector2( min.x + (left + cell - right) * 0.5f, min.y + (top + cell - bottom) * 0.5f );
+			var halfSize = new Vector2( (cell - left - right) * 0.5f, (cell - top - bottom) * 0.5f );
+			var skew = (Next() - 0.5f) * 0.4f * MathF.PI / 180f;
+			var across = new Vector2( MathF.Cos( skew ), MathF.Sin( skew ) ) * halfSize.x;
+			var down = new Vector2( -MathF.Sin( skew ), MathF.Cos( skew ) ) * halfSize.y;
+			painter.Polygon( new[] { middle - across - down, middle + across - down, middle + across + down, middle - across + down }, carpet, height: 1f, bevel: 7f, roughness: 0.95f );
 		}
 
 		PaintPile( painter );
+
+		// Fleck yarn: short dashes of periwinkle and of a deep ply along the pile rows, at low contrast.
+		for ( var c = 0; c < 4; c++ )
+		{
+			var min = CellOrigin( c, FloorSize );
+			var direction = c == 0 || c == 3 ? new Vector2( 1, 0 ) : new Vector2( 0, 1 );
+			for ( var f = 0; f < 1300; f++ )
+			{
+				var at = min + new Vector2( 30f + Next() * 452f, 30f + Next() * 452f );
+				var length = 2f + Next() * 4f;
+				var deep = Next() < 0.4f;
+				painter.Line( at, at + direction * length, 1.3f, deep ? Mix( Carpet, CarpetDeep, 0.8f ) : Mix( Carpet, Fleck, 0.7f ), deep ? 0.4f : 0.45f );
+			}
+		}
 
 		// Walking paths: pile crushed flat and a little lighter and shinier.
 		painter.Blend( Ramp( painter.Noise( 3, Seed + 30, 4 ), 0.55f, 0.82f, 0.45f ), Mix( Carpet, CarpetLight, 0.35f ), height: 1f, roughness: 0.86f );
@@ -104,9 +129,12 @@ public sealed class OfficeTheme : ArenaTheme
 	}
 
 	/// <summary>
-	/// Loop pile in rows, alternating direction per tile (the quarter-turn laying). Each row's yarn
-	/// drifts between a dark and a light ply in streaks a hundred-odd pixels long — read from a noise
-	/// field sampled stretched along the row — and the odd row carries a periwinkle fleck yarn.
+	/// Loop pile in rows, across on two tiles and down on the other two (the quarter-turn laying).
+	/// Its colour is three scales of yarn variation blended softly, never thresholded into lines:
+	///   * heather, a 2–4 px speckle of a dark and a light ply;
+	///   * tufting, soft clouds a few units across where the pile sits denser or looser — also in
+	///     height, so the pile still looks matte and uneven where mips have averaged the loops away;
+	///   * faint streaks along each row, and alternate rows a hair lighter.
 	/// Loops are offset row to row like real tufting.
 	/// </summary>
 	void PaintPile( Painter painter )
@@ -114,10 +142,10 @@ public sealed class OfficeTheme : ArenaTheme
 		const int cell = FloorSize / 2;
 		const int Stretch = 3;
 		var streaks = painter.Noise( 64, Seed + 20, 2 );
-		var heather = painter.Noise( 512, Seed + 21, 1 );
+		var heather = painter.Noise( 256, Seed + 21, 2 );
+		var tufting = painter.Noise( 24, Seed + 22, 3 );
 		var dark = new float[FloorSize * FloorSize];
 		var light = new float[FloorSize * FloorSize];
-		var fleck = new float[FloorSize * FloorSize];
 		var loops = new float[FloorSize * FloorSize];
 
 		for ( var c = 0; c < 4; c++ )
@@ -142,28 +170,22 @@ public sealed class OfficeTheme : ArenaTheme
 					var f = position - p0;
 					var s = streaks[sampleRow + p0 % FloorSize] * (1f - f) + streaks[sampleRow + (p0 + 1) % FloorSize] * f;
 
-					// Heathered yarn: a tight speckle of a dark and a light ply, faintly streaked along the
-					// row, and alternate pile rows a touch lighter — the fine striation of a tufted tile.
-					var tone = (heather[i] - 0.5f) * 0.9f + (s - 0.5f) * 0.6f + ((pileRow & 1) == 0 ? 0.07f : -0.07f);
-					dark[i] = tone < -0.08f ? MathF.Min( (-0.08f - tone) * 3f, 1f ) * 0.45f : 0f;
-					light[i] = tone > 0.08f ? MathF.Min( (tone - 0.08f) * 3f, 1f ) * 0.35f : 0f;
-
-					var rowHash = (uint)(pileRow * 2654435761u + (uint)c * 40503u);
-					fleck[i] = (rowHash >> 24) > 238 && s > 0.5f ? 0.55f : 0f;
+					var tone = (heather[i] - 0.5f) * 1.3f + (tufting[i] - 0.5f) * 0.7f + (s - 0.5f) * 0.25f + ((pileRow & 1) == 0 ? 0.04f : -0.04f);
+					dark[i] = tone < 0f ? MathF.Min( -tone * 1.3f, 1f ) * 0.5f : 0f;
+					light[i] = tone > 0f ? MathF.Min( tone * 1.3f, 1f ) * 0.4f : 0f;
 
 					var acrossPhase = across % PileRow;
 					var alongPhase = (along + (pileRow & 1)) % PileRow;
 					var acrossHeight = acrossPhase == 0 ? 0.15f : acrossPhase == 1 ? 1f : 0.6f;
 					var alongHeight = alongPhase == 0 ? 0.35f : alongPhase == 1 ? 1f : 0.7f;
-					loops[i] = acrossHeight * alongHeight - 0.5f;
+					loops[i] = (acrossHeight * alongHeight - 0.5f) * 0.16f + (tufting[i] - 0.5f) * 0.5f;
 				}
 			}
 		}
 
 		painter.Blend( dark, CarpetDeep );
 		painter.Blend( light, CarpetLight );
-		painter.Blend( fleck, Fleck );
-		painter.AddHeight( loops, 0.16f );
+		painter.AddHeight( loops, 1f );
 	}
 
 	/// <summary>
@@ -213,7 +235,7 @@ public sealed class OfficeTheme : ArenaTheme
 				painter.Polygon( outline, WaterStain, alpha: 0.16f );
 				for ( var ring = 0; ring < 2; ring++ )
 				{
-					var shrunk = Organic( centre, half * (1f - ring * 0.35f), 1f, Seed + 570 );
+					var shrunk = Organic( centre, half * (1f - ring * 0.35f), 1f, Seed + 571 + ring );
 					for ( var k = 0; k < shrunk.Length; k++ )
 						painter.Line( shrunk[k], shrunk[(k + 1) % shrunk.Length], 2f, WaterStain, 0.3f - ring * 0.1f );
 				}

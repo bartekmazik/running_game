@@ -110,6 +110,27 @@ public sealed class Painter
 	static float Smooth( float t ) => t * t * (3f - 2f * t);
 
 	/// <summary>
+	/// Sets a whole pixel rectangle at once — colour, and optionally height and roughness — with hard
+	/// edges and no wrapping. For underlays (a block's base before its outline is painted) where the
+	/// signed-distance path would cost a closure call per pixel for nothing.
+	/// </summary>
+	public void Fill( int x, int y, int w, int h, Color color, float height = float.NaN, float roughness = float.NaN )
+	{
+		var hasHeight = !float.IsNaN( height );
+		var hasRoughness = !float.IsNaN( roughness );
+		for ( var row = y; row < y + h; row++ )
+		{
+			var offset = row * Size;
+			for ( var i = offset + x; i < offset + x + w; i++ )
+			{
+				_red[i] = color.r; _green[i] = color.g; _blue[i] = color.b;
+				if ( hasHeight ) _height[i] = height;
+				if ( hasRoughness ) _roughness[i] = roughness;
+			}
+		}
+	}
+
+	/// <summary>
 	/// Rounded rectangle; the workhorse for bricks, planks and panels. <paramref name="angle"/> turns
 	/// it about its centre in degrees, clockwise as seen in the image (image y grows downward), so a
 	/// laid course can sit slightly crooked.
@@ -169,49 +190,119 @@ public sealed class Painter
 
 		// Shape only needs the distance up to the bevel plus the 1-px soft edge: beyond that the pixel
 		// is fully covered at full height, or not touched. So each row looks only at the edges within
-		// that reach of it, and finds its crossings once instead of once per pixel.
+		// that reach of it, and finds its crossings once instead of once per pixel. The pixel loop is
+		// Shape's, inlined: a block outline covers a quarter of a 1024² atlas, and a closure call per
+		// pixel was most of its cost in the unoptimised build.
 		var reach = MathF.Max( bevel, 0f ) + 1f;
-		var nearby = new int[count]; var nearbyCount = 0;
-		var crossings = new float[count]; var crossingCount = 0;
-		var cachedY = float.NaN;
+		var reachSq = reach * reach;
+		var nearby = new int[count];
+		var crossings = new float[count];
+		var hasHeight = !float.IsNaN( height );
+		var hasRoughness = !float.IsNaN( roughness );
+		var inverseBevel = bevel > 0f ? 1f / bevel : 0f;
+		var size = Size;
+		var xStart = (int)MathF.Floor( minX ) - 1;
+		var xEnd = (int)MathF.Ceiling( maxX ) + 1;
 
-		Shape( ( px, py ) =>
+		// Per row, which pixels have any edge within reach, and their squared distance to the nearest:
+		// each nearby edge is measured only across its own x reach, instead of every pixel testing
+		// every nearby edge. Everywhere else the distance is simply "beyond reach" — most of a large
+		// block's interior.
+		var nearEdge = new bool[xEnd - xStart + 1];
+		var rowNearest = new float[xEnd - xStart + 1];
+
+		for ( var y = (int)MathF.Floor( minY ) - 1; y <= (int)MathF.Ceiling( maxY ) + 1; y++ )
 		{
-			if ( py != cachedY )
+			var py = y + 0.5f;
+			var row = Wrap( y ) * size;
+			var nearbyCount = 0; var crossingCount = 0;
+			for ( var k = 0; k < count; k++ )
 			{
-				cachedY = py; nearbyCount = 0; crossingCount = 0;
-				for ( var k = 0; k < count; k++ )
-				{
-					if ( py >= edgeMinY[k] - reach && py <= edgeMaxY[k] + reach )
-						nearby[nearbyCount++] = k;
+				if ( py >= edgeMinY[k] - reach && py <= edgeMaxY[k] + reach )
+					nearby[nearbyCount++] = k;
 
-					// Even-odd crossing test against a ray toward +x.
-					if ( (ys[k] > py) != (ys[k] + edgeY[k] > py) )
-						crossings[crossingCount++] = xs[k] + edgeX[k] * (py - ys[k]) / edgeY[k];
-				}
+				// Even-odd crossing test against a ray toward +x.
+				if ( (ys[k] > py) != (ys[k] + edgeY[k] > py) )
+					crossings[crossingCount++] = xs[k] + edgeX[k] * (py - ys[k]) / edgeY[k];
 			}
 
-			var inside = false;
-			for ( var c = 0; c < crossingCount; c++ )
-				if ( px < crossings[c] ) inside = !inside;
-
-			var nearestSq = reach * reach;
+			Array.Clear( nearEdge );
+			Array.Fill( rowNearest, reachSq );
 			for ( var n = 0; n < nearbyCount; n++ )
 			{
 				var k = nearby[n];
-				if ( px < edgeMinX[k] - reach || px > edgeMaxX[k] + reach ) continue;
-
-				var wx = px - xs[k]; var wy = py - ys[k];
-				var t = (wx * edgeX[k] + wy * edgeY[k]) * inverseLengthSq[k];
-				t = t < 0f ? 0f : t > 1f ? 1f : t;
-				var dx = wx - edgeX[k] * t; var dy = wy - edgeY[k] * t;
-				var distanceSq = dx * dx + dy * dy;
-				if ( distanceSq < nearestSq ) nearestSq = distanceSq;
+				// Pixels whose centre (x + 0.5) lies within [min - reach, max + reach] of the edge.
+				var from = Math.Max( (int)MathF.Ceiling( edgeMinX[k] - reach - 0.5f ), xStart );
+				var to = Math.Min( (int)MathF.Floor( edgeMaxX[k] + reach - 0.5f ), xEnd );
+				var wy = py - ys[k];
+				for ( var x = from; x <= to; x++ )
+				{
+					nearEdge[x - xStart] = true;
+					var wx = x + 0.5f - xs[k];
+					var t = (wx * edgeX[k] + wy * edgeY[k]) * inverseLengthSq[k];
+					t = t < 0f ? 0f : t > 1f ? 1f : t;
+					var dx = wx - edgeX[k] * t; var dy = wy - edgeY[k] * t;
+					var distanceSq = dx * dx + dy * dy;
+					if ( distanceSq < rowNearest[x - xStart] ) rowNearest[x - xStart] = distanceSq;
+				}
 			}
 
-			var distance = MathF.Sqrt( nearestSq );
-			return inside ? -distance : distance;
-		}, minX, minY, maxX, maxY, color, alpha, height, bevel, roughness );
+			for ( var x = xStart; x <= xEnd; x++ )
+			{
+				var px = x + 0.5f;
+				var inside = false;
+				for ( var c = 0; c < crossingCount; c++ )
+					if ( px < crossings[c] ) inside = !inside;
+
+				// A run with no edge within reach is wholly inside or wholly outside (a crossing lies on a
+				// nearby edge, so it would have marked its neighbours): skip it, or set it in one tight loop.
+				if ( !nearEdge[x - xStart] )
+				{
+					var runEnd = x;
+					while ( runEnd < xEnd && !nearEdge[runEnd + 1 - xStart] ) runEnd++;
+					if ( inside )
+					{
+						for ( var rx = x; rx <= runEnd; rx++ )
+						{
+							var j = row + ((uint)rx < (uint)size ? rx : Wrap( rx ));
+							_red[j] += (color.r - _red[j]) * alpha;
+							_green[j] += (color.g - _green[j]) * alpha;
+							_blue[j] += (color.b - _blue[j]) * alpha;
+							if ( hasRoughness ) _roughness[j] += (roughness - _roughness[j]) * alpha;
+							if ( hasHeight ) _height[j] = height;
+						}
+					}
+					x = runEnd;
+					continue;
+				}
+
+				var nearestSq = rowNearest[x - xStart];
+				var distance = nearestSq >= reachSq ? reach : MathF.Sqrt( nearestSq );
+				var d = inside ? -distance : distance;
+				var coverage = 0.5f - d;
+				if ( coverage <= 0f ) continue;
+				if ( coverage > 1f ) coverage = 1f;
+
+				var i = row + ((uint)x < (uint)size ? x : Wrap( x ));
+				var blend = coverage * alpha;
+				_red[i] += (color.r - _red[i]) * blend;
+				_green[i] += (color.g - _green[i]) * blend;
+				_blue[i] += (color.b - _blue[i]) * blend;
+
+				if ( hasRoughness )
+					_roughness[i] += (roughness - _roughness[i]) * blend;
+
+				if ( !hasHeight ) continue;
+				var shoulder = 1f;
+				if ( bevel > 0f )
+				{
+					var s = -d * inverseBevel;
+					shoulder = s <= 0f ? 0f : s >= 1f ? 1f : s * s * (3f - 2f * s);
+				}
+				var shaped = _height[i] + (height - _height[i]) * shoulder;
+				_height[i] += (shaped - _height[i]) * coverage;
+			}
+		}
 	}
 
 	/// <summary>

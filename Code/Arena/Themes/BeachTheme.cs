@@ -46,14 +46,16 @@ public sealed class BeachTheme : ArenaTheme
 			var min = CellOrigin( c, FloorSize );
 			var tone = Next() * 2f - 1f;
 			var sand = tone < 0f ? Mix( Sand, SandShade, -tone * 0.4f ) : Mix( Sand, SandLight, tone * 0.4f );
-			painter.Polygon( SlabOutline( min, cell, 5f + Next() * 5f, 4f, 12f + Next() * 18f, Seed + c * 101 ), sand, height: 1f, bevel: 18f, roughness: 0.9f );
+			// The sand runs on over the arris and slumps toward the joint at the chamfer's foot.
+			painter.Fill( (int)min.x, (int)min.y, cell, cell, Mix( sand, SandDark, 0.5f ), height: 0.6f );
+			painter.Polygon( SlabOutline( min, cell, 3f + Next() * 4f, 4f, 12f + Next() * 18f, Seed + c * 101 ), sand, height: 1f, bevel: Rim, roughness: 0.9f );
 
 			// Grit: shell fragments and pebbles, each its own size, outline and colour. Painted before
 			// the ripples are added, so they ride the sand instead of sinking into the crests.
 			var bits = 22 + random.Next( 20 );
 			for ( var b = 0; b < bits; b++ )
 			{
-				var at = min + new Vector2( 30f + Next() * 452f, 30f + Next() * 452f );
+				var at = min + new Vector2( 34f + Next() * 444f, 34f + Next() * 444f );
 				var size = 1.2f + Next() * Next() * 4f;
 				var half = new Vector2( size, size * (0.5f + Next() * 0.5f) );
 				var color = Mix( Palette.Hex( Grit[random.Next( Grit.Length )] ), Sand, 0.25f );
@@ -61,8 +63,10 @@ public sealed class BeachTheme : ArenaTheme
 					height: 1.1f + Next() * 0.12f, bevel: 1.2f, roughness: 0.45f + Next() * 0.35f );
 			}
 
-			if ( c == 1 ) PaintStarfish( painter, min + new Vector2( 150f + Next() * 210f, 150f + Next() * 210f ), 44f + Next() * 10f, Next() * MathF.Tau, random );
-			if ( c == 2 ) PaintScallop( painter, min + new Vector2( 160f + Next() * 190f, 180f + Next() * 170f ), 38f + Next() * 10f, Next() * MathF.Tau, random );
+			// One half-buried find per variant 1 and 2 — small, bleached and broken, because each of
+			// them lies on a quarter of the floor's 900 tiles and must never read as a sticker.
+			if ( c == 1 ) PaintStarfish( painter, min + new Vector2( 150f + Next() * 210f, 150f + Next() * 210f ), 30f + Next() * 8f, Next() * MathF.Tau, random );
+			if ( c == 2 ) PaintScallop( painter, min + new Vector2( 160f + Next() * 190f, 180f + Next() * 170f ), 26f + Next() * 6f, Next() * MathF.Tau, random );
 		}
 
 		PaintRipples( painter, random );
@@ -74,7 +78,7 @@ public sealed class BeachTheme : ArenaTheme
 		painter.HeightNoise( 0.08f, 128, Seed + 32, 2 );
 		painter.Mottle( 0.05f, 4, Seed + 33, 6 );
 		painter.RoughnessNoise( 0.05f, 8, Seed + 34, 3 );
-		painter.Cavity( 0.3f, 8 );
+		painter.Cavity( 0.2f, 8 );
 		painter.Grain( 0.02f, Seed + 35 );
 		return painter.ToMaterial( "arena_2_floor", Painter.Matte, 6f );
 	}
@@ -111,7 +115,7 @@ public sealed class BeachTheme : ArenaTheme
 					// Position within one ripple, 0..1: a long gentle rise (stoss), a crest, a short steep fall (lee).
 					var phase = ((x - min.x) * dx + (y - min.y) * dy + (warp[i] - 0.5f) * 50f + (warpFine[i] - 0.5f) * 14f) / wavelength;
 					var t = phase - MathF.Floor( phase );
-					var profile = t < 0.72f ? t / 0.72f : (1f - t) / 0.28f;
+					var profile = t < 0.66f ? t / 0.66f : (1f - t) / 0.34f;
 					profile = profile * profile * (3f - 2f * profile);
 					var amplitude = 0.3f + strength[i] * 0.9f;
 					var h = (profile - 0.5f) * 2f * amplitude;
@@ -123,11 +127,15 @@ public sealed class BeachTheme : ArenaTheme
 		}
 
 		painter.AddHeight( ripple, 1.2f );
-		painter.Blend( troughs, SandShade );
+		painter.Blend( troughs, Mix( SandShade, SandDark, 0.5f ) );
 		painter.Blend( crests, SandLight );
 	}
 
-	/// <summary>A five-armed starfish, every arm its own length and curl, studded with tubercles and dusted with sand.</summary>
+	/// <summary>
+	/// A dried starfish half sunk in the sand: five arms of their own length and curl, one snapped
+	/// short, bleached most of the way to the sand's colour, faint tubercles, and sand drifted over
+	/// part of it.
+	/// </summary>
 	static void PaintStarfish( Painter painter, Vector2 centre, float radius, float rotation, Random random )
 	{
 		float Next() => (float)random.NextDouble();
@@ -138,7 +146,7 @@ public sealed class BeachTheme : ArenaTheme
 		for ( var a = 0; a < 5; a++ )
 		{
 			var angle = rotation + a * MathF.Tau / 5f + (Next() - 0.5f) * 0.18f;
-			var length = radius * (0.82f + Next() * 0.3f);
+			var length = radius * (a == 0 ? 0.5f : 0.82f + Next() * 0.3f);
 			var curl = (Next() - 0.5f) * 0.3f;
 			arms[a] = (angle, length, curl);
 
@@ -150,9 +158,8 @@ public sealed class BeachTheme : ArenaTheme
 			points.Add( Toward( angle + 0.24f + curl * 0.4f, length * 0.6f ) );
 		}
 
-		// Sun-bleached: a dried starfish fades toward the sand it lies on.
-		painter.Polygon( points.ToArray(), Mix( Coral, Sand, 0.3f ), height: 1.4f, bevel: 12f, roughness: 0.7f );
-		painter.Circle( centre.x, centre.y, radius * 0.16f, CoralLight, 0.5f );
+		var body = Mix( Coral, Sand, 0.55f );
+		painter.Polygon( points.ToArray(), body, height: 1.22f, bevel: 7f, roughness: 0.8f );
 
 		foreach ( var (angle, length, curl) in arms )
 		{
@@ -161,33 +168,39 @@ public sealed class BeachTheme : ArenaTheme
 			{
 				var t = 0.12f + s / (float)studs * 0.75f;
 				var at = Toward( angle + curl * t + (Next() - 0.5f) * 0.12f, length * t );
-				var r = 1.4f + Next() * 1.2f;
-				painter.Circle( at.x, at.y, r, CoralLight, 0.85f, height: 1.48f, bevel: r, roughness: 0.55f );
+				var r = 1f + Next() * 0.9f;
+				painter.Circle( at.x, at.y, r, Mix( CoralLight, Sand, 0.4f ), 0.5f, height: 1.27f, bevel: r, roughness: 0.75f );
 			}
 		}
 
-		for ( var d = 0; d < 18; d++ )
+		// Sand drifted over two of the arms and the edge of the disc.
+		for ( var d = 0; d < 3; d++ )
 		{
-			var at = Toward( Next() * MathF.Tau, Next() * radius * 0.8f );
-			painter.Circle( at.x, at.y, 1f + Next() * 2.5f, Sand, 0.55f );
+			var arm = arms[1 + random.Next( 4 )];
+			var at = Toward( arm.angle + (Next() - 0.5f) * 0.6f, arm.length * (0.4f + Next() * 0.5f) );
+			painter.Polygon( Organic( at, new Vector2( radius * 0.45f, radius * 0.3f ), 0.8f, random.Next(), Next() * MathF.Tau, 20 ), Sand, alpha: 0.85f, height: 1.1f, bevel: 6f, roughness: 0.9f );
 		}
 	}
 
-	/// <summary>A scallop: fan of ribs with a scalloped rim, two ears at the hinge, pink growth bands.</summary>
+	/// <summary>A small scallop, hinge-first in the sand: fan of ribs, scalloped rim, ears, faint pink growth bands.</summary>
 	static void PaintScallop( Painter painter, Vector2 hinge, float radius, float heading, Random random )
 	{
 		var shapeSeed = random.Next();
-		painter.Polygon( ScallopOutline( hinge, radius, heading, shapeSeed ), ShellCream, height: 1.3f, bevel: 10f, roughness: 0.45f );
-		painter.Polygon( ScallopOutline( hinge, radius * 0.74f, heading, shapeSeed ), Coral, alpha: 0.28f );
-		painter.Polygon( ScallopOutline( hinge, radius * 0.46f, heading, shapeSeed ), Coral, alpha: 0.22f );
+		var shell = Mix( ShellCream, Sand, 0.3f );
+		painter.Polygon( ScallopOutline( hinge, radius, heading, shapeSeed ), shell, height: 1.18f, bevel: 7f, roughness: 0.5f );
+		painter.Polygon( ScallopOutline( hinge, radius * 0.74f, heading, shapeSeed ), Coral, alpha: 0.14f );
+		painter.Polygon( ScallopOutline( hinge, radius * 0.46f, heading, shapeSeed ), Coral, alpha: 0.12f );
 
 		const int Ribs = 13;
 		for ( var r = 0; r <= Ribs; r++ )
 		{
 			var angle = heading + (r / (float)Ribs - 0.5f) * 2.1f;
 			var direction = new Vector2( MathF.Cos( angle ), MathF.Sin( angle ) );
-			painter.Line( hinge + direction * radius * 0.16f, hinge + direction * radius * 0.94f, 2f, ShellRib, 0.5f, 1.24f );
+			painter.Line( hinge + direction * radius * 0.16f, hinge + direction * radius * 0.94f, 1.6f, ShellRib, 0.3f, 1.14f );
 		}
+
+		// The hinge end is under the sand.
+		painter.Polygon( Organic( hinge, new Vector2( radius * 0.55f, radius * 0.4f ), 0.8f, shapeSeed + 1, heading, 20 ), Sand, alpha: 0.9f, height: 1.08f, bevel: 6f, roughness: 0.9f );
 	}
 
 	static Vector2[] ScallopOutline( Vector2 hinge, float radius, float heading, int seed )
@@ -217,7 +230,7 @@ public sealed class BeachTheme : ArenaTheme
 	/// <summary>
 	/// Striped sailcloth: 32 px stripes, so all four undersides start on the same stripe and the
 	/// pattern runs on from tile to tile. Basket weave in height, soft sagging folds, sun-faded
-	/// patches, stitched panel seams, and one patched repair.
+	/// patches and stitched panel seams.
 	/// </summary>
 	protected override Material PaintCeiling()
 	{
@@ -250,31 +263,6 @@ public sealed class BeachTheme : ArenaTheme
 				var seamY = min.y + StripeWidth * (1 + random.Next( 7 )) + (s == 0 ? -3f : 3f);
 				for ( var x = min.x + 3f + Next() * 4f; x < min.x + cell - 5f; x += 5.5f + Next() * 1.2f )
 					painter.Line( new Vector2( x, seamY ), new Vector2( x + 2.6f, seamY + (Next() - 0.5f) * 0.6f ), 1.1f, Thread, 0.55f, 0.35f );
-			}
-
-			// A patched repair on one underside, sewn on slightly askew.
-			if ( c == 3 )
-			{
-				var px = min.x + 60f + Next() * 100f; var py = min.y + 50f + Next() * 110f;
-				var pw = 26f + Next() * 14f; var ph = 20f + Next() * 10f;
-				var patchAngle = (Next() - 0.5f) * 8f;
-				painter.Rect( px, py, pw, ph, Mix( Canvas, Thread, 0.15f ), radius: 1f, alpha: 0.45f, height: 0.5f, bevel: 2f, roughness: 0.9f, angle: patchAngle );
-				var turn = patchAngle * MathF.PI / 180f;
-				var across = new Vector2( MathF.Cos( turn ), MathF.Sin( turn ) );
-				var down = new Vector2( -across.y, across.x );
-				var middle = new Vector2( px + pw * 0.5f, py + ph * 0.5f );
-				var corners = new[]
-				{
-					middle - across * (pw * 0.5f - 2f) - down * (ph * 0.5f - 2f), middle + across * (pw * 0.5f - 2f) - down * (ph * 0.5f - 2f),
-					middle + across * (pw * 0.5f - 2f) + down * (ph * 0.5f - 2f), middle - across * (pw * 0.5f - 2f) + down * (ph * 0.5f - 2f),
-				};
-				for ( var k = 0; k < 4; k++ )
-				{
-					var from = corners[k]; var to = corners[(k + 1) % 4];
-					var length = (to - from).Length; var direction = (to - from) / length;
-					for ( var d = 1f; d < length - 2f; d += 5f )
-						painter.Line( from + direction * d, from + direction * (d + 2.4f), 1f, Thread, 0.6f, 0.75f );
-				}
 			}
 		}
 

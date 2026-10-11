@@ -21,8 +21,8 @@ public sealed class GreenhouseTheme : ArenaTheme
 	/// <summary>A fresh break shows the unsealed body: paler and duller.</summary>
 	static Color RawClay => Palette.Hex( 0xE8BC9C );
 
-	static Color Moss => Palette.Hex( 0x5C7A43 );
-	static Color MossLight => Palette.Hex( 0xA9CF95 );
+	static Color Moss => Palette.Hex( 0x6B7052 );
+	static Color MossLight => Palette.Hex( 0x8E9D74 );
 	static Color Soil => Palette.Hex( 0x5A4434 );
 
 	public override void Dress( FloorContext room )
@@ -46,13 +46,12 @@ public sealed class GreenhouseTheme : ArenaTheme
 			var min = CellOrigin( c, FloorSize );
 			var tone = Next() * 2f - 1f;
 			var body = tone < -0.2f ? Mix( Clay, ClayShade, (-tone - 0.2f) * 0.75f ) : Mix( Clay, ClayLight, (tone + 0.2f) * 0.3f );
-			var joint = 1.5f + Next() * 2.5f;
+			var joint = 3f + Next() * 4f;
 
-			// The arris under each slab is its own clay a shade deeper, not a grey grout line: the
-			// geometric chamfer carries the joint, the texture only darkens toward it.
-			painter.Rect( min.x, min.y, cell, cell, Mix( body, Flash, 0.3f ), height: 0.5f );
-
-			painter.Polygon( SlabOutline( min, cell, joint, 2f, 6f + Next() * 12f, Seed + c * 101 ), body, height: 1f, bevel: 9f, roughness: 0.8f );
+			// The clay runs on over the arris (the outer Rim px land on the chamfer) and rolls down a
+			// little toward the joint, which sits at the chamfer's foot in the clay's own deeper tone.
+			painter.Fill( (int)min.x, (int)min.y, cell, cell, Mix( body, Flash, 0.45f ), height: 0.6f );
+			painter.Polygon( SlabOutline( min, cell, joint, 2.5f, 6f + Next() * 12f, Seed + c * 101 ), body, height: 1f, bevel: Rim, roughness: 0.8f );
 
 			// Grog: grains of sand and crushed fired clay in the body, darker and lighter than it.
 			for ( var s = 0; s < 700; s++ )
@@ -96,13 +95,15 @@ public sealed class GreenhouseTheme : ArenaTheme
 			if ( c == 1 || c == 3 )
 			{
 				var k = c == 1 ? 2 : 0;
+				// A break: sunk well below the face, raw and rough, with a sharp step the cavity bake darkens.
+				var broken = Mix( Mix( body, RawClay, 0.3f ), Flash, 0.12f );
 				painter.Polygon( ChipOutline( min + cornerOffsets[k], sideA[k], sideB[k], 70f + Next() * 45f, 60f + Next() * 50f, Seed + c * 13 ),
-					Mix( body, RawClay, 0.55f ), height: 0.55f, bevel: 5f, roughness: 0.92f );
+					broken, height: 0.35f, bevel: 2.5f, roughness: 0.96f );
 				if ( c == 3 )
 				{
 					k = 1;
 					painter.Polygon( ChipOutline( min + cornerOffsets[k], sideA[k], sideB[k], 36f + Next() * 16f, 32f + Next() * 16f, Seed + c * 17 ),
-						Mix( body, RawClay, 0.55f ), height: 0.6f, bevel: 4f, roughness: 0.92f );
+						broken, height: 0.4f, bevel: 2f, roughness: 0.96f );
 				}
 			}
 
@@ -116,17 +117,17 @@ public sealed class GreenhouseTheme : ArenaTheme
 				var edge = side switch { 0 => min, 1 => min + new Vector2( cell, 0 ), 2 => min + new Vector2( 0, cell ), _ => min };
 				var at = edge + along * (90f + Next() * 330f) + into * (joint + 6f);
 				painter.Polygon( NickOutline( at, along, into, 9f + Next() * 14f, 7f + Next() * 10f, Seed + c * 29 + n ),
-					Mix( body, RawClay, 0.5f ), height: 0.62f, bevel: 3f, roughness: 0.92f );
+					Mix( Mix( body, RawClay, 0.3f ), Flash, 0.12f ), height: 0.45f, bevel: 2f, roughness: 0.96f );
 			}
 
-			// Moss and soil lodged at the block's edge: small clusters of round tufts.
-			var tufts = c == 2 ? 0 : random.Next( 3 );
+			// Moss and soil lodged at the block's foot, on the chamfer: soft cushions, not green dots.
+			var tufts = c == 2 ? 0 : random.Next( 2 );
 			for ( var t = 0; t < tufts; t++ )
 			{
 				var side = random.Next( 4 );
 				var along = 40f + Next() * 430f;
-				var size = 5f + Next() * 7f;
-				var inset = joint + size * 1.6f;
+				var size = 8f + Next() * 7f;
+				var inset = size * 1.45f + 1f;
 				var at = side switch
 				{
 					0 => min + new Vector2( along, inset ), 1 => min + new Vector2( cell - inset, along ),
@@ -138,14 +139,14 @@ public sealed class GreenhouseTheme : ArenaTheme
 
 		// Moss creeping out of one corner of variant 2, fuzzy and clumped.
 		var mossCorner = CellOrigin( 2, FloorSize ) + new Vector2( 4f, 4f );
-		var moss = Ramp( painter.Noise( 20, Seed + 40, 4 ), 0.36f, 0.6f );
-		KeepNear( moss, FloorSize, mossCorner, 175f );
+		var moss = Ramp( painter.Noise( 20, Seed + 40, 4 ), 0.3f, 0.55f );
+		KeepNear( moss, FloorSize, mossCorner, 200f );
 		var clumps = Ramp( painter.Noise( 96, Seed + 41, 2 ), 0.4f, 0.75f );
 		for ( var i = 0; i < clumps.Length; i++ ) clumps[i] *= moss[i];
-		painter.Blend( moss, Moss, roughness: 0.97f );
-		painter.Blend( clumps, MossLight );
-		painter.AddHeight( moss, 0.4f );
-		painter.AddHeight( clumps, 0.25f );
+		painter.Blend( moss, Mix( Moss, Soil, 0.2f ), roughness: 0.97f );
+		painter.Blend( clumps, Mix( MossLight, Moss, 0.4f ) );
+		painter.AddHeight( moss, 0.15f );
+		painter.AddHeight( clumps, 0.1f );
 
 		// Kiln flashing and pale lime bloom: the colour drift of fired clay, a different map per tile.
 		painter.Blend( Ramp( painter.Noise( 3, Seed + 10, 4 ), 0.46f, 0.8f, 0.55f ), Flash );
@@ -171,12 +172,12 @@ public sealed class GreenhouseTheme : ArenaTheme
 			return;
 		}
 
-		var cushions = 4 + random.Next( 5 );
+		var cushions = 6 + random.Next( 5 );
 		for ( var k = 0; k < cushions; k++ )
 		{
-			var offset = new Vector2( Next() - 0.5f, Next() - 0.5f ) * size * 1.6f;
-			var r = size * (0.3f + Next() * 0.4f);
-			painter.Circle( at.x + offset.x, at.y + offset.y, r, Mix( Moss, MossLight, Next() * 0.6f ), 0.9f, height: 1.05f + Next() * 0.1f, bevel: r, roughness: 0.97f );
+			var offset = new Vector2( Next() - 0.5f, Next() - 0.5f ) * size * 1.4f;
+			var r = size * (0.35f + Next() * 0.35f);
+			painter.Circle( at.x + offset.x, at.y + offset.y, r, Mix( Mix( Moss, Soil, 0.3f ), MossLight, Next() * 0.25f ), 0.7f, height: 1f + Next() * 0.08f, bevel: r, roughness: 0.97f );
 		}
 	}
 

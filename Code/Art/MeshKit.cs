@@ -92,6 +92,33 @@ public sealed class MeshKit
 		Grow( a ); Grow( b ); Grow( c ); Grow( d );
 	}
 
+	/// <summary>
+	/// A quad with explicit UVs, for faces whose texture has to line up with a neighbour's — a chamfer
+	/// that carries its top face's texture on over the edge, unfolded. Corners run anticlockwise seen
+	/// from the front. The tangent (+U direction) is taken from the UV layout rather than the first
+	/// edge, so the normal map is lit from the right side however the UVs are turned. Give UVs whose
+	/// layout matches the face's shape (an unfolding), and the two triangles share one mapping — no kink.
+	/// </summary>
+	public void Quad( Material material, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD )
+	{
+		var normal = Vector3.Cross( b - a, d - a ).Normal;
+		var e1 = b - a; var e2 = d - a;
+		var du1 = uvB.x - uvA.x; var dv1 = uvB.y - uvA.y;
+		var du2 = uvD.x - uvA.x; var dv2 = uvD.y - uvA.y;
+		var tangent = ((e1 * dv2 - e2 * dv1) / (du1 * dv2 - du2 * dv1)).Normal;
+
+		var batch = For( material );
+		var start = batch.Vertices.Count;
+		batch.Vertices.Add( new Vertex( a, normal, tangent, new Vector4( uvA.x, uvA.y, 0f, 0f ) ) );
+		batch.Vertices.Add( new Vertex( b, normal, tangent, new Vector4( uvB.x, uvB.y, 0f, 0f ) ) );
+		batch.Vertices.Add( new Vertex( c, normal, tangent, new Vector4( uvC.x, uvC.y, 0f, 0f ) ) );
+		batch.Vertices.Add( new Vertex( d, normal, tangent, new Vector4( uvD.x, uvD.y, 0f, 0f ) ) );
+		AddTriangle( batch, start, start + 1, start + 2 );
+		AddTriangle( batch, start, start + 2, start + 3 );
+
+		Grow( a ); Grow( b ); Grow( c ); Grow( d );
+	}
+
 	public void Tri( Skin skin, Vector3 a, Vector3 b, Vector3 c )
 	{
 		var uAxis = (b - a).Normal;

@@ -86,8 +86,8 @@ public sealed class ArenaGenerator : Component
 	/// <summary>Lilac haze for the drop, so the bottom of the shaft is soft rather than black.</summary>
 	static readonly Color FogColor = new Color( 0.80f, 0.66f, 0.86f );
 
-	/// <summary>Chamfer on every tile edge: catches the light, so neighbouring tiles read as separate blocks.</summary>
-	const float TileBevel = 2f;
+	/// <summary>Chamfer on the tile's top edges: catches the light, so neighbouring tiles read as separate blocks.</summary>
+	public const float TileBevel = 2f;
 
 	/// <summary>Four atlas cells times four quarter-turns of the top face's UVs.</summary>
 	const int TileLooks = 16;
@@ -236,13 +236,15 @@ public sealed class ArenaGenerator : Component
 
 	/// <summary>
 	/// One generated slab, 56 x 56 x 12, chamfered on its top edges only, in two materials:
-	///   * top: the floor surface, fitted to atlas <paramref name="cell"/> and turned by
-	///     <paramref name="turn"/> quarter-turns. The turn starts the anticlockwise corner walk at a
-	///     later corner, which rotates the UVs and the tangent together without touching the
-	///     geometry or its winding, so the normal map stays lit from the right side.
-	///   * chamfers and sides: the same surface, but only a band from the middle of the cell sized
-	///     like the side face, so they show the material at its true scale instead of a whole tile
-	///     squeezed into 10 units; they are mostly in shadow and seen around holes.
+	///   * top and chamfers: the floor surface, one atlas cell unfolded over both — the top face
+	///     takes the cell's middle, each chamfer the strip along the cell's edge on its side at true
+	///     slant length (<see cref="ArenaTheme.UnfoldedSpan"/>), so the surface runs on over the arris
+	///     and the cell's edge, where the joint is painted, lands at the chamfer's foot. UVs are
+	///     turned by <paramref name="turn"/> quarter-turns with the tangent following them, so the
+	///     normal map stays lit from the right side; each chamfer's UV trapezoid has the shape of the
+	///     chamfer itself, so its two triangles share one mapping and nothing kinks.
+	///   * sides: the outermost sliver of the same strip, the joint colour, stretched down the side —
+	///     no decal from the middle of the tile can land on them.
 	///   * underside: the ceiling of the room below, full size and unchamfered, so neighbouring
 	///     undersides meet edge to edge and read as one ceiling; the cell with the same index as the
 	///     top, unturned, so boards and stripes keep one direction across the room.
@@ -256,31 +258,37 @@ public sealed class ArenaGenerator : Component
 		var inner = half - TileBevel;
 		var top = Arena.TileThickness * 0.5f;
 		var shoulder = top - TileBevel;
+		var unfolded = ArenaTheme.UnfoldedSpan * 0.5f;
 		var region = ArenaTheme.Cell( cell % 2, cell / 2, 2 );
+		var surface = self.FloorSurface;
 
-		var corners = new[]
+		// A point on the unfolded top (units from the tile centre) to its place in the cell:
+		// texture right is +X and texture up is +Y before the turn.
+		Vector2 Uv( float x, float y )
 		{
-			new Vector3( -inner, -inner, top ), new Vector3( inner, -inner, top ),
-			new Vector3( inner, inner, top ), new Vector3( -inner, inner, top ),
-		};
-		kit.Quad( new Skin( self.FloorSurface, region ), corners[turn], corners[(turn + 1) % 4], corners[(turn + 2) % 4], corners[(turn + 3) % 4] );
+			for ( var k = 0; k < turn; k++ ) (x, y) = (-y, x);
+			return new Vector2( region.Left + region.Width * (x + unfolded) / (unfolded * 2f), region.Top + region.Height * (unfolded - y) / (unfolded * 2f) );
+		}
 
-		var faceFraction = inner * 2f / Arena.TileSize;
-		var bandFraction = (shoulder + top) / Arena.TileSize;
-		var band = new Skin( self.FloorSurface, new Rect(
-			region.Left + region.Width * (1f - faceFraction) * 0.5f,
-			region.Top + region.Height * (0.5f - bandFraction * 0.5f),
-			region.Width * faceFraction,
-			region.Height * bandFraction ) );
+		kit.Quad( surface,
+			new Vector3( -inner, -inner, top ), new Vector3( inner, -inner, top ), new Vector3( inner, inner, top ), new Vector3( -inner, inner, top ),
+			Uv( -inner, -inner ), Uv( inner, -inner ), Uv( inner, inner ), Uv( -inner, inner ) );
 
-		// The +X side, then the same quarter-turned three times; each pair is anticlockwise seen from outside.
+		// The +X side, then the same quarter-turned three times; geometry and unfolded UV points are
+		// turned by the same rotation, so every side samples its own edge of the cell.
+		var foot = unfolded - 0.25f;
 		for ( var side = 0; side < 4; side++ )
 		{
 			var rotation = Rotation.FromYaw( side * 90f );
 			Vector3 P( float x, float y, float z ) => rotation * new Vector3( x, y, z );
+			Vector2 T( float x, float y ) { var p = rotation * new Vector3( x, y, 0f ); return Uv( p.x, p.y ); }
 
-			kit.Quad( band, P( half, -half, shoulder ), P( half, half, shoulder ), P( inner, inner, top ), P( inner, -inner, top ) );
-			kit.Quad( band, P( half, -half, -top ), P( half, half, -top ), P( half, half, shoulder ), P( half, -half, shoulder ) );
+			kit.Quad( surface,
+				P( half, -half, shoulder ), P( half, half, shoulder ), P( inner, inner, top ), P( inner, -inner, top ),
+				T( unfolded, -half ), T( unfolded, half ), T( inner, inner ), T( inner, -inner ) );
+			kit.Quad( surface,
+				P( half, -half, -top ), P( half, half, -top ), P( half, half, shoulder ), P( half, -half, shoulder ),
+				T( foot, -half ), T( foot, half ), T( unfolded, half ), T( unfolded, -half ) );
 		}
 
 		// Anticlockwise seen from below.

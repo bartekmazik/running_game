@@ -26,6 +26,20 @@ public abstract class ArenaTheme
 	/// <summary>Ceiling resolution: 2x2 cells of 256 px, one cell per tile underside, seen from 160+ units away.</summary>
 	protected const int CeilingSize = 512;
 
+	/// <summary>
+	/// World units one floor cell spans: the tile's top face plus both chamfers laid flat at their
+	/// true slant length. The tile model maps a cell over exactly this, so texture density is the
+	/// same on the top and on the chamfers.
+	/// </summary>
+	public static float UnfoldedSpan => Arena.TileSize - 2f * ArenaGenerator.TileBevel + 2f * ArenaGenerator.TileBevel * MathF.Sqrt( 2f );
+
+	/// <summary>
+	/// Pixels along each edge of a 512 px floor cell that land on the tile's chamfer (about 25). The
+	/// joint belongs at the outer edge of this rim — the chamfer's foot, where neighbours meet — and
+	/// no decal may sit in it, because the chamfer's foot also feeds the tile's sides.
+	/// </summary>
+	protected static float Rim => FloorSize / 2 * ArenaGenerator.TileBevel * MathF.Sqrt( 2f ) / UnfoldedSpan;
+
 	public abstract string Name { get; }
 	public abstract int Floor { get; }
 
@@ -306,7 +320,7 @@ public abstract class ArenaTheme
 	/// height, a tone shift per block, crevice darkening and soft colour drift. Floors 4–7 wear this
 	/// until their full surfaces are painted (Task 4b).
 	/// </summary>
-	protected Material PaintPlainFloor( Color baseColor, Color light, Color shade, float roughness, string baseMaterial = Painter.Matte )
+	protected Material PaintPlainFloor( Color baseColor, Color light, Color shade, float roughness )
 	{
 		var painter = new Painter( FloorSize, Mix( shade, Color.Black, 0.25f ), 0.95f );
 		var random = new Random( Seed );
@@ -316,19 +330,19 @@ public abstract class ArenaTheme
 		{
 			var tone = (float)random.NextDouble() * 2f - 1f;
 			var color = tone < 0f ? Mix( baseColor, shade, -tone * 0.5f ) : Mix( baseColor, light, tone * 0.5f );
-			var outline = SlabOutline( CellOrigin( c, FloorSize ), cell, 7f, 2.5f, 14f, Seed + c * 101 );
-			painter.Polygon( outline, color, height: 1f, bevel: 14f, roughness: roughness );
+			var outline = SlabOutline( CellOrigin( c, FloorSize ), cell, 4f, 2.5f, 10f, Seed + c * 101 );
+			painter.Polygon( outline, color, height: 1f, bevel: Rim, roughness: roughness );
 		}
 
 		painter.HeightNoise( 0.8f, 4, Seed + 1, 5 );
 		painter.Mottle( 0.07f, 4, Seed + 2, 5 );
 		painter.Cavity( 0.45f, 8 );
 		painter.Grain( 0.015f, Seed + 3 );
-		return painter.ToMaterial( $"arena_{Floor}_floor", baseMaterial, 8f );
+		return painter.ToMaterial( $"arena_{Floor}_floor", Painter.Matte, 8f );
 	}
 
 	/// <summary>The plain counterpart for ceilings: four undersides per atlas, same treatment at half the resolution.</summary>
-	protected Material PaintPlainCeiling( Color baseColor, Color light, Color shade, float roughness, string baseMaterial = Painter.Matte )
+	protected Material PaintPlainCeiling( Color baseColor, Color light, Color shade, float roughness )
 	{
 		var painter = new Painter( CeilingSize, Mix( shade, Color.Black, 0.25f ), 0.95f );
 		var random = new Random( Seed + 500 );
@@ -346,6 +360,6 @@ public abstract class ArenaTheme
 		painter.Mottle( 0.07f, 4, Seed + 502, 5 );
 		painter.Cavity( 0.45f, 4 );
 		painter.Grain( 0.015f, Seed + 503 );
-		return painter.ToMaterial( $"arena_{Floor}_ceiling", baseMaterial, 5f );
+		return painter.ToMaterial( $"arena_{Floor}_ceiling", Painter.Matte, 5f );
 	}
 }
