@@ -89,11 +89,13 @@ public abstract class WallProps
 		return path[i] + (path[i + 1] - path[i]) * (f - i);
 	}
 
-	/// <summary>A path kept in bounds: points that would leave them are pulled back in front of the wall face and behind <see cref="Nearest"/>.</summary>
-	protected static Vector3[] Inside( Vector3[] path )
+	/// <summary>
+	/// Keeps a path in bounds, in place: points that would leave them are pulled back in front of the wall
+	/// face and behind <see cref="Nearest"/>, by <paramref name="radius"/> more for a tube that thick.
+	/// </summary>
+	protected static void Inside( Vector3[] path, float radius = 0f )
 	{
 		for ( var i = 0; i < path.Length; i++ )
-			path[i] = path[i].WithY( Math.Clamp( path[i].y, Nearest( path[i].z ) + 0.5f, Face ) );
-		return path;
+			path[i] = path[i].WithY( Math.Clamp( path[i].y, Nearest( path[i].z ) + 0.5f + radius, Face ) );
 	}
 }

@@ -48,6 +48,17 @@ public sealed class MeshKit
 
 	public bool IsEmpty => _batches.Count == 0;
 
+	/// <summary>Triangles in every batch so far: what the model will cost to draw.</summary>
+	public int Triangles
+	{
+		get
+		{
+			var count = 0;
+			foreach ( var batch in _batches.Values ) count += batch.Indices.Count / 3;
+			return count;
+		}
+	}
+
 	Batch For( Material material )
 	{
 		if ( !_batches.TryGetValue( material, out var batch ) )
@@ -336,30 +347,41 @@ public sealed class MeshKit
 
 		Vector3 Radial( int step ) { var angle = (step / (float)sides + turn) * MathF.Tau; return new Vector3( MathF.Cos( angle ), MathF.Sin( angle ), 0f ); }
 
-		void Corner( int step, int p, Vector2 normal )
+		// One row of vertices round the solid at profile point p (the seam doubled, for the texture to wrap),
+		// shared by the segments above and below it unless a crease gives them different normals.
+		int Row( int p, Vector2 normal )
 		{
-			var radial = Radial( step );
-			var position = baseCenter + rotation * (radial * profile[p].x + Vector3.Up * profile[p].y);
-			var tangent = rotation * new Vector3( -radial.y, radial.x, 0f );
-			Add( batch, position, (rotation * (radial * normal.x + Vector3.Up * normal.y)).Normal, tangent,
-				new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - along[p] / total) ) );
+			var start = batch.Vertices.Count;
+			for ( var step = 0; step <= sides; step++ )
+			{
+				var radial = Radial( step );
+				var position = baseCenter + rotation * (radial * profile[p].x + Vector3.Up * profile[p].y);
+				var tangent = rotation * new Vector3( -radial.y, radial.x, 0f );
+				Add( batch, position, (rotation * (radial * normal.x + Vector3.Up * normal.y)).Normal, tangent,
+					new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - along[p] / total) ) );
+			}
+			return start;
 		}
 
+		var shared = -1;
+		var sharedNormal = Vector2.Zero;
 		for ( var p = 0; p + 1 < count; p++ )
 		{
 			var bottomApex = profile[p].x <= 0.0001f;
 			var topApex = profile[p + 1].x <= 0.0001f;
-			if ( bottomApex && topApex ) continue;
+			if ( bottomApex && topApex ) { shared = -1; continue; }
 			var n0 = Blend( p, p - 1 );
 			var n1 = Blend( p, p + 1 );
+			var bottom = shared >= 0 && sharedNormal == n0 ? shared : Row( p, n0 );
+			var top = Row( p + 1, n1 );
 			for ( var s = 0; s < sides; s++ )
 			{
-				var start = batch.Vertices.Count;
-				Corner( s, p, n0 ); Corner( s + 1, p, n0 ); Corner( s + 1, p + 1, n1 ); Corner( s, p + 1, n1 );
 				// Same triangles as the flat lathe: an apex quad keeps the one that is not degenerate.
-				if ( !bottomApex ) AddTriangle( batch, start, start + 1, start + 2 );
-				if ( !topApex ) AddTriangle( batch, start, start + 2, start + 3 );
+				if ( !bottomApex ) AddTriangle( batch, bottom + s, bottom + s + 1, top + s + 1 );
+				if ( !topApex ) AddTriangle( batch, bottom + s, top + s + 1, top + s );
 			}
+			shared = top;
+			sharedNormal = n1;
 		}
 
 		if ( capBottom && profile[0].x > 0.0001f ) Cap( batch, region, baseCenter, profile[0], sides, rotation, turn, false );
@@ -373,20 +395,20 @@ public sealed class MeshKit
 		var tangent = rotation * Vector3.Forward;
 		var middle = new Vector2( region.Left + region.Width * 0.5f, region.Top + region.Height * 0.5f );
 		var centre = baseCenter + rotation * (Vector3.Up * rim.y);
+		var start = batch.Vertices.Count;
+		Add( batch, centre, normal, tangent, middle );
+		for ( var s = 0; s <= sides; s++ )
+		{
+			var a = (s / (float)sides + turn) * MathF.Tau;
+			Add( batch, centre + rotation * new Vector3( MathF.Cos( a ) * rim.x, MathF.Sin( a ) * rim.x, 0f ), normal, tangent,
+				middle + new Vector2( MathF.Cos( a ) * region.Width, MathF.Sin( a ) * region.Height ) * 0.45f );
+		}
+
+		// A fan round the shared centre. Anticlockwise about the axis faces up: swap the rim pair for a cap facing down.
 		for ( var s = 0; s < sides; s++ )
 		{
-			var a0 = (s / (float)sides + turn) * MathF.Tau;
-			var a1 = ((s + 1) / (float)sides + turn) * MathF.Tau;
-			var p0 = centre + rotation * new Vector3( MathF.Cos( a0 ) * rim.x, MathF.Sin( a0 ) * rim.x, 0f );
-			var p1 = centre + rotation * new Vector3( MathF.Cos( a1 ) * rim.x, MathF.Sin( a1 ) * rim.x, 0f );
-			var uv0 = middle + new Vector2( MathF.Cos( a0 ) * region.Width, MathF.Sin( a0 ) * region.Height ) * 0.45f;
-			var uv1 = middle + new Vector2( MathF.Cos( a1 ) * region.Width, MathF.Sin( a1 ) * region.Height ) * 0.45f;
-			var start = batch.Vertices.Count;
-			Add( batch, centre, normal, tangent, middle );
-			// Anticlockwise about the axis faces up: swap the rim pair for a cap facing down.
-			if ( top ) { Add( batch, p0, normal, tangent, uv0 ); Add( batch, p1, normal, tangent, uv1 ); }
-			else { Add( batch, p1, normal, tangent, uv1 ); Add( batch, p0, normal, tangent, uv0 ); }
-			AddTriangle( batch, start, start + 1, start + 2 );
+			if ( top ) AddTriangle( batch, start, start + 1 + s, start + 2 + s );
+			else AddTriangle( batch, start, start + 2 + s, start + 1 + s );
 		}
 	}
 
@@ -401,7 +423,9 @@ public sealed class MeshKit
 		var batch = For( skin.Material );
 		var region = skin.Region;
 
-		void Corner( int ring, int step )
+		var start = batch.Vertices.Count;
+		for ( var ring = 0; ring <= rings; ring++ )
+		for ( var step = 0; step <= sides; step++ )
 		{
 			var latitude = MathF.PI * ring / rings - MathF.PI * 0.5f;
 			var longitude = MathF.Tau * step / sides;
@@ -413,13 +437,15 @@ public sealed class MeshKit
 			Add( batch, position, normal, tangent, new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - ring / (float)rings) ) );
 		}
 
+		// One vertex per (ring, step), shared by the four quads round it; the poles keep a vertex per
+		// step, for their tangents and the texture's wrap.
+		var row = sides + 1;
 		for ( var r = 0; r < rings; r++ )
 		for ( var s = 0; s < sides; s++ )
 		{
-			var start = batch.Vertices.Count;
-			Corner( r, s ); Corner( r, s + 1 ); Corner( r + 1, s + 1 ); Corner( r + 1, s );
-			if ( r > 0 ) AddTriangle( batch, start, start + 1, start + 2 );
-			if ( r < rings - 1 ) AddTriangle( batch, start, start + 2, start + 3 );
+			var a = start + r * row + s;
+			if ( r > 0 ) AddTriangle( batch, a, a + 1, a + row + 1 );
+			if ( r < rings - 1 ) AddTriangle( batch, a, a + row + 1, a + row );
 		}
 	}
 
@@ -428,8 +454,8 @@ public sealed class MeshKit
 	/// Forward, its face toward the rotation's Up, <paramref name="width"/> across at its widest (at
 	/// <paramref name="widest"/> of the length), narrowing to <paramref name="tip"/> of that at the end and to
 	/// a stalk at the root. It bends by <paramref name="bend"/> radians from root to tip (positive droops
-	/// away from Up) and is folded up along its midrib by <paramref name="fold"/> of its half-width, so the
-	/// two halves catch the light differently, as a real leaf's do. <paramref name="teeth"/> narrows every
+	/// away from Up) and is lit as if folded up along its midrib by <paramref name="fold"/> of its half-width,
+	/// so the two halves catch the light differently, as a real leaf's do. <paramref name="teeth"/> narrows every
 	/// other station by that share, so the edge runs in points — a fern's or a palm's leaflets. Both sides
 	/// are drawn, unless <paramref name="oneSided"/> — for a material that renders back faces itself. The
 	/// region maps along the blade left to right, its middle row on the midrib.
@@ -468,30 +494,98 @@ public sealed class MeshKit
 			halves[i] = width * 0.5f * shape * (i % 2 == 1 && i < segments ? 1f - teeth : 1f);
 		}
 
+		// One strip from edge to edge: each station carries two vertices a side, shared by the segments either
+		// side of it. The fold up the midrib is not modelled — it would double the faces — but lit: each
+		// edge takes the normal its folded half would have, averaged over the segments it joins, so the two
+		// halves still shade apart (in a gradient across the midrib rather than a crease) and a bent blade
+		// curves smoothly instead of in facets.
+		var stride = segments + 1;
+		var lefts = new Vector3[stride]; var rights = new Vector3[stride]; var mids = new Vector3[stride];
+		for ( var i = 0; i <= segments; i++ )
+		{
+			mids[i] = centres[i] + ups[i] * (fold * halves[i]);
+			lefts[i] = centres[i] + left * halves[i];
+			rights[i] = centres[i] - left * halves[i];
+		}
+
+		// Each half's normal per segment, turned to face the blade's Up; a segment with no area (a blade
+		// folded flat onto itself) is left out.
+		var leftNormals = new Vector3[stride]; var rightNormals = new Vector3[stride];
+		var drawn = new bool[segments];
+		var builtUp = true;
+		var largest = -1f;
 		for ( var i = 0; i < segments; i++ )
 		{
-			var u0 = region.Left + region.Width * stations[i];
-			var u1 = region.Left + region.Width * stations[i + 1];
-			var m0 = centres[i] + ups[i] * (fold * halves[i]);
-			var m1 = centres[i + 1] + ups[i + 1] * (fold * halves[i + 1]);
-			var l0 = centres[i] + left * halves[i]; var l1 = centres[i + 1] + left * halves[i + 1];
-			var r0 = centres[i] - left * halves[i]; var r1 = centres[i + 1] - left * halves[i + 1];
-			var face = (ups[i] + ups[i + 1]).Normal;
-			var middle = region.Top + region.Height * 0.5f;
-			TwoSided( skin.Material, face, l0, l1, m1, m0, new Vector2( u0, region.Top ), new Vector2( u1, region.Top ), new Vector2( u1, middle ), new Vector2( u0, middle ), oneSided );
-			TwoSided( skin.Material, face, m0, m1, r1, r0, new Vector2( u0, middle ), new Vector2( u1, middle ), new Vector2( u1, region.Top + region.Height ), new Vector2( u0, region.Top + region.Height ), oneSided );
+			var strip = Vector3.Cross( lefts[i + 1] - lefts[i], rights[i] - lefts[i] );
+			if ( strip.LengthSquared < 1e-8f ) continue;
+			drawn[i] = true;
+			var flip = Vector3.Dot( strip, ups[i] + ups[i + 1] ) >= 0f ? 1f : -1f;
+			if ( strip.LengthSquared > largest ) { largest = strip.LengthSquared; builtUp = flip > 0f; }
+			var l = Vector3.Cross( lefts[i + 1] - lefts[i], mids[i] - lefts[i] );
+			var r = Vector3.Cross( mids[i + 1] - mids[i], rights[i] - mids[i] );
+			l = (l.LengthSquared < 1e-10f ? strip : l).Normal * flip;
+			r = (r.LengthSquared < 1e-10f ? strip : r).Normal * flip;
+			leftNormals[i] += l; leftNormals[i + 1] += l;
+			rightNormals[i] += r; rightNormals[i + 1] += r;
+		}
+		if ( largest < 0f ) return;
+
+		// The tangent runs along the blade (the texture's U); its handedness is the one the explicit-UV quad
+		// would give the strip wound as built, flipped for the side wound the other way.
+		float U( int i ) => region.Left + region.Width * stations[i];
+		var top = region.Top; var bottom = region.Top + region.Height;
+		var handedness = Handedness( lefts[0], lefts[1], rights[0], new Vector2( U( 0 ), top ), new Vector2( U( 1 ), top ), new Vector2( U( 0 ), bottom ) );
+
+		var batch = For( skin.Material );
+		for ( var side = 0; side < (oneSided ? 1 : 2); side++ )
+		{
+			// Side 0 faces the blade's Up; side 1, drawn back to back with it, faces away.
+			var sign = side == 0 ? 1f : -1f;
+			var asBuilt = (side == 0) == builtUp;
+			var h = asBuilt ? handedness : -handedness;
+			var start = batch.Vertices.Count;
+			for ( var i = 0; i <= segments; i++ )
+			{
+				var tangent = (centres[Math.Min( i + 1, segments )] - centres[Math.Max( i - 1, 0 )]).Normal;
+				var u = U( i );
+				Vertex V( Vector3 p, Vector3 n, float v )
+				{
+					var vertex = new Vertex( p, n, tangent, new Vector4( u, v, 0f, 0f ) );
+					vertex.Tangent = new Vector4( tangent.x, tangent.y, tangent.z, h );
+					return vertex;
+				}
+				batch.Vertices.Add( V( lefts[i], leftNormals[i].Normal * sign, top ) );
+				batch.Vertices.Add( V( rights[i], rightNormals[i].Normal * sign, bottom ) );
+				Grow( lefts[i] ); Grow( rights[i] );
+			}
+
+			for ( var i = 0; i < segments; i++ )
+			{
+				if ( !drawn[i] ) continue;
+				var s0 = start + i * 2;
+				// As built: (left i, left i+1, right i+1, right i).
+				Face( batch, s0, s0 + 2, s0 + 3, s0 + 1, asBuilt );
+			}
 		}
 	}
 
-	/// <summary>An explicit-UV quad facing <paramref name="normal"/>, and (unless <paramref name="oneSided"/>) once more facing away from it.</summary>
-	void TwoSided( Material material, Vector3 normal, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD, bool oneSided )
+	/// <summary>A quad a→b→c→d of shared vertices, as wound or (<paramref name="asWound"/> false) the other way round.</summary>
+	static void Face( Batch batch, int a, int b, int c, int d, bool asWound )
 	{
-		// A quad with no area (a blade folded flat onto itself) has no tangent to give.
-		var front = Vector3.Cross( b - a, d - a );
-		if ( front.LengthSquared < 1e-8f ) return;
-		var facing = Vector3.Dot( front, normal ) >= 0f;
-		if ( facing || !oneSided ) Quad( material, a, b, c, d, uvA, uvB, uvC, uvD );
-		if ( !facing || !oneSided ) Quad( material, d, c, b, a, uvD, uvC, uvB, uvA );
+		if ( asWound ) { AddTriangle( batch, a, b, c ); AddTriangle( batch, a, c, d ); }
+		else { AddTriangle( batch, d, c, b ); AddTriangle( batch, d, b, a ); }
+	}
+
+	/// <summary>The tangent handedness the explicit-UV <see cref="Quad(Material, Vector3, Vector3, Vector3, Vector3, Vector2, Vector2, Vector2, Vector2, Vector3?)"/> gives a face a→b…d with these UVs.</summary>
+	static float Handedness( Vector3 a, Vector3 b, Vector3 d, Vector2 uvA, Vector2 uvB, Vector2 uvD )
+	{
+		var e1 = b - a; var e2 = d - a;
+		var du1 = uvB.x - uvA.x; var dv1 = uvB.y - uvA.y;
+		var du2 = uvD.x - uvA.x; var dv2 = uvD.y - uvA.y;
+		var determinant = du1 * dv2 - du2 * dv1;
+		var tangent = ((e1 * dv2 - e2 * dv1) / determinant).Normal;
+		var bitangent = (e2 * du1 - e1 * du2) / determinant;
+		return Vector3.Dot( Vector3.Cross( Vector3.Cross( e1, e2 ), tangent ), bitangent ) > 0f ? 1f : -1f;
 	}
 
 	/// <summary>
@@ -521,24 +615,29 @@ public sealed class MeshKit
 		for ( var i = 1; i < count; i++ )
 			normals[i] = (normals[i - 1] - tangents[i] * Vector3.Dot( normals[i - 1], tangents[i] )).Normal;
 
-		void Corner( int i, int step )
+		var start = batch.Vertices.Count;
+		for ( var i = 0; i < count; i++ )
 		{
-			var angle = MathF.Tau * step / sides;
 			var binormal = Vector3.Cross( tangents[i], normals[i] );
-			var outward = normals[i] * MathF.Cos( angle ) + binormal * MathF.Sin( angle );
 			var r = radius + (endRadius - radius) * along[i] / total;
-			var around = binormal * MathF.Cos( angle ) - normals[i] * MathF.Sin( angle );
-			Add( batch, path[i] + outward * r, outward, around,
-				new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - along[i] / total) ) );
+			for ( var step = 0; step <= sides; step++ )
+			{
+				var angle = MathF.Tau * step / sides;
+				var outward = normals[i] * MathF.Cos( angle ) + binormal * MathF.Sin( angle );
+				var around = binormal * MathF.Cos( angle ) - normals[i] * MathF.Sin( angle );
+				Add( batch, path[i] + outward * r, outward, around,
+					new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - along[i] / total) ) );
+			}
 		}
 
+		// One ring of vertices per path point, shared by the lengths of tube either side of it.
+		var row = sides + 1;
 		for ( var i = 0; i + 1 < count; i++ )
 		for ( var s = 0; s < sides; s++ )
 		{
-			var start = batch.Vertices.Count;
-			Corner( i, s ); Corner( i, s + 1 ); Corner( i + 1, s + 1 ); Corner( i + 1, s );
-			AddTriangle( batch, start, start + 1, start + 2 );
-			AddTriangle( batch, start, start + 2, start + 3 );
+			var a = start + i * row + s;
+			AddTriangle( batch, a, a + 1, a + row + 1 );
+			AddTriangle( batch, a, a + row + 1, a + row );
 		}
 	}
 

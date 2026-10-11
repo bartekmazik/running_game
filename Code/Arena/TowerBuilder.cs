@@ -100,6 +100,10 @@ public sealed class TowerBuilder
 		room.Theme.Dress( room );
 		if ( floor == 0 ) BuildRoof( room );
 
+		var triangles = room.Kit.Triangles;
+		if ( triangles > FloorContext.MaxTriangles )
+			Log.Warning( $"Floor {floor}: {triangles} triangles, over the budget of {FloorContext.MaxTriangles}" );
+
 		var renderer = root.AddComponent<ModelRenderer>();
 		renderer.Model = room.Kit.Build( $"tower_floor{floor}" );
 

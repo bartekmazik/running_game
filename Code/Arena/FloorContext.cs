@@ -65,6 +65,12 @@ public sealed class FloorContext
 	public const int MaxLights = 6;
 
 	/// <summary>
+	/// Triangles per floor, walls, trim and props together (R39): a dressed room is one batch per
+	/// material with room-sized bounds, so all of it is drawn whenever the room is in view.
+	/// </summary>
+	public const int MaxTriangles = 80000;
+
+	/// <summary>
 	/// Softer than the default inverse-square falloff (1): with a short radius — kept short of the
 	/// floor below, since the lights cast no shadows — a lamp's pool would otherwise end in a hot spot
 	/// by the wall and leave the floor in front of it unlit.
