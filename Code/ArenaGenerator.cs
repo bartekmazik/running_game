@@ -268,7 +268,7 @@ public sealed class ArenaGenerator : Component
 
 		// The biggest surfaces first — the walls, then the floors — so no worker is left starting one at
 		// the end; the walls from the bottom floor up, since the forge's and the dungeon's are the slowest.
-		foreach ( var surface in new[] { ThemeSurface.Wall, ThemeSurface.Floor, ThemeSurface.Ceiling, ThemeSurface.Trim } )
+		foreach ( var surface in new[] { ThemeSurface.Wall, ThemeSurface.Floor, ThemeSurface.Ceiling, ThemeSurface.Trim, ThemeSurface.Glow } )
 			foreach ( var theme in surface == ThemeSurface.Wall ? Enumerable.Reverse( _themes ) : _themes )
 				for ( var variant = 0; variant < (surface == ThemeSurface.Wall ? theme.WallCount : 1); variant++ )
 				{

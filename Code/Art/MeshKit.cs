@@ -291,6 +291,257 @@ public sealed class MeshKit
 		Lathe( skin, center - Vector3.Up * radius, profile, sides, Rotation.Identity, false, false );
 	}
 
+	/// <summary>One vertex with an explicit normal and tangent (+U), for the smooth-shaded primitives below.</summary>
+	void Add( Batch batch, Vector3 position, Vector3 normal, Vector3 tangent, Vector2 uv )
+	{
+		batch.Vertices.Add( new Vertex( position, normal, tangent, new Vector4( uv.x, uv.y, 0f, 0f ) ) );
+		Grow( position );
+	}
+
+	/// <summary>
+	/// A lathe (see <see cref="Lathe(Skin, Vector3, Vector2[], int, Rotation, bool, bool)"/>) shaded smooth —
+	/// a pot, a bulb, an icicle, a snowman — where flat facets read as a low-poly model at standing
+	/// distance. Normals come from the profile: where two of its segments meet at less than
+	/// <paramref name="crease"/> degrees they are averaged, so a body curves smoothly, while a sharper turn
+	/// (the step under a pot's rim) keeps its edge. The skin's region wraps once round the solid and once
+	/// along the profile (texture top at the profile's end), so a texture runs on round it instead of
+	/// repeating on every facet; <paramref name="turn"/> (0..1 of a revolution) starts the sweep elsewhere,
+	/// so two lathes of one profile do not show the same side.
+	/// </summary>
+	public void SmoothLathe( Skin skin, Vector3 baseCenter, Vector2[] profile, int sides, Rotation rotation, bool capBottom = true, bool capTop = true, float crease = 45f, float turn = 0f )
+	{
+		var batch = For( skin.Material );
+		var region = skin.Region;
+		var count = profile.Length;
+		var along = new float[count];
+		for ( var p = 1; p < count; p++ ) along[p] = along[p - 1] + (profile[p] - profile[p - 1]).Length;
+		var total = MathF.Max( along[^1], 0.0001f );
+
+		// Each segment's outward normal in the (radius, height) plane: right of the direction of travel,
+		// which faces out on a wall climbing the profile, up where the radius shrinks, in where it falls back.
+		var segment = new Vector2[count - 1];
+		for ( var p = 0; p + 1 < count; p++ )
+		{
+			var d = profile[p + 1] - profile[p];
+			segment[p] = new Vector2( d.y, -d.x ).Normal;
+		}
+
+		var smoothBelow = MathF.Cos( crease * MathF.PI / 180f );
+		Vector2 Blend( int own, int neighbour )
+		{
+			if ( neighbour < 0 || neighbour >= segment.Length ) return segment[own];
+			var a = segment[own]; var b = segment[neighbour];
+			return a.x * b.x + a.y * b.y < smoothBelow ? a : (a + b).Normal;
+		}
+
+		Vector3 Radial( int step ) { var angle = (step / (float)sides + turn) * MathF.Tau; return new Vector3( MathF.Cos( angle ), MathF.Sin( angle ), 0f ); }
+
+		void Corner( int step, int p, Vector2 normal )
+		{
+			var radial = Radial( step );
+			var position = baseCenter + rotation * (radial * profile[p].x + Vector3.Up * profile[p].y);
+			var tangent = rotation * new Vector3( -radial.y, radial.x, 0f );
+			Add( batch, position, (rotation * (radial * normal.x + Vector3.Up * normal.y)).Normal, tangent,
+				new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - along[p] / total) ) );
+		}
+
+		for ( var p = 0; p + 1 < count; p++ )
+		{
+			var bottomApex = profile[p].x <= 0.0001f;
+			var topApex = profile[p + 1].x <= 0.0001f;
+			if ( bottomApex && topApex ) continue;
+			var n0 = Blend( p, p - 1 );
+			var n1 = Blend( p, p + 1 );
+			for ( var s = 0; s < sides; s++ )
+			{
+				var start = batch.Vertices.Count;
+				Corner( s, p, n0 ); Corner( s + 1, p, n0 ); Corner( s + 1, p + 1, n1 ); Corner( s, p + 1, n1 );
+				// Same triangles as the flat lathe: an apex quad keeps the one that is not degenerate.
+				if ( !bottomApex ) AddTriangle( batch, start, start + 1, start + 2 );
+				if ( !topApex ) AddTriangle( batch, start, start + 2, start + 3 );
+			}
+		}
+
+		if ( capBottom && profile[0].x > 0.0001f ) Cap( batch, region, baseCenter, profile[0], sides, rotation, turn, false );
+		if ( capTop && profile[^1].x > 0.0001f ) Cap( batch, region, baseCenter, profile[^1], sides, rotation, turn, true );
+	}
+
+	/// <summary>A flat disc closing a smooth lathe, facing up or down, its texture the region's middle.</summary>
+	void Cap( Batch batch, Rect region, Vector3 baseCenter, Vector2 rim, int sides, Rotation rotation, float turn, bool top )
+	{
+		var normal = rotation * (top ? Vector3.Up : Vector3.Down);
+		var tangent = rotation * Vector3.Forward;
+		var middle = new Vector2( region.Left + region.Width * 0.5f, region.Top + region.Height * 0.5f );
+		var centre = baseCenter + rotation * (Vector3.Up * rim.y);
+		for ( var s = 0; s < sides; s++ )
+		{
+			var a0 = (s / (float)sides + turn) * MathF.Tau;
+			var a1 = ((s + 1) / (float)sides + turn) * MathF.Tau;
+			var p0 = centre + rotation * new Vector3( MathF.Cos( a0 ) * rim.x, MathF.Sin( a0 ) * rim.x, 0f );
+			var p1 = centre + rotation * new Vector3( MathF.Cos( a1 ) * rim.x, MathF.Sin( a1 ) * rim.x, 0f );
+			var uv0 = middle + new Vector2( MathF.Cos( a0 ) * region.Width, MathF.Sin( a0 ) * region.Height ) * 0.45f;
+			var uv1 = middle + new Vector2( MathF.Cos( a1 ) * region.Width, MathF.Sin( a1 ) * region.Height ) * 0.45f;
+			var start = batch.Vertices.Count;
+			Add( batch, centre, normal, tangent, middle );
+			// Anticlockwise about the axis faces up: swap the rim pair for a cap facing down.
+			if ( top ) { Add( batch, p0, normal, tangent, uv0 ); Add( batch, p1, normal, tangent, uv1 ); }
+			else { Add( batch, p1, normal, tangent, uv1 ); Add( batch, p0, normal, tangent, uv0 ); }
+			AddTriangle( batch, start, start + 1, start + 2 );
+		}
+	}
+
+	/// <summary>
+	/// A smooth ellipsoid of half-sizes <paramref name="radii"/> (local x, y, z) turned by
+	/// <paramref name="rotation"/>: a flattened sphere — a leaf clump, a heap of snow, a berry, a bulb.
+	/// Normals are the true ellipsoid's (the unit sphere's scaled by the inverse radii), so a squashed one
+	/// is lit as a flat cushion rather than as a stretched ball. The region wraps once round it.
+	/// </summary>
+	public void Ellipsoid( Skin skin, Vector3 center, Vector3 radii, Rotation rotation, int rings, int sides )
+	{
+		var batch = For( skin.Material );
+		var region = skin.Region;
+
+		void Corner( int ring, int step )
+		{
+			var latitude = MathF.PI * ring / rings - MathF.PI * 0.5f;
+			var longitude = MathF.Tau * step / sides;
+			var c = MathF.Cos( latitude );
+			var unit = new Vector3( c * MathF.Cos( longitude ), c * MathF.Sin( longitude ), MathF.Sin( latitude ) );
+			var position = center + rotation * new Vector3( unit.x * radii.x, unit.y * radii.y, unit.z * radii.z );
+			var normal = (rotation * new Vector3( unit.x / radii.x, unit.y / radii.y, unit.z / radii.z )).Normal;
+			var tangent = rotation * new Vector3( -MathF.Sin( longitude ), MathF.Cos( longitude ), 0f );
+			Add( batch, position, normal, tangent, new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - ring / (float)rings) ) );
+		}
+
+		for ( var r = 0; r < rings; r++ )
+		for ( var s = 0; s < sides; s++ )
+		{
+			var start = batch.Vertices.Count;
+			Corner( r, s ); Corner( r, s + 1 ); Corner( r + 1, s + 1 ); Corner( r + 1, s );
+			if ( r > 0 ) AddTriangle( batch, start, start + 1, start + 2 );
+			if ( r < rings - 1 ) AddTriangle( batch, start, start + 2, start + 3 );
+		}
+	}
+
+	/// <summary>
+	/// A leaf, a frond's leaflet, a ribbon, a ski: a blade from <paramref name="root"/> along the rotation's
+	/// Forward, its face toward the rotation's Up, <paramref name="width"/> across at its widest (at
+	/// <paramref name="widest"/> of the length), narrowing to <paramref name="tip"/> of that at the end and to
+	/// a stalk at the root. It bends by <paramref name="bend"/> radians from root to tip (positive droops
+	/// away from Up) and is folded up along its midrib by <paramref name="fold"/> of its half-width, so the
+	/// two halves catch the light differently, as a real leaf's do. <paramref name="teeth"/> narrows every
+	/// other station by that share, so the edge runs in points — a fern's or a palm's leaflets. Both sides
+	/// are drawn, unless <paramref name="oneSided"/> — for a material that renders back faces itself. The
+	/// region maps along the blade left to right, its middle row on the midrib.
+	/// </summary>
+	public void Blade( Skin skin, Vector3 root, Rotation rotation, float length, float width, float bend, float fold = 0.25f, int segments = 4, float tip = 0f, float widest = 0.4f,
+		bool oneSided = false, float teeth = 0f )
+	{
+		var region = skin.Region;
+		var forward = rotation.Forward; var up = rotation.Up; var left = rotation.Left;
+
+		// Stations along the blade, evenly spaced but for the one nearest the widest point, which moves
+		// onto it — so even a two-segment leaf is a diamond at its full width, never a sliver.
+		segments = Math.Max( segments, 2 );
+		var stations = new float[segments + 1];
+		for ( var i = 0; i <= segments; i++ ) stations[i] = i / (float)segments;
+		var nearest = Math.Clamp( (int)MathF.Round( widest * segments ), 1, segments - 1 );
+		stations[nearest] = widest;
+
+		var centres = new Vector3[segments + 1];
+		var ups = new Vector3[segments + 1];
+		var halves = new float[segments + 1];
+		centres[0] = root;
+		for ( var i = 0; i <= segments; i++ )
+		{
+			var t = stations[i];
+			var angle = bend * t;
+			ups[i] = forward * MathF.Sin( angle ) + up * MathF.Cos( angle );
+			if ( i > 0 )
+			{
+				var mid = bend * (t + stations[i - 1]) * 0.5f;
+				centres[i] = centres[i - 1] + (forward * MathF.Cos( mid ) - up * MathF.Sin( mid )) * (length * (t - stations[i - 1]));
+			}
+			var shape = t < widest
+				? 0.18f + 0.82f * MathF.Sin( t / widest * MathF.PI * 0.5f )
+				: tip + (1f - tip) * MathF.Cos( (t - widest) / (1f - widest) * MathF.PI * 0.5f );
+			halves[i] = width * 0.5f * shape * (i % 2 == 1 && i < segments ? 1f - teeth : 1f);
+		}
+
+		for ( var i = 0; i < segments; i++ )
+		{
+			var u0 = region.Left + region.Width * stations[i];
+			var u1 = region.Left + region.Width * stations[i + 1];
+			var m0 = centres[i] + ups[i] * (fold * halves[i]);
+			var m1 = centres[i + 1] + ups[i + 1] * (fold * halves[i + 1]);
+			var l0 = centres[i] + left * halves[i]; var l1 = centres[i + 1] + left * halves[i + 1];
+			var r0 = centres[i] - left * halves[i]; var r1 = centres[i + 1] - left * halves[i + 1];
+			var face = (ups[i] + ups[i + 1]).Normal;
+			var middle = region.Top + region.Height * 0.5f;
+			TwoSided( skin.Material, face, l0, l1, m1, m0, new Vector2( u0, region.Top ), new Vector2( u1, region.Top ), new Vector2( u1, middle ), new Vector2( u0, middle ), oneSided );
+			TwoSided( skin.Material, face, m0, m1, r1, r0, new Vector2( u0, middle ), new Vector2( u1, middle ), new Vector2( u1, region.Top + region.Height ), new Vector2( u0, region.Top + region.Height ), oneSided );
+		}
+	}
+
+	/// <summary>An explicit-UV quad facing <paramref name="normal"/>, and (unless <paramref name="oneSided"/>) once more facing away from it.</summary>
+	void TwoSided( Material material, Vector3 normal, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD, bool oneSided )
+	{
+		// A quad with no area (a blade folded flat onto itself) has no tangent to give.
+		var front = Vector3.Cross( b - a, d - a );
+		if ( front.LengthSquared < 1e-8f ) return;
+		var facing = Vector3.Dot( front, normal ) >= 0f;
+		if ( facing || !oneSided ) Quad( material, a, b, c, d, uvA, uvB, uvC, uvD );
+		if ( !facing || !oneSided ) Quad( material, d, c, b, a, uvD, uvC, uvB, uvA );
+	}
+
+	/// <summary>
+	/// A round tube swept along <paramref name="path"/> — a wire, a stem, a chain's run, a handle, a cane —
+	/// shaded smooth round, its radius running from <paramref name="radius"/> at the start to
+	/// <paramref name="endRadius"/> (negative: the same) at the end. The frame is carried along the path
+	/// without twisting, so a curved tube keeps its girth. Open at both ends: tubes this thin end in
+	/// something (a socket, a pot, a hook) or taper to nothing. The region wraps round and runs along.
+	/// </summary>
+	public void Tube( Skin skin, Vector3[] path, float radius, int sides, float endRadius = -1f )
+	{
+		var batch = For( skin.Material );
+		var region = skin.Region;
+		var count = path.Length;
+		if ( endRadius < 0f ) endRadius = radius;
+
+		var along = new float[count];
+		for ( var i = 1; i < count; i++ ) along[i] = along[i - 1] + (path[i] - path[i - 1]).Length;
+		var total = MathF.Max( along[^1], 0.0001f );
+
+		var tangents = new Vector3[count];
+		var normals = new Vector3[count];
+		for ( var i = 0; i < count; i++ )
+			tangents[i] = (path[Math.Min( i + 1, count - 1 )] - path[Math.Max( i - 1, 0 )]).Normal;
+		var reference = MathF.Abs( tangents[0].z ) < 0.9f ? Vector3.Up : Vector3.Forward;
+		normals[0] = Vector3.Cross( Vector3.Cross( tangents[0], reference ), tangents[0] ).Normal;
+		for ( var i = 1; i < count; i++ )
+			normals[i] = (normals[i - 1] - tangents[i] * Vector3.Dot( normals[i - 1], tangents[i] )).Normal;
+
+		void Corner( int i, int step )
+		{
+			var angle = MathF.Tau * step / sides;
+			var binormal = Vector3.Cross( tangents[i], normals[i] );
+			var outward = normals[i] * MathF.Cos( angle ) + binormal * MathF.Sin( angle );
+			var r = radius + (endRadius - radius) * along[i] / total;
+			var around = binormal * MathF.Cos( angle ) - normals[i] * MathF.Sin( angle );
+			Add( batch, path[i] + outward * r, outward, around,
+				new Vector2( region.Left + region.Width * step / sides, region.Top + region.Height * (1f - along[i] / total) ) );
+		}
+
+		for ( var i = 0; i + 1 < count; i++ )
+		for ( var s = 0; s < sides; s++ )
+		{
+			var start = batch.Vertices.Count;
+			Corner( i, s ); Corner( i, s + 1 ); Corner( i + 1, s + 1 ); Corner( i + 1, s );
+			AddTriangle( batch, start, start + 1, start + 2 );
+			AddTriangle( batch, start, start + 2, start + 3 );
+		}
+	}
+
 	public Model Build( string name )
 	{
 		var builder = Model.Builder.WithName( name );

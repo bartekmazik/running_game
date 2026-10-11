@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 
-/// <summary>The four surfaces every theme paints, each an independent job for <see cref="ArenaTheme.Bake"/>.</summary>
-public enum ThemeSurface { Floor, Ceiling, Wall, Trim }
+/// <summary>
+/// The surfaces a theme paints, each an independent job for <see cref="ArenaTheme.Bake"/>: the four every
+/// theme has, and <see cref="Glow"/> for the few that light their own lamps.
+/// </summary>
+public enum ThemeSurface { Floor, Ceiling, Wall, Trim, Glow }
 
 /// <summary>
 /// The rows of a theme's trim atlas. Every band but <see cref="Infill"/> spans the full width and is
@@ -131,6 +134,14 @@ public abstract class ArenaTheme
 	public Material Trim { get; private set; }
 
 	/// <summary>
+	/// The lit parts of the room's lamp fittings — bulbs, a shade's lit inside, a lantern's panes — on the
+	/// self-lit base (<see cref="ArenaGenerator.GlowMaterialPath"/>) with a painted mask, so they glow in their
+	/// own colour and light the ceiling around them the way no unshadowed lamp may (ruling R31). Null where
+	/// a theme paints none. Everything else a prop wears comes from <see cref="Trim"/>'s infill band.
+	/// </summary>
+	public Material Glow { get; private set; }
+
+	/// <summary>
 	/// World units per horizontal repeat of <see cref="Wall"/>, and the height its one vertical repeat
 	/// spans: the room's clear height, so a wall is painted floor to ceiling in one repeat.
 	/// </summary>
@@ -149,7 +160,8 @@ public abstract class ArenaTheme
 		ThemeSurface.Floor => PaintFloor(),
 		ThemeSurface.Ceiling => PaintCeiling(),
 		ThemeSurface.Wall => PaintWall( variant ),
-		_ => PaintTrim(),
+		ThemeSurface.Trim => PaintTrim(),
+		_ => PaintGlow(),
 	};
 
 	/// <summary>Uploads a baked surface and keeps its material. Main thread only.</summary>
@@ -161,7 +173,8 @@ public abstract class ArenaTheme
 			case ThemeSurface.Floor: FloorSurface = material; break;
 			case ThemeSurface.Ceiling: Ceiling = material; break;
 			case ThemeSurface.Wall: (Walls ??= new Material[WallCount])[variant] = material; break;
-			default: Trim = material; break;
+			case ThemeSurface.Trim: Trim = material; break;
+			default: Glow = material; break;
 		}
 	}
 
@@ -171,6 +184,9 @@ public abstract class ArenaTheme
 	/// <summary>Wall surface <paramref name="variant"/> of <see cref="WallCount"/>; a theme with one wall only ever gets 0.</summary>
 	protected abstract PaintedSurface PaintWall( int variant );
 	protected abstract PaintedSurface PaintTrim();
+
+	/// <summary>The lamp fittings' lit parts (<see cref="Glow"/>), or null for a theme whose lamps show none.</summary>
+	protected virtual PaintedSurface PaintGlow() => null;
 
 	/// <summary>
 	/// Dress the room: wall face layer, alcove props, ceiling props, lights. Must call
@@ -663,11 +679,13 @@ public abstract class ArenaTheme
 	/// Windows set into the wall face of some bays: a picture from the trim's infill band (frosted
 	/// glass, blinds) fitted to the opening, a frame and a sill in another infill cell, an optional
 	/// glazing cross. All of it stands inside the recess, in front of the wall face and behind the
-	/// collider plane. Which bays get one is seeded per room, so every machine agrees.
+	/// collider plane. Which bays get one is seeded per room, so every machine agrees. Returns those
+	/// bays with each window's width, for a theme that dresses round its windows.
 	/// </summary>
-	protected void AddWindows( FloorContext room, List<Bay> bays, Rect glass, Rect frame, float sill, float height, float maxWidth, float chance, bool cross, int seed )
+	protected List<(Bay Bay, float Width)> AddWindows( FloorContext room, List<Bay> bays, Rect glass, Rect frame, float sill, float height, float maxWidth, float chance, bool cross, int seed )
 	{
 		var random = new Random( seed );
+		var windows = new List<(Bay, float)>();
 		var skin = new Skin( Trim, frame );
 		const float Rail = 4f;
 		const float Depth = 5f;
@@ -680,6 +698,7 @@ public abstract class ArenaTheme
 			var side = bay.Side;
 			var facing = room.WallFacing( side );
 			var width = MathF.Min( maxWidth, bay.Width - 36f );
+			windows.Add( (bay, width) );
 			var u = bay.Middle;
 			var top = sill + height;
 			// Every piece reaches Embed behind the wall face, so it never meets the face along a crack.
@@ -697,6 +716,8 @@ public abstract class ArenaTheme
 			room.Kit.BevelBox( skin, At( 0f, sill + height * 0.5f, 3f + FloorContext.Embed ), new Vector3( 3f + FloorContext.Embed, 2.5f, height - Rail * 2f ), 0.4f, facing );
 			room.Kit.BevelBox( skin, At( 0f, sill + height * 0.55f, 3f + FloorContext.Embed ), new Vector3( 3f + FloorContext.Embed, width - Rail * 2f, 2.5f ), 0.4f, facing );
 		}
+
+		return windows;
 	}
 
 	/// <summary>
@@ -714,13 +735,35 @@ public abstract class ArenaTheme
 	/// </summary>
 	protected static void AddLamps( FloorContext room, int count, float v, float depth, Color color, int seed, float jitter = 0.25f )
 	{
-		var radius = FloorContext.LampReach( v );
+		foreach ( var spot in LampSpots( count, seed, jitter ) )
+			AddLamp( room, spot.Side, spot.U, v, depth, color * spot.Brightness );
+	}
+
+	/// <summary>One of <see cref="AddLamps"/>'s lamps: a cone thrown straight down from (side, u, v, depth), reaching <see cref="FloorContext.LampReach"/>.</summary>
+	protected static void AddLamp( FloorContext room, int side, float u, float v, float depth, Color color )
+		=> room.AddLight( room.OnWall( side, u, v, depth ), color, FloorContext.LampReach( v ), Vector3.Down, FloorContext.LampCone );
+
+	/// <summary>Where a lamp of <see cref="AddLamps"/> goes along the walls, and how much brighter or dimmer than the rest it burns.</summary>
+	protected readonly struct LampSpot
+	{
+		public int Side { get; init; }
+		public float U { get; init; }
+		public float Brightness { get; init; }
+	}
+
+	/// <summary>
+	/// <see cref="AddLamps"/>'s placement on its own, for a theme that hangs a fitting where each lamp
+	/// goes: the same draws from the same <paramref name="seed"/>, so the lamps land where they always have.
+	/// </summary>
+	protected static List<LampSpot> LampSpots( int count, int seed, float jitter = 0.25f )
+	{
 		const float Span = FloorContext.Span;
 		const float Margin = 160f;
 		var order = new[] { 0, 3, 2, 1 };
 		var random = new Random( seed );
 		var spacing = 4f * Span / count;
 		var start = (float)random.NextDouble() * spacing;
+		var spots = new List<LampSpot>();
 
 		for ( var k = 0; k < count; k++ )
 		{
@@ -728,8 +771,23 @@ public abstract class ArenaTheme
 			along = (along % (4f * Span) + 4f * Span) % (4f * Span);
 			var side = order[(int)(along / Span)];
 			var u = Math.Clamp( along % Span, Margin, Span - Margin );
-			room.AddLight( room.OnWall( side, u, v, depth ), color * (0.94f + (float)random.NextDouble() * 0.12f), radius, Vector3.Down, FloorContext.LampCone );
+			spots.Add( new LampSpot { Side = side, U = u, Brightness = 0.94f + (float)random.NextDouble() * 0.12f } );
 		}
+
+		return spots;
+	}
+
+	/// <summary>
+	/// A swatch of the trim atlas's infill band as a UV region, from pixel (<paramref name="x"/>,
+	/// <paramref name="y"/>) — y counted from the band's top row — <paramref name="width"/> by
+	/// <paramref name="height"/>, inset three pixels so the first mips never pull in the swatch beside it.
+	/// Props wear these: a theme that hangs no infill pictures paints its props' materials there.
+	/// </summary>
+	public static Rect Swatch( float x, float y, float width, float height )
+	{
+		const float Inset = 3f;
+		var top = TrimRows( TrimBand.Infill ).Top;
+		return new Rect( (x + Inset) / TrimSize, (top + y + Inset) / TrimSize, (width - Inset * 2f) / TrimSize, (height - Inset * 2f) / TrimSize );
 	}
 
 	/// <summary>
