@@ -113,7 +113,7 @@ public sealed class WorkshopTheme : ArenaTheme
 			}
 		}
 
-		// Mill scale and heat tint in broad patches that run from tile to tile.
+		// Mill scale and heat tint in broad patches, laid out differently on each of the four plates.
 		painter.Blend( Ramp( painter.Noise( 3, Seed + 30, 2 ), 0.5f, 0.8f, 0.4f ), MillScale );
 
 		// Grime worked into the plate in drifts, thicker away from the walking lines.

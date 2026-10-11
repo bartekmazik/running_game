@@ -25,8 +25,11 @@ public sealed class DungeonTheme : ArenaTheme
 	static Color Feldspar => Palette.Hex( 0xBDB7BE );
 	static Color Mica => Palette.Hex( 0x45414B );
 
-	/// <summary>Damp mortar in the joints: darker and wet-looking.</summary>
-	static Color Mortar => Palette.Hex( 0x5A5560 );
+	/// <summary>
+	/// Lime mortar in the joints: warm and sandy against the cool granite, about as light — a filled
+	/// joint reads as a band of another material, not as a dark crack.
+	/// </summary>
+	static Color Mortar => Palette.Hex( 0x8A847E );
 
 	static Color Moss => Palette.Hex( 0x7FA06A );
 
@@ -52,30 +55,27 @@ public sealed class DungeonTheme : ArenaTheme
 
 		PaintFlagstones( painter, random );
 
-		// A hairline crack across one stone of variant 1.
-		var start = CellOrigin( 1, FloorSize ) + new Vector2( 120f + (float)random.NextDouble() * 80f, 60f + (float)random.NextDouble() * 60f );
-		var crack = Wander( start, MathF.PI * 0.5f + ((float)random.NextDouble() - 0.5f) * 0.6f, 14f, 9 + random.Next( 4 ), 0.35f, random );
-		Polyline( painter, crack, 1.2f, Mix( Mortar, Mica, 0.5f ), 0.75f, 0.85f, 0.8f );
-
-		// Damp creeping across the floor in patches that ignore the joints.
+		// Damp patches, drawn over stone and mortar alike.
 		painter.Blend( Ramp( painter.Noise( 3, Seed + 30, 2 ), 0.56f, 0.82f, 0.4f ), Damp, roughness: 0.55f );
 
 		painter.HeightNoise( 0.5f, 8, Seed + 31, 2 );
 		painter.Mottle( 0.07f, 4, Seed + 32, 3 );
 		painter.RoughnessNoise( 0.08f, 6, Seed + 33, 2 );
 		painter.Cavity( 0.5f, 5 );
-		painter.EdgeWear( 0.35f, 4, Seed + 34 );
+		painter.EdgeWear( 0.2f, 4, Seed + 34 );
 		painter.Grain( 0.015f, Seed + 35 );
 		return painter.ToMaterial( "arena_6_floor", Painter.Matte, 7f );
 	}
 
 	/// <summary>
-	/// The flagstones, per pixel. Each block is split among two or three seed points (a Voronoi
-	/// cell per stone), read through a noise warp so the cut lines bend and wander a little; the
-	/// distance to the nearest split (exact, from the bisectors) or to the block's foot gives the
-	/// stone its worn, rounded shoulder and the joint its width, which varies along the joint with a
-	/// finer noise so edges look chipped. Stones sit a little proud or sunk of each other, and each
-	/// has its own colour from a small palette (one blend pass for all of them).
+	/// The flagstones, per pixel. Each block is laid as two or three stones around seed points (a
+	/// Voronoi cell per stone), read through a noise warp so the cut lines bend a little. The distance
+	/// to the nearest split (exact, from the bisectors) or to the block's foot gives each stone a worn,
+	/// rounded arris and the mortar joint its width: 4–7 px between stones, about the block joint's,
+	/// varying slowly along its length. The block's foot stays clean — a straight cut, nicked only in a
+	/// few places by larger, slowly varying chips — because a fine modulation there foreshortens into
+	/// stitching along the chamfer. Stones sit clearly proud or sunk of each other, and each has its
+	/// own colour from a small palette (one blend pass for all of them).
 	/// </summary>
 	void PaintFlagstones( Painter painter, Random random )
 	{
@@ -86,16 +86,17 @@ public sealed class DungeonTheme : ArenaTheme
 		// One warp field read at two offsets serves both axes; the offset is far enough apart that the
 		// two reads are unrelated.
 		var warp = painter.Noise( 14, Seed + 20, 2 );
-		var chips = painter.Noise( 48, Seed + 22, 1 );
+		var width = painter.Noise( 10, Seed + 22, 1 );
+		var nicks = painter.Noise( 6, Seed + 25, 1 );
 		var crystals = painter.Noise( FloorSize / 2, Seed + 23, 1 );
 		var mossNoise = painter.Noise( 20, Seed + 24, 2 );
 
 		// Outputs reuse the noise fields where a pixel's noise is read only at that pixel: crystals
-		// become the pale-fleck weight, chips the joint weight, mossNoise the moss weight.
+		// become the pale-fleck weight, width the joint weight, mossNoise the moss weight.
 		var relief = new float[FloorSize * FloorSize];
 		var owners = new byte[FloorSize * FloorSize];
 		var dark = new float[FloorSize * FloorSize];
-		var pale = crystals; var joint = chips; var moss = mossNoise;
+		var pale = crystals; var joint = width; var moss = mossNoise;
 		var palette = new Color[13];
 
 		// Per block: the stone seeds, and for every ordered pair the bisector as a unit normal and an
@@ -116,7 +117,7 @@ public sealed class DungeonTheme : ArenaTheme
 				var radius = cell * 0.26f * (0.85f + Next() * 0.3f);
 				seedX[k] = centreX + MathF.Cos( angle ) * radius;
 				seedY[k] = centreY + MathF.Sin( angle ) * radius;
-				lift[k] = (Next() - 0.5f) * 0.12f;
+				lift[k] = (Next() - 0.5f) * 0.3f;
 
 				var tone = Next() * 2f - 1f;
 				var lean = Next() * 2f - 1f;
@@ -161,29 +162,31 @@ public sealed class DungeonTheme : ArenaTheme
 						if ( e < split ) split = e;
 					}
 
-					// The joint between stones is 2–6 px wide, eaten away in places; the block's own
-					// edge (the chamfer's foot) is unwarped so neighbouring tiles still meet cleanly.
-					var chip = chips[i];
+					// Mortar between stones 4–7 px either side of the split; the block's own edge (the
+					// chamfer's foot) is unwarped so neighbouring tiles still meet cleanly.
+					var halfJoint = 4f + width[i] * 3f;
+					var nick = nicks[i] > 0.68f ? (nicks[i] - 0.68f) * 45f : 0f;
 					var mossy = mossNoise[i];
 					var crystal = crystals[i];
 					joint[i] = 0f; moss[i] = 0f; pale[i] = 0f;
-					var halfJoint = 1.2f + chip * 3.5f;
-					var foot = MathF.Min( MathF.Min( x + 0.5f, cell - x - 0.5f ), MathF.Min( y + 0.5f, cell - y - 0.5f ) ) - footInset - (chip - 0.5f) * 4f;
+					var toEdge = MathF.Min( MathF.Min( x + 0.5f, cell - x - 0.5f ), MathF.Min( y + 0.5f, cell - y - 0.5f ) );
+					var foot = toEdge - footInset - nick;
 					var edge = MathF.Min( split - halfJoint, foot );
 
 					if ( edge <= 0f )
 					{
-						joint[i] = 0.6f + MathF.Min( -edge * 0.2f, 0.4f );
-						relief[i] = 0.42f;
-						var m = (mossy - 0.5f) * 4f;
-						moss[i] = m > 0f ? MathF.Min( m, 1f ) * 0.6f : 0f;
+						joint[i] = 0.9f;
+						relief[i] = 0.3f;
+						if ( crystal > 0.6f ) pale[i] = MathF.Min( (crystal - 0.6f) * 4f, 1f ) * 0.3f;
+						var m = (mossy - 0.55f) * 4f;
+						moss[i] = m > 0f ? MathF.Min( m, 1f ) * 0.4f : 0f;
 						continue;
 					}
 
-					// A worn, rounded shoulder about ten pixels wide, then the stone's own level.
-					var t = edge >= 10f ? 1f : edge * 0.1f;
+					// A worn, rounded arris about twelve pixels wide, then the stone's own level.
+					var t = edge >= 12f ? 1f : edge / 12f;
 					var shoulder = t * t * (3f - 2f * t);
-					relief[i] = 0.45f + shoulder * (0.55f + lift[owner]);
+					relief[i] = 0.3f + shoulder * (0.7f + lift[owner]);
 					owners[i] = (byte)(1 + c * 3 + owner);
 					if ( edge < 3f )
 					{
@@ -191,9 +194,12 @@ public sealed class DungeonTheme : ArenaTheme
 						moss[i] = m > 0f ? MathF.Min( m, 1f ) * (1f - edge / 3f) * 0.4f : 0f;
 					}
 
-					// Crystals: sparse pale feldspar and dark mica, low contrast — granite, not asphalt.
-					if ( crystal > 0.7f ) pale[i] = MathF.Min( (crystal - 0.7f) * 6f, 1f ) * 0.22f;
-					else if ( crystal < 0.29f ) dark[i] = MathF.Min( (0.29f - crystal) * 6f, 1f ) * 0.28f;
+					// Crystals: sparse pale feldspar and dark mica, low contrast — granite, not asphalt. They
+					// fade out over the chamfer: seen nearly face-on there, specks along every tile edge
+					// would line up into a dotted seam.
+					var fade = MathF.Min( MathF.Max( (toEdge - 10f) / 24f, 0f ), 1f );
+					if ( crystal > 0.7f ) pale[i] = MathF.Min( (crystal - 0.7f) * 6f, 1f ) * 0.22f * fade;
+					else if ( crystal < 0.29f ) dark[i] = MathF.Min( (0.29f - crystal) * 6f, 1f ) * 0.28f * fade;
 				}
 			}
 		}

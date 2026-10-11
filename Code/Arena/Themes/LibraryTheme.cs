@@ -88,8 +88,7 @@ public sealed class LibraryTheme : ArenaTheme
 			{
 				var at = min + new Vector2( 170f + Next() * 170f, 170f + Next() * 170f );
 				var radius = 7f + Next() * 2f;
-				painter.Polygon( Organic( at, new Vector2( radius + 2.2f, radius + 2f ), 0.15f, Seed + 80, 0f, 24 ), Gap, alpha: 0.35f );
-				painter.Polygon( Organic( at, new Vector2( radius, radius * 0.96f ), 0.1f, Seed + 81, 0f, 24 ), Mix( Mix( Rosewood, Rose, 0.3f ), Oak, 0.3f ), alpha: 0.65f, roughness: 0.4f );
+				painter.Polygon( Organic( at, new Vector2( radius, radius * 0.96f ), 0.1f, Seed + 81, 0f, 24 ), Mix( Mix( Rose, Rosewood, 0.25f ), Oak, 0.35f ), alpha: 0.6f, roughness: 0.4f );
 				painter.Polygon( Organic( at + new Vector2( 1.5f, -1f ), new Vector2( radius * 0.6f, radius * 0.45f ), 0.6f, Seed + 82, Next() * MathF.Tau, 16 ), Bare, alpha: 0.25f );
 			}
 
@@ -97,7 +96,7 @@ public sealed class LibraryTheme : ArenaTheme
 			painter.Polygon( JointRing( min, cell, outlines[c] ), Mix( Gap, OakShade, 0.25f ), alpha: 0.85f, roughness: 0.8f );
 		}
 
-		// Traffic: the finish worn dull and paler where people walk, in patches that cross tiles.
+		// Traffic: the finish worn dull and paler in broad patches, different on each of the four blocks.
 		painter.Blend( Ramp( painter.Noise( 3, Seed + 30, 2 ), 0.55f, 0.85f, 0.45f ), Bare, roughness: 0.62f );
 
 		painter.Mottle( 0.06f, 4, Seed + 31, 3 );
@@ -151,6 +150,7 @@ public sealed class LibraryTheme : ArenaTheme
 			var mirror = c == 1 || c == 2;
 			var offsetU = (float)random.NextDouble() * Period;
 			var offsetV = (float)random.NextDouble() * Period;
+			lastKey = int.MinValue; lastB = int.MinValue;
 
 			for ( var y = 0; y < cell; y++ )
 			{
@@ -183,13 +183,14 @@ public sealed class LibraryTheme : ArenaTheme
 					{
 						lastKey = key; lastB = idB;
 						var h = Hash( key, idB, Seed + c * 7 );
+						var g = Hash( key, idB, Seed + c * 7 + 3 );
 						plankColor = (byte)(h & 0xFF);
 						plankLift = (Bits( h, 12 ) - 0.5f) * 0.06f;
 						plankStrength = 0.22f + Bits( h, 20 ) * 0.28f;
-						plankPhase = (int)((h >> 16) & 0xFF);
-						plankWave = 1f + Bits( h, 24 ) * 2f;
-						plankRow = (int)(h & 511);
-						plankShift = (h >> 9) & 255;
+						plankPhase = (int)(g & 0xFF);
+						plankWave = 1f + Bits( g, 8 ) * 2f;
+						plankRow = (int)((g >> 16) & 511);
+						plankShift = (g >> 25) & 127;
 					}
 
 					var i = row + x;

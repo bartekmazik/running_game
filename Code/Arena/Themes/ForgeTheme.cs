@@ -192,8 +192,8 @@ public sealed class ForgeTheme : ArenaTheme
 	/// <summary>
 	/// Rough-hewn rock seen from below: each underside a slab with a broken outline, its face broken
 	/// into chipped facets (a jittered Voronoi, every facet a tilted plane with its own tone, so the
-	/// rock reads faceted even in flat light), a few branching fissures, soot, and a handful of ember
-	/// glints lodged in the fissures — tiny, soft and few.
+	/// rock reads faceted even in flat light), a few long tapered fissures cut mostly in height, soot,
+	/// and a handful of ember glints lodged in the fissures — tiny, soft and few.
 	/// </summary>
 	protected override Material PaintCeiling()
 	{
@@ -213,23 +213,27 @@ public sealed class ForgeTheme : ArenaTheme
 
 		PaintFacets( painter );
 
-		// Fissures: a few branching cracks per underside, with an ember caught here and there.
+		// Fissures: one or two long cracks per underside with a shorter branch, cut mostly in height,
+		// with an ember caught here and there in the widest part.
 		for ( var c = 0; c < 4; c++ )
 		{
 			var min = CellOrigin( c, CeilingSize );
-			var fissures = 2 + random.Next( 2 );
+			var fissures = 1 + random.Next( 2 );
 			for ( var f = 0; f < fissures; f++ )
 			{
-				var start = min + new Vector2( 30f + Next() * (cell - 60f), 30f + Next() * (cell - 60f) );
-				var crack = Wander( start, Next() * MathF.Tau, 11f, 7 + random.Next( 6 ), 0.45f, random );
-				Polyline( painter, crack, 1.6f, Soot, 0.85f, 0.55f );
-				var branch = Wander( crack[crack.Length / 2], Next() * MathF.Tau, 8f, 3 + random.Next( 3 ), 0.5f, random );
-				Polyline( painter, branch, 1.1f, Soot, 0.75f, 0.6f );
-
-				for ( var g = 0; g < 2; g++ )
+				var start = min + new Vector2( 40f + Next() * (cell - 80f), 40f + Next() * (cell - 80f) );
+				var crack = Inside( Wander( start, Next() * MathF.Tau, 12f, 12 + random.Next( 8 ), 0.35f, random ), min, cell );
+				var width = 3.2f + Next() * 1.6f;
+				PaintFissure( painter, crack, width, random );
+				if ( crack.Length > 4 )
 				{
-					var at = crack[1 + random.Next( crack.Length - 1 )];
-					if ( at.x < min.x + 8f || at.y < min.y + 8f || at.x > min.x + cell - 8f || at.y > min.y + cell - 8f ) continue;
+					var branch = Inside( Wander( crack[crack.Length / 3], Next() * MathF.Tau, 9f, 4 + random.Next( 4 ), 0.45f, random ), min, cell );
+					PaintFissure( painter, branch, width * 0.55f, random );
+				}
+
+				for ( var g = 0; g < 2 && crack.Length > 4; g++ )
+				{
+					var at = crack[crack.Length / 4 + random.Next( crack.Length / 2 )];
 					painter.Circle( at.x, at.y, 2.6f + Next() * 1.5f, Scorch, 0.25f );
 					painter.Circle( at.x, at.y, 0.7f + Next() * 0.6f, Palette.Lava, 0.6f, roughness: 0.9f );
 				}
@@ -242,6 +246,42 @@ public sealed class ForgeTheme : ArenaTheme
 		painter.Cavity( 0.5f, 4 );
 		painter.Grain( 0.015f, Seed + 514 );
 		return painter.ToMaterial( "arena_7_ceiling", Painter.Matte, 5f );
+	}
+
+	/// <summary>
+	/// A fissure as relief, not ink: along the polyline its width swells and tapers to nothing at both
+	/// ends, each segment a little wider or narrower than the last. A slightly raised, faintly lighter
+	/// lip either side catches the light; the cut itself drops deep, and its colour is only a soft
+	/// darkening — the cavity bake and the normal map do the rest.
+	/// </summary>
+	static void PaintFissure( Painter painter, Vector2[] points, float width, Random random )
+	{
+		for ( var s = 1; s < points.Length; s++ )
+		{
+			var t = (s - 0.5f) / (points.Length - 1);
+			var w = width * (0.12f + 0.88f * MathF.Sin( t * MathF.PI )) * (0.75f + (float)random.NextDouble() * 0.5f);
+			painter.Line( points[s - 1], points[s], w + 3f, RockLight, 0.08f, height: 1.08f );
+		}
+		for ( var s = 1; s < points.Length; s++ )
+		{
+			var t = (s - 0.5f) / (points.Length - 1);
+			var w = width * (0.12f + 0.88f * MathF.Sin( t * MathF.PI ));
+			painter.Line( points[s - 1], points[s], w, Mix( Rock, Soot, 0.4f ), 0.22f, height: 0.5f );
+			painter.Line( points[s - 1], points[s], w * 0.4f, Soot, 0.2f, height: 0.25f );
+		}
+	}
+
+	/// <summary>A polyline cut off where it first leaves its underside (inset 14 px), so a crack never runs onto a neighbouring cell.</summary>
+	static Vector2[] Inside( Vector2[] points, Vector2 min, float size )
+	{
+		var count = 1;
+		while ( count < points.Length )
+		{
+			var p = points[count];
+			if ( p.x < min.x + 14f || p.y < min.y + 14f || p.x > min.x + size - 14f || p.y > min.y + size - 14f ) break;
+			count++;
+		}
+		return points[..count];
 	}
 
 	/// <summary>
