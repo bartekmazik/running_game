@@ -72,14 +72,14 @@ public abstract class ArenaTheme
 	/// <summary>Mouldings, posts, skirting, slab edge and infill pictures, one atlas laid out by <see cref="TrimBand"/>.</summary>
 	public Material Trim { get; private set; }
 
-	/// <summary>World units per horizontal repeat of <see cref="Wall"/>, and the height its one vertical repeat spans.</summary>
-	public virtual float WallRepeat => 208f;
+	/// <summary>
+	/// World units per horizontal repeat of <see cref="Wall"/>, and the height its one vertical repeat
+	/// spans: the room's clear height, so a wall is painted floor to ceiling in one repeat.
+	/// </summary>
+	public const float WallRepeat = FloorContext.ClearHeight;
 
 	/// <summary>Interior light colour (HDR allowed) used by the room builder and props.</summary>
 	public abstract Color LightColor { get; }
-
-	/// <summary>How many textures this theme holds, for the one startup timing line.</summary>
-	public int SurfaceCount => (FloorSurface is null ? 0 : 1) + (Ceiling is null ? 0 : 1) + (Wall is null ? 0 : 1) + (Trim is null ? 0 : 1);
 
 	/// <summary>
 	/// Paints one surface into plain bytes. Safe on any thread: every surface paints its own canvas
@@ -262,7 +262,7 @@ public abstract class ArenaTheme
 	/// between samples. Neighbouring rows read neighbouring noise rows, so features keep their width
 	/// across and become streaks along — wood grain, yarn, brushed metal.
 	/// </summary>
-	public static float Streak( float[] noise, int size, int row, float along )
+	protected static float Streak( float[] noise, int size, int row, float along )
 	{
 		var offset = ((row % size) + size) % size * size;
 		var p0 = (int)MathF.Floor( along );
@@ -444,16 +444,48 @@ public abstract class ArenaTheme
 
 	/// <summary>
 	/// Wood grain along rows <paramref name="top"/>..+<paramref name="height"/>: growth rings as seen on
-	/// a sawn face — continuous thin late-wood lines running the length of the piece, bent by a slow
-	/// smooth field so their spacing opens and closes, each line sharp on one side and fading into the
-	/// early wood on the other. Never dashes: thresholded noise read as tiger stripes (4a review).
-	/// Seamless across the texture's wrap, since mouldings tile along their run.
+	/// a sawn face — continuous thin late-wood lines running the length of the piece. Rings are laid
+	/// across the band at random widths (a slow random walk between about 4 and 12 px, so tight and
+	/// open years come in runs, as in a real log), every line its own weight and thickness, and the
+	/// whole set drifts a few pixels along the run on one slow octave, so lines wander gently instead
+	/// of rippling in step. Each line is sharp on one side and fades into the early wood on the other.
+	/// Never dashes: thresholded noise read as tiger stripes (4a review); evenly spaced rings bent by
+	/// fast noise read as a wavy pattern (6a review). Seamless across the texture's wrap, since
+	/// mouldings tile along their run.
 	/// </summary>
 	protected static void GrainRows( Painter painter, int top, int height, Color lateWood, float strength, int seed )
 	{
+		const float Drift = 4f;
 		var size = painter.Size;
-		var bend = painter.Noise( 3, seed, 3 );
-		var fade = painter.Noise( 8, seed + 1, 2 );
+		var bend = painter.Noise( 2, seed, 1 );
+		var fade = painter.Noise( 4, seed + 1, 2 );
+		var random = new Random( seed + 2 );
+		float Next() => (float)random.NextDouble();
+
+		// Ring starts over the band plus the drift on both sides, with each ring's line width and weight.
+		var starts = new List<float>();
+		var widths = new List<float>();
+		var weights = new List<float>();
+		var period = 5f + Next() * 5f;
+		var start = top - Drift - 1f - Next() * 12f;
+		while ( start < top + height + Drift + 1f )
+		{
+			starts.Add( start );
+			widths.Add( 1.2f + Next() * 1.4f );
+			weights.Add( 0.5f + Next() * 0.8f );
+			period = Math.Clamp( period + (Next() - 0.5f) * 3f, 4f, 12f );
+			start += period * (0.8f + Next() * 0.4f);
+		}
+
+		// Which ring a whole-pixel position falls in, so each pixel finds its ring in a step or two.
+		var origin = (int)MathF.Floor( starts[0] );
+		var lookup = new int[(int)MathF.Ceiling( start ) - origin + 2];
+		for ( int p = 0, k = 0; p < lookup.Length; p++ )
+		{
+			while ( k + 1 < starts.Count && starts[k + 1] <= origin + p ) k++;
+			lookup[p] = k;
+		}
+
 		var weight = new float[size * size];
 		for ( var y = top; y < top + height; y++ )
 		{
@@ -461,10 +493,15 @@ public abstract class ArenaTheme
 			for ( var x = 0; x < size; x++ )
 			{
 				var i = row + x;
-				var ring = y / 7f + bend[i] * 5f;
-				var f = ring - MathF.Floor( ring );
-				var line = f < 0.16f ? 1f - f / 0.16f : 0f;
-				weight[i] = line * strength * (0.45f + fade[i] * 0.8f);
+				var c = y + (bend[i] - 0.5f) * 2f * Drift;
+				var k = lookup[(int)MathF.Floor( c ) - origin];
+				while ( k + 1 < starts.Count && starts[k + 1] <= c ) k++;
+				// Sharp side: a one-pixel ramp up to the next ring's line, so a line drifting across pixel
+				// rows never drops out between them (a hard edge there broke lines into dashes).
+				var d = c - starts[k];
+				var line = d < widths[k] ? (1f - d / widths[k]) * weights[k] : 0f;
+				if ( k + 1 < starts.Count ) line = MathF.Max( line, MathF.Max( 0f, 1f - (starts[k + 1] - c) ) * weights[k + 1] );
+				weight[i] = line * strength * (0.6f + fade[i] * 0.6f);
 			}
 		}
 		painter.Blend( weight, lateWood );
@@ -518,9 +555,9 @@ public abstract class ArenaTheme
 
 	/// <summary>
 	/// A trim atlas in one material: every band in <paramref name="body"/> with its moulding profile
-	/// and the profile's coves shaded toward <paramref name="shade"/>, then <paramref name="details"/>
-	/// (a theme's own paint, nail heads, windows in the infill band), then <paramref name="grain"/>
-	/// (0 for none) of wood grain along the run, mottle, cavity and worn arrises.
+	/// and the profile's coves shaded toward <paramref name="shade"/>, then <paramref name="grain"/>
+	/// (0 for none) of wood grain along the run of every moulding band, then <paramref name="details"/>
+	/// (a theme's own paint, nail heads, windows in the infill band), then mottle, cavity and worn arrises.
 	/// </summary>
 	protected PaintedSurface PaintTrimAtlas( string name, Color body, Color shade, float roughness, float grain, int seed, Action<Painter> details = null )
 	{
@@ -534,9 +571,11 @@ public abstract class ArenaTheme
 		ShadeBand( painter, TrimBand.Cornice, CorniceProfile, shade, 0.7f );
 		ShadeBand( painter, TrimBand.Skirting, SkirtingProfile, shade, 0.5f );
 		ShadeBand( painter, TrimBand.Pilaster, PostProfile, shade, 0.4f );
+
+		// The generic grain goes under the theme's own paint, so pictures and band repaints sit on top of it.
+		if ( grain > 0f ) GrainRows( painter, 0, TrimRows( TrimBand.Infill ).Top, Mix( body, shade, 0.8f ), grain, seed + 1 );
 		details?.Invoke( painter );
 
-		if ( grain > 0f ) GrainRows( painter, 0, TrimSize, Mix( body, shade, 0.8f ), grain, seed + 1 );
 		painter.HeightNoise( 0.08f, 32, seed + 2, 3 );
 		painter.Mottle( 0.05f, 6, seed + 3, 4 );
 		painter.RoughnessNoise( 0.06f, 8, seed + 4, 3 );
@@ -672,6 +711,8 @@ public abstract class ArenaTheme
 			foreach ( var (from, to) in posts )
 				room.WallBox( side, Trim, post, stock, true, from, to, FloorContext.LedgeTop, beam, 0f, Deep, BoxFaces.Front | BoxFaces.Ends );
 
+			BuildWallFace( room, side, posts );
+
 			for ( var k = 0; k + 1 < posts.Count; k++ )
 			{
 				var bay = new Bay { Side = side, From = posts[k].To, To = posts[k + 1].From };
@@ -686,6 +727,30 @@ public abstract class ArenaTheme
 		}
 
 		return bays;
+	}
+
+	/// <summary>
+	/// The wall face behind the posts, from the segment's bottom to the ceiling, in lengths that meet
+	/// at the middle of a post — hidden inside it, since a post's front and ends run from the collider
+	/// plane to behind the face. Every length starts the wall's pattern somewhere else, so a wall that
+	/// repeats every <see cref="WallRepeat"/> units never shows the same strip in two bays (with one
+	/// start per wall, bays about a repeat wide all showed the same bands, 6a review). Faces of
+	/// neighbouring walls meet only along the corner edges, so the end lengths run through both corners.
+	/// </summary>
+	void BuildWallFace( FloorContext room, int side, List<(float From, float To)> posts )
+	{
+		const float Recess = FloorContext.Recess;
+		var random = new Random( Seed * 19 + room.Floor * 211 + side * 4099 + 5 );
+		var bottom = room.BottomZ - room.TileTopZ;
+		var start = -Recess;
+		for ( var k = 1; k < posts.Count; k++ )
+		{
+			var end = k < posts.Count - 1 ? (posts[k].From + posts[k].To) * 0.5f : FloorContext.Span + Recess;
+			var offset = (float)random.NextDouble() * WallRepeat;
+			room.WallFace( side, Wall, start, end, bottom, FloorContext.ClearHeight, Recess, false,
+				( u, v ) => new Vector2( (u + offset) / WallRepeat, (WallRepeat - v) / WallRepeat ) );
+			start = end;
+		}
 	}
 
 	/// <summary>Posts between <paramref name="from"/> and <paramref name="to"/>: gaps jittered ±30 % and rescaled to fit exactly, widths ±15 %.</summary>

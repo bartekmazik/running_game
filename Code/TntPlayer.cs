@@ -803,7 +803,7 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		var desired = target - rotation.Forward * distance;
 
 		var trace = Scene.Trace.Ray( target, desired )
-			.Radius( 8f )
+			.Radius( 12f )
 			.WithoutTags( new[] { "player" } )
 			.IgnoreGameObjectHierarchy( GameObject )
 			.Run();

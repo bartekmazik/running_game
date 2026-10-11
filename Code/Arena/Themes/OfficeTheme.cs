@@ -37,7 +37,7 @@ public sealed class OfficeTheme : ArenaTheme
 	static Color PlasterShade => Palette.Hex( 0xB7B2A8 );
 	static Color Vinyl => Palette.Hex( 0x545966 );
 	static Color PowderCoat => Palette.Hex( 0xEFEFEC );
-	static Color Sky => Palette.Hex( 0xBFD8E8 );
+	static Color Sky => Palette.Sky;
 	static Color Slat => Palette.Hex( 0xE4E4DF );
 
 	/// <summary>Pile rows across the yarn, in pixels: about a third of a unit, close to real loop pile.</summary>
@@ -57,14 +57,15 @@ public sealed class OfficeTheme : ArenaTheme
 	/// <summary>
 	/// System partitions, 52-unit modules: aluminium posts with a shadow groove, a dark vinyl kick, a
 	/// lower and an upper fabric panel split by a rail, plaster above to the bulkhead. The fabric is a
-	/// fine weave with a heathered yarn, every panel its own tone (one replaced, a shade bluer), with
-	/// the ghosts of notices that hung there and the pinholes that held them.
+	/// fine weave with a heathered yarn, every panel its own small drift in tone and hue (no single odd
+	/// panel: anything one-off in a 208-unit repeat comes back in every bay, 6a review / R18), with
+	/// the faint ghosts of notices that hung there and the pinholes that held them.
 	/// </summary>
 	protected override PaintedSurface PaintWall()
 	{
-		const float Ppu = WallSize / 208f;
+		const float Ppu = WallSize / WallRepeat;
 		const int Module = WallSize / 4;
-		int Row( float v ) => (int)MathF.Round( (208f - v) * Ppu );
+		int Row( float v ) => (int)MathF.Round( (WallRepeat - v) * Ppu );
 		var painter = new Painter( WallSize, Plaster, 0.85f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();
@@ -72,7 +73,6 @@ public sealed class OfficeTheme : ArenaTheme
 		painter.Fill( 0, 0, WallSize, Row( 153f ), Plaster, height: 0.8f, roughness: 0.85f );
 		painter.Fill( 0, Row( 153f ), WallSize, WallSize - Row( 153f ), Aluminium, height: 0.9f, roughness: 0.35f );
 
-		var replaced = random.Next( 8 );
 		var panels = new[] { (Top: Row( 150f ), Bottom: Row( 99f )), (Top: Row( 96f ), Bottom: Row( 10f )) };
 		for ( var m = 0; m < 4; m++ )
 		{
@@ -81,15 +81,16 @@ public sealed class OfficeTheme : ArenaTheme
 				var (top, bottom) = panels[p];
 				var x0 = m * Module + 9f;
 				var tone = Next() * 2f - 1f;
-				var fabric = m * 2 + p == replaced ? FabricBlue : tone < 0f ? Mix( Fabric, FabricDark, -tone * 0.25f ) : Mix( Fabric, FabricLight, tone * 0.3f );
+				var fabric = tone < 0f ? Mix( Fabric, FabricDark, -tone * 0.18f ) : Mix( Fabric, FabricLight, tone * 0.2f );
+				fabric = Mix( fabric, FabricBlue, Next() * 0.12f );
 				painter.Rect( x0, top + 1f, Module - 18f, bottom - top - 2f, fabric, radius: 2f, height: 0.7f, bevel: 3f, roughness: 0.95f );
 
 				// The ghost of a notice: a paler rectangle where the fabric was kept out of the light, and its pinholes.
-				if ( Next() < 0.35f )
+				if ( Next() < 0.3f )
 				{
 					var w = 40f + Next() * 60f; var h = 50f + Next() * 70f;
 					var nx = x0 + 15f + Next() * (Module - 48f - w); var ny = top + 20f + Next() * MathF.Max( 1f, bottom - top - 40f - h );
-					painter.Rect( nx, ny, w, h, FabricLight, alpha: 0.12f );
+					painter.Rect( nx, ny, w, h, FabricLight, alpha: 0.06f );
 					foreach ( var (cx, cy) in new[] { (nx + 3f, ny + 3f), (nx + w - 3f, ny + 3f), (nx + 3f, ny + h - 3f), (nx + w - 3f, ny + h - 3f) } )
 						painter.Circle( cx + (Next() - 0.5f) * 2f, cy + (Next() - 0.5f) * 2f, 0.8f, FabricDark, 0.6f );
 				}

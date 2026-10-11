@@ -48,19 +48,23 @@ public sealed class BeachTheme : ArenaTheme
 	}
 
 	/// <summary>
-	/// Beach-hut weatherboard: lapped planks of uneven width, painted in runs of two to four boards per
-	/// colour — chalky pastels between bands of white — each lap throwing a dark line under it. The
-	/// paint is worn through to silver-grey timber where water runs and along the laps, salt-bleached
-	/// in broad patches; every plank has a butt joint somewhere and a nail at each stud, rusting.
+	/// Beach-hut weatherboard: lapped planks of uneven width, each lap throwing a dark line under it.
+	/// Every plank is laid in lengths, butt-jointed near one of three uneven stretches across the
+	/// repeat, and every stretch was painted on its own — runs of two to four boards per colour, chalky
+	/// pastels mostly between bands of white, starting at a different board in each stretch — so the bands
+	/// break and shift at the joints and no bay shows the same stack of colours (a single paint per
+	/// board ran the same stripes round the whole room, 6a review). The paint is worn through to
+	/// silver-grey timber where water runs, along the laps and at the joints, salt-bleached in broad
+	/// patches, with a nail at each stud, rusting.
 	/// </summary>
 	protected override PaintedSurface PaintWall()
 	{
-		const float Ppu = WallSize / 208f;
+		const float Ppu = WallSize / WallRepeat;
 		var painter = new Painter( WallSize, Driftwood, 0.85f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();
 
-		var tops = new System.Collections.Generic.List<float>();
+		var tops = new List<float>();
 		var y = 0f;
 		while ( y < WallSize - 1f )
 		{
@@ -72,23 +76,74 @@ public sealed class BeachTheme : ArenaTheme
 		tops.Add( WallSize );
 		var boards = tops.Count - 1;
 
-		// Runs of boards share a paint; white between the pastels.
-		var palette = new Color[boards + 1];
-		palette[0] = new Color( 0f, 0f, 0f, 0f );
-		var pastel = random.Next( HutPastels.Length );
-		var white = Next() < 0.5f;
-		var run = 0;
+		// Three stretches of uneven width across the repeat; each paints its boards in its own runs,
+		// white between most of the pastels, from its own starting point.
+		const int Stretches = 3;
+		var bounds = new float[Stretches];
+		var first = Next() * WallSize;
+		for ( var z = 0; z < Stretches; z++ ) bounds[z] = first + z * WallSize / (float)Stretches + (Next() - 0.5f) * 150f;
+
+		// Paint per stretch and board: an index into HutPastels, or −1 for white.
+		var paints = new int[Stretches, boards];
+		for ( var z = 0; z < Stretches; z++ )
+		{
+			var pastel = random.Next( HutPastels.Length );
+			var white = Next() < 0.5f;
+			var run = 1 + random.Next( 4 );
+			for ( var b = 0; b < boards; b++ )
+			{
+				if ( run == 0 )
+				{
+					// White after most pastel runs, never two whites running; each stretch decides on its own.
+					white = !white && Next() < 0.6f;
+					if ( !white ) pastel = (pastel + 1 + random.Next( HutPastels.Length - 1 )) % HutPastels.Length;
+					run = 2 + random.Next( 3 );
+				}
+				run--;
+				paints[z, b] = white ? -1 : pastel;
+			}
+		}
+
+		// Each board's lengths: a butt joint near every stretch boundary where the paint changes (a
+		// length runs on through where both stretches gave it the same colour), and at least one per
+		// board. Every length fades on its own. Joints are kept relative to the board's first one, so
+		// finding a pixel's length is a walk along a short sorted list.
+		var palette = new List<Color> { new Color( 0f, 0f, 0f, 0f ) };
+		var joints = new List<float>[boards];
+		var lengths = new List<byte>[boards];
 		for ( var b = 0; b < boards; b++ )
 		{
-			if ( run == 0 )
+			joints[b] = new List<float>();
+			lengths[b] = new List<byte>();
+			for ( var z = 0; z < Stretches; z++ )
 			{
-				white = !white;
-				if ( !white ) pastel = (pastel + 1 + random.Next( HutPastels.Length - 1 )) % HutPastels.Length;
-				run = 2 + random.Next( 3 );
+				var previous = paints[(z + Stretches - 1) % Stretches, b];
+				if ( z > 0 && previous == paints[z, b] && joints[b].Count > 0 ) continue;
+				joints[b].Add( bounds[z] + (Next() - 0.5f) * 80f );
+				var paint = paints[z, b] < 0 ? HutWhite : Palette.Hex( HutPastels[paints[z, b]] );
+				palette.Add( Mix( paint, HutWhite, Next() * 0.15f ) );
+				lengths[b].Add( (byte)(palette.Count - 1) );
 			}
-			run--;
-			var paint = white ? HutWhite : Palette.Hex( HutPastels[pastel] );
-			palette[b + 1] = Mix( paint, HutWhite, Next() * 0.15f );
+		}
+
+		int LengthAt( int b, float x )
+		{
+			var list = joints[b];
+			var rel = ((x - list[0]) % WallSize + WallSize) % WallSize;
+			var k = 0;
+			while ( k + 1 < list.Count && list[k + 1] - list[0] <= rel ) k++;
+			return lengths[b][k];
+		}
+
+		float JointDistance( int b, float x )
+		{
+			var nearest = float.MaxValue;
+			foreach ( var joint in joints[b] )
+			{
+				var d = MathF.Abs( ((x - joint) % WallSize + WallSize) % WallSize );
+				nearest = MathF.Min( nearest, MathF.Min( d, WallSize - d ) );
+			}
+			return nearest;
 		}
 
 		var wear = painter.Noise( 24, Seed + 601, 4 );
@@ -97,8 +152,6 @@ public sealed class BeachTheme : ArenaTheme
 		var relief = new float[WallSize * WallSize];
 		var bare = new float[WallSize * WallSize];
 		var lap = new float[WallSize * WallSize];
-		var joints = new float[boards];
-		for ( var b = 0; b < boards; b++ ) joints[b] = Next() * WallSize;
 
 		for ( var b = 0; b < boards; b++ )
 		{
@@ -110,7 +163,7 @@ public sealed class BeachTheme : ArenaTheme
 				for ( var px = 0; px < WallSize; px++ )
 				{
 					var i = py * WallSize + px;
-					index[i] = (byte)(b + 1);
+					index[i] = (byte)LengthAt( b, px );
 
 					// Lapped board: thin at the top, thick at the foot, then a shadowed step down to the next.
 					var shadow = t > 0.93f;
@@ -119,27 +172,31 @@ public sealed class BeachTheme : ArenaTheme
 					if ( shadow ) lap[i] = 0.55f;
 
 					// Worn paint: more along the laps and around the butt joint, where water sits.
-					var dj = MathF.Abs( px - joints[b] ); dj = MathF.Min( dj, WallSize - dj );
+					var dj = JointDistance( b, px );
 					var exposure = wear[i] + MathF.Max( 0f, t - 0.6f ) * 0.45f + MathF.Max( 0f, 1f - dj / 30f ) * 0.3f;
 					bare[i] = exposure > 0.74f ? MathF.Min( (exposure - 0.74f) * 3f, 1f ) * 0.6f : 0f;
 				}
 			}
 		}
 
-		painter.Blend( index, palette );
+		painter.Blend( index, palette.ToArray() );
 		painter.AddHeight( relief, 1f );
 		painter.Blend( bare, Driftwood, roughness: 0.9f );
 		painter.Blend( lap, Mix( Driftwood, Palette.Ink, 0.3f ) );
 
-		// Each plank's butt joint: a dark hairline gap where two lengths meet.
+		// The butt joints: a dark hairline gap where two lengths meet.
 		for ( var b = 0; b < boards; b++ )
-			painter.Line( new Vector2( joints[b], tops[b] ), new Vector2( joints[b], tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
+			foreach ( var joint in joints[b] )
+			{
+				var x = (joint % WallSize + WallSize) % WallSize;
+				painter.Line( new Vector2( x, tops[b] ), new Vector2( x, tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
+			}
 
 		// Salt bleaching in broad patches.
 		painter.Blend( Ramp( painter.Noise( 4, Seed + 603, 4 ), 0.55f, 0.85f, 0.25f ), HutWhite );
 
 		// Nails at every stud, about 24 units apart but never on a grid, each with a faint rust halo.
-		var studs = new System.Collections.Generic.List<float>();
+		var studs = new List<float>();
 		for ( var x = Next() * 40f; x < WallSize - 30f; x += (24f + (Next() - 0.5f) * 8f) * Ppu ) studs.Add( x );
 		for ( var b = 0; b < boards; b++ )
 		{
@@ -150,8 +207,12 @@ public sealed class BeachTheme : ArenaTheme
 				if ( Next() < 0.4f ) painter.Circle( nx, ny + (Next() - 0.5f) * 3f, 3f + Next() * 3f, Rust, 0.08f );
 				painter.Circle( nx, ny, 1.8f, NailHead, 0.9f, height: 1.05f, bevel: 1f, roughness: 0.5f );
 			}
-			painter.Circle( joints[b] - 6f, ny, 1.8f, NailHead, 0.9f );
-			painter.Circle( joints[b] + 6f, ny, 1.8f, NailHead, 0.9f );
+			foreach ( var joint in joints[b] )
+			{
+				var x = (joint % WallSize + WallSize) % WallSize;
+				painter.Circle( x - 6f, ny, 1.8f, NailHead, 0.9f );
+				painter.Circle( x + 6f, ny, 1.8f, NailHead, 0.9f );
+			}
 		}
 
 		painter.Mottle( 0.04f, 6, Seed + 604, 4 );

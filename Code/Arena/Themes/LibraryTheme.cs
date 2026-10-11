@@ -56,7 +56,7 @@ public sealed class LibraryTheme : ArenaTheme
 	protected override PaintedSurface PaintWall()
 	{
 		// Full surface in Task 6b.
-		const float Ppu = WallSize / 208f;
+		const float Ppu = WallSize / WallRepeat;
 		const int Bay = WallSize / 4;
 		var painter = new Painter( WallSize, Mix( WalnutDeep, WalnutGrain, 0.5f ), 0.85f );
 		var random = new Random( Seed + 600 );
@@ -66,7 +66,7 @@ public sealed class LibraryTheme : ArenaTheme
 		for ( var level = 0; level < 6; level++ )
 		{
 			var shelfV = 2f + level * 34f;
-			var bottom = (208f - shelfV) * Ppu;
+			var bottom = (WallRepeat - shelfV) * Ppu;
 			var gap = (34f - 2.5f) * Ppu;
 			for ( var c = 0; c < 4; c++ )
 			{

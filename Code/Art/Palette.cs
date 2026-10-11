@@ -17,6 +17,12 @@ public static class Palette
 	public static Color Ink => Hex( 0x2F2A3B );
 	public static Color InkSoft => Hex( 0x5D5669 );
 
+	/// <summary>The flat sky behind the tower (the camera's clear colour) and what windows and glass reflect.</summary>
+	public static Color Sky => Hex( 0xBFD8E8 );
+
+	/// <summary>Soft lilac depth haze: the fog colour.</summary>
+	public static Color Haze => Hex( 0xD9CFE3 );
+
 	public static Color Warn => Hex( 0xFF8A4C );
 	public static Color Lava => Hex( 0xF25C54 );
 

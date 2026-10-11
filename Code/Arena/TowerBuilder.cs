@@ -2,9 +2,10 @@ using System;
 
 /// <summary>
 /// Builds the tower around the tiles: per floor a wall segment on all four sides — wall face, slab
-/// edge, the theme's structural front layer, the outer facade — four static box colliders, and on
-/// top the greenhouse's glass roof. Each floor is one model (one draw call per material) on its own
-/// GameObject; everything is local presentation, rebuilt identically on every machine from constants.
+/// edge, the theme's structural front layer, the outer facade — and on top the greenhouse's glass
+/// roof; then four static box colliders that run the whole height of the shaft. Each floor is one
+/// model (one draw call per material) on its own GameObject; everything is local presentation,
+/// rebuilt identically on every machine from constants.
 ///
 /// The segments stack: a floor's wall runs from its tile underside (the lava top, for the last floor)
 /// up to the next floor's underside, so looking down a hole by a wall shows the room below, never sky.
@@ -30,15 +31,22 @@ public sealed class TowerBuilder
 	/// <summary>Greenhouse roof: eave beam on the wall tops, the glass rising to a ridge along X.</summary>
 	const float EaveHeight = 8f;
 	const float RoofRise = 40f;
-	const float BarSpacing = 1808f / 43f;
+	const float BarSpacing = (FloorContext.Span + 2f * FloorContext.WallThickness) / 43f;
 	const float PaneLength = 150f;
 
 	/// <summary>Self-lit frosted glass: dimmed so it reads as bright overcast sky rather than blowing out under bloom.</summary>
 	static Color PaneTint => new( 0.34f, 0.37f, 0.39f );
 
-	/// <summary>Detail atlas cells (4 × 4 of 128 px): 0–7 frame paint per floor, then glass, then dressed stone.</summary>
-	const int GlassCell = 8;
+	/// <summary>
+	/// Detail atlas cells (4 × 4 of 128 px): 0–7 frame paint per floor, dressed stone, three tones of
+	/// glass, a dark pane (an unlit room), a warmly lit one, a slatted blind and a linen curtain.
+	/// </summary>
 	const int StoneCell = 9;
+	static readonly int[] GlassCells = { 8, 10, 11 };
+	const int DarkCell = 12;
+	const int LitCell = 13;
+	const int BlindCell = 14;
+	const int CurtainCell = 15;
 
 	readonly GameObject _arena;
 	readonly ArenaTheme[] _themes;
@@ -60,6 +68,8 @@ public sealed class TowerBuilder
 	{
 		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 			BuildFloor( floor, lavaTopZ, lavaBottomZ );
+
+		AddColliders( lavaTopZ, Arena.TileThickness * 0.5f + FloorContext.ClearHeight );
 	}
 
 	void BuildFloor( int floor, float lavaTopZ, float lavaBottomZ )
@@ -88,16 +98,14 @@ public sealed class TowerBuilder
 
 		var renderer = root.AddComponent<ModelRenderer>();
 		renderer.Model = room.Kit.Build( $"tower_floor{floor}" );
-
-		AddColliders( room );
 	}
 
 	/// <summary>
-	/// The structural shell in the theme's surfaces: the wall face at <see cref="FloorContext.Recess"/>
-	/// from the segment's bottom to the ceiling, and the slab edge — a ledge at the tile line whose
+	/// The structural shell in the theme's surfaces: the slab edge — a ledge at the tile line whose
 	/// front face fills the strip between this floor's tiles and the cornice of the room below. The
 	/// last floor's segment runs on down the lava shaft as a plain face on the grid edge, so the lava,
-	/// which fits the grid exactly, meets the wall without a gap.
+	/// which fits the grid exactly, meets the wall without a gap. The wall face itself is laid by the
+	/// theme's front layer, in lengths that meet behind its posts.
 	/// </summary>
 	void BuildShell( FloorContext room )
 	{
@@ -105,18 +113,14 @@ public sealed class TowerBuilder
 		var stock = ArenaTheme.TrimRegion( TrimBand.Stock );
 		var slab = ArenaTheme.TrimRegion( TrimBand.SlabEdge );
 		var bottom = room.BottomZ - room.TileTopZ;
-		var repeat = theme.WallRepeat;
+		const float Repeat = ArenaTheme.WallRepeat;
 		const float Span = FloorContext.Span;
 		const float Recess = FloorContext.Recess;
 
 		for ( var side = 0; side < 4; side++ )
 		{
-			// Each wall starts its pattern somewhere else, so no two walls show the same strip at the same place.
-			var offset = (float)new Random( 9001 + room.Floor * 4 + side ).NextDouble() * repeat;
-			Vector2 WallUv( float u, float v ) => new( (u + offset) / repeat, (repeat - v) / repeat );
-
-			// Wall faces meet only along the corner edges, so every side runs through both corners.
-			room.WallFace( side, theme.Wall, -Recess, Span + Recess, bottom, FloorContext.ClearHeight, Recess, false, WallUv );
+			var offset = (float)new Random( 9001 + room.Floor * 4 + side ).NextDouble() * Repeat;
+			Vector2 WallUv( float u, float v ) => new( (u + offset) / Repeat, (Repeat - v) / Repeat );
 
 			const float Deep = Recess + FloorContext.Embed;
 			var (u0, u1) = side % 2 == 0 ? (-Deep, Span + Deep) : (0f, Span);
@@ -150,7 +154,7 @@ public sealed class TowerBuilder
 			for ( var w = 0; w < WindowsPerSide; w++ )
 			{
 				var u = (w + 0.5f) * Span / WindowsPerSide;
-				AddWindow( room, side, u, facing, frame, stone );
+				AddWindow( room, side, u, facing, frame, stone, new Random( 5101 + room.Floor * 211 + side * 37 + w ) );
 			}
 
 			// Courses and cornices: sides 0 and 2 run through the corners, 1 and 3 stop at them.
@@ -185,8 +189,13 @@ public sealed class TowerBuilder
 	/// One facade window: frame, a cross of glazing bars and a stone sill standing proud of the wall,
 	/// dark glass a unit in front of the stone. The rotation's Forward points into the room, so the
 	/// boxes' local X is depth, Y runs along the wall and Z is up.
+	///
+	/// The grid of windows is regular, as real fenestration is; what differs is behind the glass
+	/// (ruling R25), drawn per window from its own seeded stream: one of three glass tones, mirrored
+	/// or not so the reflection falls differently, now and then an unlit room or a warmly lit one, and
+	/// in some a blind or a curtain let down to its own height. All of it quiet — the facade stays calm.
 	/// </summary>
-	void AddWindow( FloorContext room, int side, float u, Rotation facing, Skin frame, Skin stone )
+	void AddWindow( FloorContext room, int side, float u, Rotation facing, Skin frame, Skin stone, Random random )
 	{
 		const float Thick = FloorContext.WallThickness;
 		var kit = room.Kit;
@@ -207,8 +216,37 @@ public sealed class TowerBuilder
 
 		kit.BevelBox( stone, At( 0f, WindowSill - 2.5f, Proud + 3f ), new Vector3( Proud + 3f, WindowWidth + 12f, 5f ), 1f, facing );
 
-		room.WallPicture( side, _detail, Cell( GlassCell ), u - WindowWidth * 0.5f + Rail, u + WindowWidth * 0.5f - Rail,
-			WindowSill + Rail, top - Rail, Thick + 1f, true );
+		var pick = random.NextDouble();
+		var glass = pick < 0.07 ? DarkCell : pick < 0.13 ? LitCell : GlassCells[random.Next( GlassCells.Length )];
+		var mirror = random.NextDouble() < 0.5;
+
+		var cover = random.NextDouble();
+		var screen = cover < 0.3 ? BlindCell : cover < 0.45 ? CurtainCell : -1;
+		var drop = screen < 0 ? 0f : 0.15f + (float)random.NextDouble() * 0.5f;
+
+		// Glass below the blind's foot, the blind above it, on one plane and never overlapping.
+		var bottom = WindowSill + Rail;
+		var high = top - Rail;
+		var foot = high - (high - bottom) * drop;
+		Pane( room, side, Cell( glass ), u, Rail, bottom, foot, 1f - drop, mirror );
+		if ( screen >= 0 ) Pane( room, side, Cell( screen ), u, Rail, foot, high, drop, mirror );
+	}
+
+	/// <summary>
+	/// The lower <paramref name="fraction"/> of an atlas cell fitted to one strip (v0..v1) of a window's
+	/// opening, facing out: a part of the picture keeps its scale, so a blind let half down shows its
+	/// bottom rail and half its slats rather than all of them squeezed.
+	/// </summary>
+	void Pane( FloorContext room, int side, Rect cell, float u, float rail, float v0, float v1, float fraction, bool mirror )
+	{
+		var half = WindowWidth * 0.5f - rail;
+		room.WallFace( side, _detail, u - half, u + half, v0, v1, FloorContext.WallThickness + 1f, true, ( pu, pv ) =>
+		{
+			var x = (u + half - pu) / (half * 2f);
+			if ( mirror ) x = 1f - x;
+			var y = 1f - fraction + fraction * (v1 - pv) / (v1 - v0);
+			return new Vector2( cell.Left + x * cell.Width, cell.Top + y * cell.Height );
+		} );
 	}
 
 	/// <summary>
@@ -314,19 +352,21 @@ public sealed class TowerBuilder
 	}
 
 	/// <summary>
-	/// One solid static box per side for this floor's segment, inner face exactly on the grid edge
-	/// (centre at depth +32, 64 thick), long enough to close the corners. Never a mesh collider: the
-	/// player and the camera boom slide along a box face. Floor 0 also gets a lid over the roof, so a
-	/// launch can't carry anyone over the wall tops and the camera boom pulls in under the glass.
+	/// One solid static box per side for the whole shaft, from the lava top to floor 0's ceiling, inner
+	/// face exactly on the grid edge (centre at depth +32, 64 thick), long enough to close the corners.
+	/// One box rather than one per floor, so a player sliding down the wall meets no seam at a floor
+	/// line to snag on (ruling R24). Never a mesh collider: the player and the camera boom slide along
+	/// a box face. A lid over the roof too, so a launch can't carry anyone over the wall tops and the
+	/// camera boom pulls in under the glass.
 	/// </summary>
-	static void AddColliders( FloorContext room )
+	void AddColliders( float bottomZ, float topZ )
 	{
-		var holder = new GameObject( room.Root, true, $"Floor {room.Floor} Walls" );
+		var holder = new GameObject( _arena, true, "Tower Walls" );
 		ArenaGenerator.MakeLocalOnly( holder );
 
 		const float Thick = FloorContext.WallThickness;
-		var height = room.CeilingZ - room.BottomZ;
-		var middle = (room.CeilingZ + room.BottomZ) * 0.5f;
+		var height = topZ - bottomZ;
+		var middle = (topZ + bottomZ) * 0.5f;
 		var reach = FloorContext.HalfSpan + Thick * 0.5f;
 		var length = FloorContext.Span + Thick * 2f;
 
@@ -338,9 +378,8 @@ public sealed class TowerBuilder
 			collider.Static = true;
 		}
 
-		if ( room.Floor != 0 ) return;
 		var lid = holder.AddComponent<BoxCollider>();
-		lid.Center = Vector3.Up * (room.CeilingZ + RoofRise * 0.5f);
+		lid.Center = Vector3.Up * (topZ + RoofRise * 0.5f);
 		lid.Scale = new Vector3( length, length, RoofRise );
 		lid.Static = true;
 	}
@@ -409,7 +448,8 @@ public sealed class TowerBuilder
 
 	/// <summary>
 	/// The facade's small parts in one atlas: window-frame paint in each floor's identity colour, dark
-	/// glass with a faint sky reflection, and smooth dressed stone for sills and courses.
+	/// glass in three tones with a faint sky reflection, an unlit and a lamp-lit pane, a blind and a
+	/// curtain, and dressed stone for sills and courses.
 	/// </summary>
 	public static PaintedSurface PaintFacadeDetail()
 	{
@@ -424,18 +464,82 @@ public sealed class TowerBuilder
 			painter.Rect( x + 3f, y + 3f, Cell - 6f, Cell - 6f, paint, radius: 6f, height: 1f, bevel: 10f, roughness: 0.45f );
 		}
 
+		// Three glass tones: how much sky each reflects, how fast it darkens, where the sheen falls.
+		var random = new Random( 4124 );
+		float Next() => (float)random.NextDouble();
+		foreach ( var glass in GlassCells )
 		{
-			var x = (GlassCell % 4) * Cell; var y = (GlassCell / 4) * Cell;
-			var sky = ArenaTheme.Mix( Palette.Ink, Palette.Hex( 0xBFD8E8 ), 0.35f );
+			var (x, y) = ((glass % 4) * Cell, (glass / 4) * Cell);
+			var sky = ArenaTheme.Mix( Palette.Ink, Palette.Sky, 0.26f + Next() * 0.16f );
+			var fall = 0.55f + Next() * 0.4f;
 			for ( var row = 0; row < Cell; row++ )
-				painter.Fill( x, y + row, Cell, 1, ArenaTheme.Mix( sky, Palette.Ink, MathF.Pow( row / (float)Cell, 0.7f ) ), height: 0f, roughness: 0.08f );
-			painter.Polygon( new[] { new Vector2( x + 20f, y + Cell ), new Vector2( x + 44f, y + Cell ), new Vector2( x + 110f, y ), new Vector2( x + 86f, y ) },
-				Palette.Hex( 0xBFD8E8 ), alpha: 0.12f );
+				painter.Fill( x, y + row, Cell, 1, ArenaTheme.Mix( sky, Palette.Ink, MathF.Pow( row / (float)Cell, fall ) ), height: 0f, roughness: 0.08f );
+			var at = x + 4f + Next() * 40f;
+			var width = 14f + Next() * 16f;
+			painter.Polygon( new[] { new Vector2( at, y + Cell ), new Vector2( at + width, y + Cell ), new Vector2( at + width + 66f, y ), new Vector2( at + 66f, y ) },
+				Palette.Sky, alpha: 0.07f + Next() * 0.06f );
 		}
 
 		{
-			var x = (StoneCell % 4) * Cell; var y = (StoneCell / 4) * Cell;
-			painter.Fill( x, y, Cell, Cell, ArenaTheme.Mix( Palette.Paper, Palette.PaperShade, 0.3f ), height: 0.5f, roughness: 0.85f );
+			// A room with no light on: deep glass with only a trace of sky.
+			var (x, y) = ((DarkCell % 4) * Cell, (DarkCell / 4) * Cell);
+			var deep = ArenaTheme.Mix( Palette.Ink, Color.Black, 0.25f );
+			for ( var row = 0; row < Cell; row++ )
+				painter.Fill( x, y + row, Cell, 1, ArenaTheme.Mix( ArenaTheme.Mix( deep, Palette.Sky, 0.14f ), deep, row / (float)Cell ), height: 0f, roughness: 0.08f );
+		}
+
+		{
+			// A room with a lamp on: a muted warm glow, brightest low in the pane where the lamp light falls.
+			var (x, y) = ((LitCell % 4) * Cell, (LitCell / 4) * Cell);
+			var warm = Palette.Hex( 0xE6C9A2 );
+			for ( var row = 0; row < Cell; row++ )
+				painter.Fill( x, y + row, Cell, 1, ArenaTheme.Mix( Palette.Ink, warm, 0.3f + 0.22f * row / (float)Cell ), height: 0f, roughness: 0.1f );
+		}
+
+		{
+			// A slatted blind, its bottom rail at the cell's foot.
+			var (x, y) = ((BlindCell % 4) * Cell, (BlindCell / 4) * Cell);
+			var slat = ArenaTheme.Mix( Palette.Paper, Palette.PaperShade, 0.35f );
+			painter.Fill( x, y, Cell, Cell, ArenaTheme.Mix( slat, Palette.InkSoft, 0.25f ), height: 0.3f, roughness: 0.6f );
+			for ( var sy = Cell - 10f; sy > -6f; sy -= 7f )
+				painter.Rect( x, y + sy, Cell, 5.5f, slat, height: 0.7f, bevel: 1.5f, roughness: 0.6f );
+			painter.Rect( x, y + Cell - 6f, Cell, 6f, ArenaTheme.Mix( slat, Palette.InkSoft, 0.15f ), height: 0.9f, bevel: 1.5f, roughness: 0.5f );
+		}
+
+		{
+			// A linen curtain: soft vertical folds of uneven width, a hem at its foot.
+			var (x, y) = ((CurtainCell % 4) * Cell, (CurtainCell / 4) * Cell);
+			var linen = Palette.Hex( 0xE4D8C6 );
+			var phase = Next() * MathF.Tau;
+			for ( var col = 0; col < Cell; col++ )
+			{
+				var fold = MathF.Sin( col / (float)Cell * MathF.Tau * 4.5f + phase + MathF.Sin( col * 0.11f ) * 0.8f );
+				painter.Fill( x + col, y, 1, Cell, ArenaTheme.Mix( linen, Palette.InkSoft, 0.12f + fold * 0.1f ), height: 0.6f + fold * 0.2f, roughness: 0.95f );
+			}
+			painter.Fill( x, y + Cell - 7, Cell, 7, ArenaTheme.Mix( linen, Palette.InkSoft, 0.2f ), height: 0.7f, roughness: 0.95f );
+		}
+
+		{
+			// Dressed stone for sills and courses, with the facade's own mottle and pitting so it never reads as plastic.
+			var (x0, y0) = ((StoneCell % 4) * Cell, (StoneCell / 4) * Cell);
+			painter.Fill( x0, y0, Cell, Cell, ArenaTheme.Mix( Palette.Paper, Palette.PaperShade, 0.3f ), height: 0.5f, roughness: 0.85f );
+			var mottle = painter.Noise( 16, 4125, 4 );
+			var pits = painter.Noise( 64, 4126, 2 );
+			var dark = new float[DetailSize * DetailSize];
+			var light = new float[DetailSize * DetailSize];
+			var relief = new float[DetailSize * DetailSize];
+			for ( var y = y0; y < y0 + Cell; y++ )
+			for ( var x = x0; x < x0 + Cell; x++ )
+			{
+				var i = y * DetailSize + x;
+				var m = (mottle[i] - 0.5f) * 2f;
+				dark[i] = m < 0f ? -m * 0.18f : 0f;
+				light[i] = m > 0f ? m * 0.12f : 0f;
+				relief[i] = pits[i] < 0.3f ? (pits[i] - 0.3f) * 1.5f : (mottle[i] - 0.5f) * 0.3f;
+			}
+			painter.Blend( dark, Palette.Hex( 0xC9BCA6 ) );
+			painter.Blend( light, Color.White );
+			painter.AddHeight( relief, 1f );
 		}
 
 		painter.HeightNoise( 0.15f, 32, 4121, 3 );
@@ -451,8 +555,9 @@ public sealed class TowerBuilder
 	/// </summary>
 	public static PaintedSurface PaintPanes()
 	{
-		var glass = ArenaTheme.Mix( Palette.Hex( 0xBFD8E8 ), Palette.Paper, 0.45f );
-		var painter = new Painter( PaneSize, glass, 0.3f );
+		var glass = ArenaTheme.Mix( Palette.Sky, Palette.Paper, 0.45f );
+		// Rough, as frost is: at 0.3 the roof threw a blown white highlight across the menu orbit.
+		var painter = new Painter( PaneSize, glass, 0.92f );
 
 		var frost = ArenaTheme.Ramp( painter.Noise( 6, 4131, 4 ), 0.35f, 0.75f, 0.35f );
 		painter.Blend( frost, Color.White );
@@ -474,7 +579,7 @@ public sealed class TowerBuilder
 			var foot = y / (float)PaneSize;
 			grime[y * PaneSize + x] = MathF.Max( 0f, 1f - edge / 22f ) * 0.3f + MathF.Max( 0f, foot - 0.82f ) * 1.4f;
 		}
-		painter.Blend( grime, ArenaTheme.Mix( glass, Palette.Hex( 0x8E9D74 ), 0.5f ) );
+		painter.Blend( grime, ArenaTheme.Mix( glass, GreenhouseTheme.MossLight, 0.5f ) );
 
 		// The bar under each pane edge, as seen through the glass from above: painted rather than modelled
 		// proud of it, because three-unit bars at the menu orbit's distance shimmer into moiré.

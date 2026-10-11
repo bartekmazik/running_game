@@ -56,7 +56,7 @@ public sealed class DungeonTheme : ArenaTheme
 	protected override PaintedSurface PaintWall()
 	{
 		// Full surface in Task 6b.
-		const float Ppu = WallSize / 208f;
+		const float Ppu = WallSize / WallRepeat;
 		var painter = new Painter( WallSize, Mix( Mortar, Soot, 0.35f ), 0.95f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();

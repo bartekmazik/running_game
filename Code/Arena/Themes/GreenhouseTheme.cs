@@ -22,7 +22,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 	static Color RawClay => Palette.Hex( 0xE8BC9C );
 
 	static Color Moss => Palette.Hex( 0x6B7052 );
-	static Color MossLight => Palette.Hex( 0x8E9D74 );
+	public static Color MossLight => Palette.Hex( 0x8E9D74 );
 	static Color Soil => Palette.Hex( 0x5A4434 );
 
 	/// <summary>White-sage paint on the glazing bars and the timber trim.</summary>
@@ -61,10 +61,10 @@ public sealed class GreenhouseTheme : ArenaTheme
 	/// </summary>
 	protected override PaintedSurface PaintWall()
 	{
-		const float Ppu = WallSize / 208f;
+		const float Ppu = WallSize / WallRepeat;
 		const int Column = WallSize / 8;
 		const float Bar = 12f;
-		int Row( float v ) => (int)MathF.Round( (208f - v) * Ppu );
+		int Row( float v ) => (int)MathF.Round( (WallRepeat - v) * Ppu );
 		var painter = new Painter( WallSize, Glass, 0.15f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();

@@ -69,14 +69,8 @@ public sealed class ArenaGenerator : Component
 
 	const float ExposureCompensation = 0f;
 
-	/// <summary>Flat sky behind everything — the camera's clear colour, soft enough to sit inside the palette.</summary>
-	public static Color SkyColor => Palette.Hex( 0xBFD8E8 );
-
 	static readonly Color SunColor = new Color( 1.00f, 0.95f, 0.88f );
 	static readonly Color SunSkyColor = new Color( 0.74f, 0.80f, 0.94f );
-
-	/// <summary>Soft lilac depth haze: inside the rooms it only takes the edge off the far wall; outside it softens the tower against the sky.</summary>
-	static Color FogColor => Palette.Hex( 0xD9CFE3 );
 
 	/// <summary>Chamfer on the tile's top edges: catches the light, so neighbouring tiles read as separate blocks.</summary>
 	public const float TileBevel = 2f;
@@ -423,8 +417,9 @@ public sealed class ArenaGenerator : Component
 
 		// Haze that thickens with depth below floor 0, so the lower floors and the lava sit in a
 		// soft lilac haze instead of hard-edged void. Height is measured from this object's origin.
+		// Inside the rooms it only takes the edge off the far wall; outside it softens the tower against the sky.
 		var fog = GameObject.AddComponent<GradientFog>();
-		fog.Color = FogColor;
+		fog.Color = Palette.Haze;
 		fog.StartDistance = 2500f;
 		fog.EndDistance = 9000f;
 		fog.FalloffExponent = 2f;
@@ -443,7 +438,7 @@ public sealed class ArenaGenerator : Component
 		if ( !camera.IsValid() ) return;
 
 		camera.FieldOfView = 75f;
-		camera.BackgroundColor = SkyColor;
+		camera.BackgroundColor = Palette.Sky;
 
 		var bloom = camera.GameObject.GetOrAddComponent<Bloom>();
 		bloom.Strength = 0.35f;
