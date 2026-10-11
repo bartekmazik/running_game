@@ -83,13 +83,20 @@ public sealed class ForgeTheme : ArenaTheme
 	}
 
 	/// <summary>
-	/// Three faces of rock, worn by the lengths of wall in turn (<see cref="ArenaTheme.Walls"/>), each
-	/// with its own seams: a quiet face with a short crack or two low down, a face split by one seam the
-	/// full height of the wall that branches on its way up to the cornice, and a face with two or three
-	/// seams of middling height. One face for every length put the same few red lines in the same band
-	/// of every bay (6b review).
+	/// Three faces of rock (<see cref="ArenaTheme.Walls"/>), each with its own seams: a quiet face with a
+	/// short crack or two low down, a face split by one seam the full height of the wall that branches on
+	/// its way up to the cornice, and a face with two or three seams of middling height. One face for
+	/// every length put the same few red lines in the same band of every bay (6b review). The lengths
+	/// wear them either way round (<see cref="MirrorWalls"/>), so the tall seam does not come round in
+	/// every third bay.
 	/// </summary>
 	public override int WallCount => 3;
+
+	/// <summary>Rock has no handedness.</summary>
+	protected override bool MirrorWalls => true;
+
+	/// <summary>Rough rock overhead has no direction: its undersides turn with the tiles, sixteen looks instead of four.</summary>
+	public override bool CeilingTurns => true;
 
 	/// <summary>The wall's rock: a step lighter than the ceiling's, so its facets read in the forge's low light.</summary>
 	static Color RockFace => Mix( Rock, RockLight, 0.5f );
@@ -274,7 +281,9 @@ public sealed class ForgeTheme : ArenaTheme
 	/// Wrought iron for the front layer, smith's work: riveted plate posts with edge straps, a lintel
 	/// with a row of rivets under the ceiling, an iron kerb at the skirting, a bolted angle on the slab
 	/// edge. Soot in the hollows, heat tarnish — a faint bronze and a faint blue — in patches, the
-	/// arrises rubbed bright. Baked as metal, so it carries the glints of the forge's fires.
+	/// arrises rubbed bright. Baked matte, as sooted iron is: on the metal base it showed only what the
+	/// forge's dark reflection probe gave it and read pure black away from the lamps (6b re-review);
+	/// matte, it reads as dark oxide in the room's ambient light and still takes a sheen from the lamps.
 	/// </summary>
 	protected override PaintedSurface PaintTrim()
 	{
@@ -306,7 +315,7 @@ public sealed class ForgeTheme : ArenaTheme
 		// Heat tarnish and soot in broad, faint patches.
 		painter.Blend( Ramp( painter.Noise( 6, Seed + 710, 3 ), 0.6f, 0.85f, 0.25f ), TarnishBronze );
 		painter.Blend( Ramp( painter.Noise( 5, Seed + 711, 3 ), 0.65f, 0.9f, 0.2f ), TarnishBlue );
-		painter.Blend( Ramp( painter.Noise( 4, Seed + 712, 3 ), 0.5f, 0.85f, 0.4f ), Soot, roughness: 0.8f );
+		painter.Blend( Ramp( painter.Noise( 4, Seed + 712, 3 ), 0.5f, 0.85f, 0.28f ), Soot, roughness: 0.8f );
 
 		painter.HeightNoise( 0.1f, 32, Seed + 713, 3 );
 		painter.Mottle( 0.06f, 8, Seed + 714, 3 );
@@ -314,7 +323,8 @@ public sealed class ForgeTheme : ArenaTheme
 		painter.Cavity( 0.45f, 3 );
 		painter.EdgeWear( 0.45f, 3, Seed + 716 );
 		painter.Grain( 0.012f, Seed + 717 );
-		return BakeMetal( painter, "arena_7_trim", 4f, 0.3f );
+		painter.Wash( Soot, 0.18f );
+		return painter.Bake( "arena_7_trim", Painter.Matte, 4f );
 	}
 
 	/// <summary>An iron post's face: straps down both edges, a hair proud of the plate between, their arrises rounded.</summary>
@@ -471,11 +481,18 @@ public sealed class ForgeTheme : ArenaTheme
 	}
 
 	/// <summary>
-	/// Rough-hewn rock seen from below, dusted pale with ash (the forge's low lamps barely reach it, and
-	/// bare basalt overhead read black): each underside a slab with a broken outline, its face broken
-	/// into chipped facets (a jittered Voronoi, every facet a tilted plane with its own tone, so the
-	/// rock reads faceted even in flat light), a few long tapered fissures cut mostly in height, soot,
-	/// and a handful of ember glints lodged in the fissures — tiny, soft and few.
+	/// Rough-hewn rock seen from below, dusted pale with ash (bare basalt overhead read black): each
+	/// underside a slab with a broken outline, its face broken into chipped facets (a jittered Voronoi,
+	/// every facet a tilted plane with its own tone), and across most of them one long fissure that runs
+	/// along the facets' borders, the way rock splits, opening in the middle and closing to nothing at
+	/// both ends. Nothing on a slab is meant to be found again on the next: the undersides turn with the
+	/// tiles (<see cref="CeilingTurns"/>) and no cell holds a compact mark.
+	///
+	/// The ceiling lights itself — the lava's glow from far below (R33) — and self-illumination is flat:
+	/// it shows the colour as painted, with none of the normal map's shading. So the shading the relief
+	/// would get from that low light is baked into the glow (<see cref="ReliefGlow"/>): facets turn
+	/// lighter and darker, a fissure's near wall and lip catch it and its far wall falls into shade,
+	/// where the colour alone drew the cut as a dark ink line (6b re-review).
 	/// </summary>
 	protected override PaintedSurface PaintCeiling()
 	{
@@ -484,107 +501,286 @@ public sealed class ForgeTheme : ArenaTheme
 		var random = new Random( Seed + 500 );
 		float Next() => (float)random.NextDouble();
 
+		// Each underside its own slab, a little lighter or darker, catching a little more or less of the glow.
+		var slabGlow = new float[4];
 		for ( var c = 0; c < 4; c++ )
 		{
 			var min = CellOrigin( c, CeilingSize );
 			var tone = Next() * 2f - 1f;
-			var rock = tone < 0f ? Mix( Rock, RockDark, -tone * 0.5f ) : Mix( Rock, RockLight, tone * 0.5f );
+			var rock = tone < 0f ? Mix( Rock, RockDark, -tone * 0.4f ) : Mix( Rock, RockLight, tone * 0.4f );
 			rock = Mix( rock, Ash, 0.3f );
 			painter.Fill( (int)min.x, (int)min.y, cell, cell, Mix( rock, Soot, 0.3f ), height: 0.4f );
 			painter.Polygon( SlabOutline( min, cell, 3f, 4f, 10f, Seed + 500 + c * 101 ), rock, height: 1f, bevel: 14f, roughness: 0.88f );
+			slabGlow[c] = 0.88f + Next() * 0.24f;
 		}
 
-		PaintFacets( painter, 32, Seed + 540, 0.35f, 0.5f );
+		// The slabs' own relief is kept out of the baked glow shading: their rims would light up on
+		// whichever side the tile happens to be turned to.
+		var slabHeight = new float[CeilingSize * CeilingSize];
+		painter.CopyHeight( slabHeight );
 
-		// Fissures: one or two long cracks per underside with a shorter branch, cut mostly in height,
-		// with an ember caught here and there in the widest part.
+		var borders = new float[CeilingSize * CeilingSize];
+		PaintFacets( painter, CeilingFacet, Seed + 540, 0.8f, 0.3f, 0.45f, borders );
+		PaintFacets( painter, CeilingFacet / 2, Seed + 541, 0.4f, 0.1f, 0.2f );
+
+		// One fissure across most undersides, now and then a second, shorter one; one underside left whole.
+		var cut = new float[CeilingSize * CeilingSize];
+		var lip = new float[CeilingSize * CeilingSize];
+		var whole = random.Next( 4 );
 		for ( var c = 0; c < 4; c++ )
 		{
+			if ( c == whole ) continue;
 			var min = CellOrigin( c, CeilingSize );
-			var fissures = 1 + random.Next( 2 );
+			var fissures = Next() < 0.35f ? 2 : 1;
 			for ( var f = 0; f < fissures; f++ )
 			{
-				var start = min + new Vector2( 40f + Next() * (cell - 80f), 40f + Next() * (cell - 80f) );
-				var crack = Inside( Wander( start, Next() * MathF.Tau, 12f, 12 + random.Next( 8 ), 0.35f, random ), min, cell );
-				var width = 3.2f + Next() * 1.6f;
-				PaintFissure( painter, crack, width, random );
-				if ( crack.Length > 4 )
+				// From near one side of the slab across it, bending gently.
+				var side = random.Next( 4 );
+				var along = 50f + Next() * (cell - 100f);
+				var start = min + side switch
 				{
-					var branch = Inside( Wander( crack[crack.Length / 3], Next() * MathF.Tau, 9f, 4 + random.Next( 4 ), 0.45f, random ), min, cell );
-					PaintFissure( painter, branch, width * 0.55f, random );
-				}
-
-				for ( var g = 0; g < 2 && crack.Length > 4; g++ )
+					0 => new Vector2( along, FissureInset ),
+					1 => new Vector2( cell - FissureInset, along ),
+					2 => new Vector2( along, cell - FissureInset ),
+					_ => new Vector2( FissureInset, along ),
+				};
+				var heading = side * MathF.PI * 0.5f + MathF.PI * 0.5f + (Next() - 0.5f) * 1.1f;
+				var steps = f == 0 ? 8 + random.Next( 3 ) : 4 + random.Next( 3 );
+				var guide = Clip( Wander( start, heading, 24f, steps, 0.3f, random ), min, cell, FissureInset );
+				var glint = OpenFissure( cut, lip, borders, guide, (f == 0 ? 3.4f : 2.2f) + Next() * 0.9f, min, cell, random );
+				if ( glint >= 0 && Next() < 0.5f )
 				{
-					var at = crack[crack.Length / 4 + random.Next( crack.Length / 2 )];
-					painter.Circle( at.x, at.y, 2.6f + Next() * 1.5f, Scorch, 0.25f );
-					painter.Circle( at.x, at.y, 0.7f + Next() * 0.6f, Palette.Lava, 0.6f, roughness: 0.9f, glow: 1f );
+					var (gx, gy) = (glint % CeilingSize + 0.5f, glint / CeilingSize + 0.5f);
+					painter.Circle( gx, gy, 2.4f, Scorch, 0.2f );
+					painter.Circle( gx, gy, 0.8f, Palette.Lava, 0.55f, roughness: 0.9f, glow: 0.9f );
 				}
 			}
 		}
 
-		// Soot in drifts, lighter than it was under ambient light alone: overhead, where the forge's low
-		// lamps reach least, the full drifts turned the rock black.
-		painter.Blend( Ramp( painter.Noise( 4, Seed + 511, 3 ), 0.55f, 0.85f, 0.3f ), Soot );
-		painter.HeightNoise( 0.5f, 8, Seed + 512, 3 );
-		painter.Mottle( 0.08f, 6, Seed + 513, 3 );
-		painter.Cavity( 0.5f, 4 );
-		painter.Grain( 0.015f, Seed + 514 );
+		// The cut sinks deep with a faint raised lip; its colour darkens only a little and the lip pales.
+		for ( var i = 0; i < lip.Length; i++ ) if ( cut[i] > 0f ) lip[i] = 0f;
+		painter.AddHeight( cut, -0.55f );
+		painter.AddHeight( lip, 0.12f );
+		for ( var i = 0; i < cut.Length; i++ ) cut[i] *= 0.1f;
+		painter.Blend( cut, Soot );
+		for ( var i = 0; i < lip.Length; i++ ) lip[i] *= 0.1f;
+		painter.Blend( lip, RockLight );
 
-		// The glow of the lava far below, caught faintly and unevenly by the rock: a broad, low
-		// self-illumination in the rock's own colour. The bounce lights warm two pools of it; a light
-		// shining up through the slab to warm the rest would light the dungeon's floor as well.
-		var bounce = painter.Noise( 3, Seed + 515, 3 );
-		for ( var i = 0; i < bounce.Length; i++ ) bounce[i] = CeilingGlow * (0.5f + bounce[i]);
-		painter.AddGlow( bounce );
-		return painter.Bake( "arena_7_ceiling", ArenaGenerator.GlowMaterialPath, 5f );
+		// Soot in faint drifts; overhead, where the forge's lamps reach least, full drifts turned the rock black.
+		painter.Blend( Ramp( painter.Noise( 4, Seed + 511, 3 ), 0.6f, 0.85f, 0.18f ), Soot );
+		painter.HeightNoise( 0.3f, 8, Seed + 512, 3 );
+		painter.Mottle( 0.05f, 6, Seed + 513, 3 );
+		painter.Cavity( 0.25f, 3 );
+		painter.Grain( 0.012f, Seed + 514 );
+
+		// The glow of the lava far below: low, a little uneven from slab to slab and across a slab, and
+		// shaded by the rock's relief. The bounce lights warm two pools of it; a light shining up through
+		// the slab to warm the rest would light the dungeon's floor as well.
+		var glow = ReliefGlow( painter, slabHeight );
+		var drift = painter.Noise( 3, Seed + 515, 2 );
+		for ( var y = 0; y < CeilingSize; y++ )
+		for ( var x = 0; x < CeilingSize; x++ )
+		{
+			var i = y * CeilingSize + x;
+			glow[i] *= CeilingGlow * slabGlow[(y / cell) * 2 + x / cell] * (0.9f + 0.2f * drift[i]);
+		}
+		painter.AddGlow( glow );
+		return painter.Bake( "arena_7_ceiling", ArenaGenerator.GlowMaterialPath, 6f );
 	}
+
+	/// <summary>The ceiling's facets in pixels: about 14 units, a fist-to-forearm chip of rock.</summary>
+	const int CeilingFacet = 64;
+
+	/// <summary>How far in from its underside's edge a fissure stays, in pixels: clear of the slab's bevelled rim.</summary>
+	const float FissureInset = 30f;
 
 	/// <summary>
-	/// A fissure as relief, not ink: along the polyline its width swells and tapers to nothing at both
-	/// ends, each segment a little wider or narrower than the last. A slightly raised, faintly lighter
-	/// lip either side catches the light; the cut itself drops deep, and its colour is only a soft
-	/// darkening — the cavity bake and the normal map do the rest.
+	/// Paints one fissure into <paramref name="cut"/> (depth 0..1) and <paramref name="lip"/> (0..1). The
+	/// crack runs from the <paramref name="guide"/>'s start to its end the way rock splits, along the
+	/// facets' borders: the cheapest path across the underside, where a pixel on a border
+	/// (<paramref name="border"/>, distance in px) costs little, one inside a facet a lot, and straying
+	/// far from the guide more and more. It opens up to <paramref name="halfWidth"/> px either side in its
+	/// middle, swells and pinches along the way and closes to nothing at both ends. Returns the pixel
+	/// where it is widest (for an ember caught there), or −1 if the guide was too short to open.
 	/// </summary>
-	static void PaintFissure( Painter painter, Vector2[] points, float width, Random random )
+	static int OpenFissure( float[] cut, float[] lip, float[] border, Vector2[] guide, float halfWidth, Vector2 min, float cell, Random random )
 	{
-		for ( var s = 1; s < points.Length; s++ )
+		if ( guide.Length < 3 ) return -1;
+		const int size = CeilingSize;
+		const float LipWidth = 2.5f;
+
+		// The search runs over the underside inside its rim.
+		var x0 = (int)min.x + 16; var y0 = (int)min.y + 16;
+		var span = (int)cell - 32;
+		var count = span * span;
+		var step = new float[count];
+		for ( var ly = 0; ly < span; ly++ )
+		for ( var lx = 0; lx < span; lx++ )
 		{
-			var t = (s - 0.5f) / (points.Length - 1);
-			var w = width * (0.12f + 0.88f * MathF.Sin( t * MathF.PI )) * (0.75f + (float)random.NextDouble() * 0.5f);
-			painter.Line( points[s - 1], points[s], w + 3f, RockLight, 0.08f, height: 1.08f );
+			var px = x0 + lx + 0.5f; var py = y0 + ly + 0.5f;
+			var near = float.MaxValue;
+			for ( var k = 1; k < guide.Length; k++ )
+			{
+				var ax = guide[k - 1].x; var ay = guide[k - 1].y;
+				var ex = guide[k].x - ax; var ey = guide[k].y - ay;
+				var t = Math.Clamp( ((px - ax) * ex + (py - ay) * ey) / MathF.Max( ex * ex + ey * ey, 0.0001f ), 0f, 1f );
+				var dx = px - ax - ex * t; var dy = py - ay - ey * t;
+				near = MathF.Min( near, dx * dx + dy * dy );
+			}
+			var stray = MathF.Max( MathF.Sqrt( near ) - 10f, 0f ) / 14f;
+			var inside = Math.Clamp( border[(y0 + ly) * size + x0 + lx] / 2.5f, 0f, 1f );
+			step[ly * span + lx] = 1f + 6f * inside * inside * (3f - 2f * inside) + stray * stray;
 		}
-		for ( var s = 1; s < points.Length; s++ )
+
+		int Node( Vector2 p ) => Math.Clamp( (int)p.y - y0, 0, span - 1 ) * span + Math.Clamp( (int)p.x - x0, 0, span - 1 );
+		var source = Node( guide[0] ); var target = Node( guide[^1] );
+
+		// Dijkstra over the eight neighbours, on a binary heap of (cost, node) big enough for one push per
+		// neighbour of every pixel: a pixel is settled once, so each of its eight steps improves a cost once at most.
+		var cost = new float[count]; Array.Fill( cost, float.MaxValue );
+		var from = new int[count]; Array.Fill( from, -1 );
+		var heapCost = new float[count * 8]; var heapNode = new int[count * 8]; var heapSize = 0;
+		void Push( float c, int n )
 		{
-			var t = (s - 0.5f) / (points.Length - 1);
-			var w = width * (0.12f + 0.88f * MathF.Sin( t * MathF.PI ));
-			painter.Line( points[s - 1], points[s], w, Mix( Rock, Soot, 0.4f ), 0.22f, height: 0.5f );
-			painter.Line( points[s - 1], points[s], w * 0.4f, Soot, 0.2f, height: 0.25f );
+			var k = heapSize++;
+			while ( k > 0 && heapCost[(k - 1) / 2] > c ) { heapCost[k] = heapCost[(k - 1) / 2]; heapNode[k] = heapNode[(k - 1) / 2]; k = (k - 1) / 2; }
+			heapCost[k] = c; heapNode[k] = n;
 		}
+		cost[source] = 0f; Push( 0f, source );
+		while ( heapSize > 0 )
+		{
+			var c = heapCost[0]; var n = heapNode[0];
+			var lastCost = heapCost[--heapSize]; var lastNode = heapNode[heapSize];
+			var k = 0;
+			while ( true )
+			{
+				var child = k * 2 + 1;
+				if ( child >= heapSize ) break;
+				if ( child + 1 < heapSize && heapCost[child + 1] < heapCost[child] ) child++;
+				if ( heapCost[child] >= lastCost ) break;
+				heapCost[k] = heapCost[child]; heapNode[k] = heapNode[child]; k = child;
+			}
+			heapCost[k] = lastCost; heapNode[k] = lastNode;
+
+			if ( c > cost[n] ) continue;
+			if ( n == target ) break;
+			var nx = n % span; var ny = n / span;
+			for ( var oy = -1; oy <= 1; oy++ )
+			for ( var ox = -1; ox <= 1; ox++ )
+			{
+				if ( ox == 0 && oy == 0 ) continue;
+				var mx = nx + ox; var my = ny + oy;
+				if ( (uint)mx >= (uint)span || (uint)my >= (uint)span ) continue;
+				var m = my * span + mx;
+				var next = c + (step[n] + step[m]) * (ox != 0 && oy != 0 ? 0.7071f : 0.5f);
+				if ( next >= cost[m] ) continue;
+				cost[m] = next; from[m] = n; Push( next, m );
+			}
+		}
+		if ( from[target] < 0 ) return -1;
+
+		var path = new List<int>();
+		for ( var n = target; n >= 0; n = from[n] ) path.Add( n );
+		path.Reverse();
+
+		// Its width along the way: open in the middle, closed at both ends, swelling and pinching.
+		var swell = new float[path.Count];
+		var level = 1f; var aim = 1f;
+		for ( var s = 0; s < path.Count; s++ )
+		{
+			if ( s % 12 == 0 ) aim = 0.55f + (float)random.NextDouble() * 0.7f;
+			level += (aim - level) * 0.15f;
+			swell[s] = level;
+		}
+
+		var widest = -1; var best = 0f;
+		for ( var s = 0; s < path.Count; s++ )
+		{
+			var taper = MathF.Pow( MathF.Sin( (s + 0.5f) / path.Count * MathF.PI ), 0.8f );
+			var w = halfWidth * taper * swell[s];
+			if ( w < 0.35f ) continue;
+			var cx = x0 + path[s] % span + 0.5f; var cy = y0 + path[s] / span + 0.5f;
+			var reach = (int)MathF.Ceiling( w + LipWidth );
+			for ( var y = (int)cy - reach; y <= (int)cy + reach; y++ )
+			for ( var x = (int)cx - reach; x <= (int)cx + reach; x++ )
+			{
+				var dx = x + 0.5f - cx; var dy = y + 0.5f - cy;
+				var d = MathF.Sqrt( dx * dx + dy * dy );
+				var i = y * size + x;
+				if ( d < w )
+				{
+					var depth = (1f - d * d / (w * w)) * MathF.Min( w / 2f, 1f );
+					if ( depth > cut[i] ) cut[i] = depth;
+				}
+				else if ( d < w + LipWidth )
+				{
+					var rise = (1f - (d - w) / LipWidth) * MathF.Min( w / 2f, 1f );
+					if ( rise > lip[i] ) lip[i] = rise;
+				}
+			}
+			if ( w > best ) { best = w; widest = (int)cy * size + (int)cx; }
+		}
+
+		return widest;
 	}
 
-	/// <summary>A polyline cut off where it first leaves its underside (inset 14 px), so a crack never runs onto a neighbouring cell.</summary>
-	static Vector2[] Inside( Vector2[] points, Vector2 min, float size )
+	/// <summary>A polyline cut off where it first comes within <paramref name="inset"/> px of its underside's edge.</summary>
+	static Vector2[] Clip( Vector2[] points, Vector2 min, float size, float inset )
 	{
 		var count = 1;
 		while ( count < points.Length )
 		{
 			var p = points[count];
-			if ( p.x < min.x + 14f || p.y < min.y + 14f || p.x > min.x + size - 14f || p.y > min.y + size - 14f ) break;
+			if ( p.x < min.x + inset || p.y < min.y + inset || p.x > min.x + size - inset || p.y > min.y + size - inset ) break;
 			count++;
 		}
 		return points[..count];
+	}
+
+	/// <summary>Direction of the low light whose shading the ceiling's glow carries, in texture space (x right, y down, z out of the rock).</summary>
+	static readonly Vector3 GlowLight = new Vector3( -0.5f, -0.35f, 0.8f ).Normal;
+
+	/// <summary>
+	/// The relief shading of a low light, per pixel, as a glow factor around 1 on flat rock: from the
+	/// height's slope over a few pixels (facets, the walls of a fissure and its lip, not the grain),
+	/// minus <paramref name="exclude"/> (the slab rims, which would light up on whatever side a tile
+	/// is turned to). Shaded slopes keep a little glow, so nothing goes black.
+	/// </summary>
+	static float[] ReliefGlow( Painter painter, float[] exclude )
+	{
+		const int size = CeilingSize;
+		const float Steepness = 8f;
+		var height = new float[size * size];
+		painter.CopyHeight( height );
+		for ( var i = 0; i < height.Length; i++ ) height[i] -= exclude[i];
+
+		var shade = new float[size * size];
+		for ( var y = 0; y < size; y++ )
+		{
+			var row = y * size;
+			var above = ((y - 2 + size) % size) * size; var below = ((y + 2) % size) * size;
+			for ( var x = 0; x < size; x++ )
+			{
+				var nx = -(height[row + (x + 2) % size] - height[row + (x - 2 + size) % size]) * Steepness;
+				var ny = -(height[below + x] - height[above + x]) * Steepness;
+				var lit = (nx * GlowLight.x + ny * GlowLight.y + GlowLight.z) / MathF.Sqrt( nx * nx + ny * ny + 1f ) / GlowLight.z;
+				shade[row + x] = 0.3f + 0.7f * Math.Clamp( lit, 0f, 1.7f );
+			}
+		}
+		return shade;
 	}
 
 	/// <summary>
 	/// Chipped facets over a whole surface: a jittered grid of points <paramref name="facet"/> px apart,
 	/// each pixel belonging to the nearest; a facet is a plane tilted its own way (height, scaled by
 	/// <paramref name="relief"/>, and the same slope as a light-to-dark gradient in colour) with its own
-	/// tone. Near the border with the next-nearest facet both planes blend to their mean, and the border
+	/// tone, spread by <paramref name="spread"/>. Near the border with the next-nearest facet both planes blend to their mean, and the border
 	/// sinks into a slight crease: two planes meeting in a hard height step made a cliff one pixel wide
 	/// in the normal map, which shimmered as a saw-tooth along every border under direct light.
+	/// Given <paramref name="borders"/>, it also records per pixel the distance to the nearest border,
+	/// so cracks can be run along them.
 	/// </summary>
-	void PaintFacets( Painter painter, int facet, int seed, float relief, float tone )
+	void PaintFacets( Painter painter, int facet, int seed, float relief, float tone, float spread = 0.8f, float[] borders = null )
 	{
 		var size = painter.Size;
 		var grid = size / facet + 2;
@@ -643,7 +839,8 @@ public sealed class ForgeTheme : ArenaTheme
 
 				var i = y * size + x;
 				height[i] = tilt * relief - (1f - w) * 0.06f;
-				var t = shade * 0.8f + tilt * 0.45f * tone / 0.5f;
+				if ( borders is not null ) borders[i] = split;
+				var t = shade * spread + tilt * 0.45f * tone / 0.5f;
 				if ( t > 0f ) light[i] = MathF.Min( t, 1f ) * 0.6f; else dark[i] = MathF.Min( -t, 1f ) * 0.6f;
 			}
 		}

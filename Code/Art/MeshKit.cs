@@ -107,18 +107,34 @@ public sealed class MeshKit
 		var e1 = b - a; var e2 = d - a;
 		var du1 = uvB.x - uvA.x; var dv1 = uvB.y - uvA.y;
 		var du2 = uvD.x - uvA.x; var dv2 = uvD.y - uvA.y;
-		var tangent = ((e1 * dv2 - e2 * dv1) / (du1 * dv2 - du2 * dv1)).Normal;
+		var determinant = du1 * dv2 - du2 * dv1;
+		var tangent = ((e1 * dv2 - e2 * dv1) / determinant).Normal;
+
+		// The bitangent's sign: the shader rebuilds +V as the normal × tangent times the tangent's w,
+		// which the engine's vertex sets to −1 — right for every face mapped the texture's own way round.
+		// A face whose UVs are mirrored (a wall length wearing its pattern flipped) has +V on the other
+		// side of that cross product, and with w left at −1 its normal map's vertical slopes would flip.
+		var bitangent = (e2 * du1 - e1 * du2) / determinant;
+		var handedness = Vector3.Dot( Vector3.Cross( Vector3.Cross( b - a, d - a ), tangent ), bitangent ) > 0f ? 1f : -1f;
 
 		var batch = For( material );
 		var start = batch.Vertices.Count;
-		batch.Vertices.Add( new Vertex( a, normal, tangent, new Vector4( uvA.x, uvA.y, 0f, 0f ) ) );
-		batch.Vertices.Add( new Vertex( b, normal, tangent, new Vector4( uvB.x, uvB.y, 0f, 0f ) ) );
-		batch.Vertices.Add( new Vertex( c, normal, tangent, new Vector4( uvC.x, uvC.y, 0f, 0f ) ) );
-		batch.Vertices.Add( new Vertex( d, normal, tangent, new Vector4( uvD.x, uvD.y, 0f, 0f ) ) );
+		batch.Vertices.Add( Corner( a, normal, tangent, handedness, uvA ) );
+		batch.Vertices.Add( Corner( b, normal, tangent, handedness, uvB ) );
+		batch.Vertices.Add( Corner( c, normal, tangent, handedness, uvC ) );
+		batch.Vertices.Add( Corner( d, normal, tangent, handedness, uvD ) );
 		AddTriangle( batch, start, start + 1, start + 2 );
 		AddTriangle( batch, start, start + 2, start + 3 );
 
 		Grow( a ); Grow( b ); Grow( c ); Grow( d );
+	}
+
+	/// <summary>A vertex with its tangent's handedness set (see <see cref="Quad(Material, Vector3, Vector3, Vector3, Vector3, Vector2, Vector2, Vector2, Vector2, Vector3?)"/>).</summary>
+	static Vertex Corner( Vector3 position, Vector3 normal, Vector3 tangent, float handedness, Vector2 uv )
+	{
+		var vertex = new Vertex( position, normal, tangent, new Vector4( uv.x, uv.y, 0f, 0f ) );
+		vertex.Tangent = new Vector4( tangent.x, tangent.y, tangent.z, handedness );
+		return vertex;
 	}
 
 	public void Tri( Skin skin, Vector3 a, Vector3 b, Vector3 c )

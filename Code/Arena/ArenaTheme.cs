@@ -64,6 +64,14 @@ public abstract class ArenaTheme
 	public Material Ceiling { get; private set; }
 
 	/// <summary>
+	/// Whether a tile's underside turns with its top (the tile's quarter-turn), so each of the four
+	/// ceiling cells is seen four ways round. For a ceiling with no direction — rough rock — that is
+	/// sixteen looks instead of four; boards, panels and stripes overhead keep one direction across the
+	/// room, so the default is off.
+	/// </summary>
+	public virtual bool CeilingTurns => false;
+
+	/// <summary>
 	/// The room's wall face behind the pilasters, tiled every <see cref="WallRepeat"/> units along the
 	/// wall; vertically one repeat spans tile top to ceiling, so a wall can be composed floor to ceiling.
 	/// One per <see cref="WallCount"/>: a theme whose bays are painted differently (a row of beach huts)
@@ -77,6 +85,15 @@ public abstract class ArenaTheme
 
 	/// <summary>How many wall surfaces the theme paints; each is its own job for <see cref="Bake"/>.</summary>
 	public virtual int WallCount => 1;
+
+	/// <summary>
+	/// Whether a length of wall may wear its surface mirrored along the wall, doubling the looks of a
+	/// pattern with no handedness (rock, a bookcase) without painting more: with three surfaces, "never
+	/// one of the previous two" leaves exactly one choice and the lengths ran A-B-C-A-B-C. With six
+	/// looks the next length need only differ from the one before (<see cref="PickLook"/>). Off by
+	/// default: a beach hut's colour is its look, and a mirror would not make a second hut of it.
+	/// </summary>
+	protected virtual bool MirrorWalls => false;
 
 	/// <summary>
 	/// Width of the wall pattern's module in world units (partition panels, bookcase bays), or 0 for a
@@ -831,7 +848,8 @@ public abstract class ArenaTheme
 	/// edge where the pattern has one (<see cref="WallModule"/>), at its own height where it may
 	/// (<see cref="WallLift"/>), stretched by up to <see cref="MaxWallStretch"/> where the bay is wider
 	/// than a repeat (not for a modular pattern, whose module would no longer fit), and in its own one
-	/// of the <see cref="Walls"/> (<see cref="PickWall"/>). Faces of neighbouring walls meet only along
+	/// of the <see cref="Walls"/> (<see cref="PickWall"/>), or one of them either way round
+	/// (<see cref="PickLook"/>) where the theme allows it. Faces of neighbouring walls meet only along
 	/// the corner edges, so the end lengths run through both corners.
 	/// </summary>
 	void BuildWallFace( FloorContext room, int side, List<(float From, float To)> posts, List<int> huts, bool closing )
@@ -848,11 +866,14 @@ public abstract class ArenaTheme
 			var offset = WallModule > 0f
 				? ModuleOffset( posts[k - 1].To, posts[k].From, random )
 				: (float)random.NextDouble() * span;
-			var wall = PickWall( huts, closing ? posts.Count - k : 0, random );
+			var look = MirrorWalls ? PickLook( huts, closing && k == posts.Count - 1, random ) : PickWall( huts, closing ? posts.Count - k : 0, random ) * 2;
+			var wall = look / 2;
+			var mirror = look % 2 == 1 ? -1f : 1f;
 			var lift = WallLift( wall, random );
 
+			// A mirrored length runs its pattern the other way; a module edge stays a module edge.
 			room.WallFace( side, Walls[wall], start, end, bottom, FloorContext.ClearHeight, Recess, false,
-				( u, v ) => new Vector2( (u + offset) / span, (WallRepeat - v + lift) / WallRepeat ) );
+				( u, v ) => new Vector2( mirror * (u + offset) / span, (WallRepeat - v + lift) / WallRepeat ) );
 			start = end;
 		}
 	}
@@ -895,6 +916,25 @@ public abstract class ArenaTheme
 
 		var pick = candidates[random.Next( candidates.Count )];
 		huts.Add( pick );
+		return pick;
+	}
+
+	/// <summary>
+	/// Which look the next length wears when walls may be mirrored (<see cref="MirrorWalls"/>): one of
+	/// the <see cref="Walls"/> times two, plus one if mirrored. Any of them but the one the length before
+	/// wore (carried round the corners in <paramref name="looks"/>), and for the length that closes the
+	/// room (<paramref name="last"/>) not the first length's either, which it meets round the corner.
+	/// Five choices at every step, so no run settles into a cycle.
+	/// </summary>
+	int PickLook( List<int> looks, bool last, Random random )
+	{
+		var candidates = new List<int>();
+		for ( var look = 0; look < Walls.Length * 2; look++ )
+			if ( looks.Count == 0 || look != looks[^1] && !(last && look == looks[0]) )
+				candidates.Add( look );
+
+		var pick = candidates[random.Next( candidates.Count )];
+		looks.Add( pick );
 		return pick;
 	}
 

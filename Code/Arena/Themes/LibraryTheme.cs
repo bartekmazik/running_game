@@ -51,11 +51,15 @@ public sealed class LibraryTheme : ArenaTheme
 	protected override float WallModule => WallRepeat / 4f;
 
 	/// <summary>
-	/// Three walls of four bookcases each, worn by the lengths of wall in turn (never the same as either
-	/// of the two before): with one, every bay — three and a half to four and a half cases wide — showed
-	/// the same four cases in the same order, and a distinctive shelf came round about thirty times (6b review).
+	/// Three walls of four bookcases each, worn by the lengths of wall either way round (six looks, never
+	/// the one the length before wore): with one, every bay — three and a half to four and a half cases
+	/// wide — showed the same four cases in the same order, and a distinctive shelf came round about
+	/// thirty times (6b review); with three and no mirror, the lengths ran A-B-C-A-B-C.
 	/// </summary>
 	public override int WallCount => 3;
+
+	/// <summary>A bookcase has no handedness: mirrored, its books stand in the other order.</summary>
+	protected override bool MirrorWalls => true;
 
 	/// <summary>The deep shadow a shelf throws over the books under it, and the dark of a leather band.</summary>
 	static Color ShelfShadow => Palette.Hex( 0x1E1512 );

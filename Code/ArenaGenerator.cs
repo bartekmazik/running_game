@@ -307,7 +307,8 @@ public sealed class ArenaGenerator : Component
 	///     stays on the chamfer's foot, where it reads from above.
 	///   * underside: the ceiling of the room below, full size and unchamfered, so neighbouring
 	///     undersides meet edge to edge and read as one ceiling; the cell with the same index as the
-	///     top, unturned, so boards and stripes keep one direction across the room.
+	///     top, unturned, so boards and stripes keep one direction across the room — or turned with the
+	///     top where the ceiling has no direction (<see cref="ArenaTheme.CeilingTurns"/>).
 	/// Built from quads rather than MeshKit.BevelBox: a bevel box chamfers the bottom edges too, and
 	/// those strips framed every ceiling panel in the floor's colour.
 	/// </summary>
@@ -364,10 +365,21 @@ public sealed class ArenaGenerator : Component
 				T( sideOuter, -half ), T( sideOuter, half ), T( sideInner, half ), T( sideInner, -half ), Vector3.Up );
 		}
 
-		// Anticlockwise seen from below.
-		kit.Quad( new Skin( below.Ceiling, region ),
-			new Vector3( -half, half, -top ), new Vector3( half, half, -top ),
-			new Vector3( half, -half, -top ), new Vector3( -half, -half, -top ) );
+		// Anticlockwise seen from below. A ceiling with no direction turns with the top (CeilingTurns):
+		// the cell's corners, as the unturned quad maps them, quarter-turned about the cell's middle.
+		var under = new[] { new Vector3( -half, half, -top ), new Vector3( half, half, -top ), new Vector3( half, -half, -top ), new Vector3( -half, -half, -top ) };
+		if ( !below.CeilingTurns )
+			kit.Quad( new Skin( below.Ceiling, region ), under[0], under[1], under[2], under[3] );
+		else
+		{
+			Vector2 Under( float u, float v )
+			{
+				var (x, y) = (u - 0.5f, v - 0.5f);
+				for ( var k = 0; k < turn; k++ ) (x, y) = (-y, x);
+				return new Vector2( region.Left + (x + 0.5f) * region.Width, region.Top + (y + 0.5f) * region.Height );
+			}
+			kit.Quad( below.Ceiling, under[0], under[1], under[2], under[3], Under( 0f, 1f ), Under( 1f, 1f ), Under( 1f, 0f ), Under( 0f, 0f ) );
+		}
 
 		return kit.Build( $"arena_tile_{self.Floor}_{cell}_{turn}" );
 	}
