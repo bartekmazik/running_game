@@ -186,6 +186,8 @@ public sealed class MeshKit
 	/// <summary>
 	/// Spins a (radius, height) profile around the local Z axis — pots, lamps, pillars, bottles, cones.
 	/// Faceted: each segment is its own quad, so a 10-sided pot reads as a crafted object.
+	/// Profile order matters: bottom to top. Listed top to bottom, the solid turns inside out (faces wind inward).
+	/// Caps keep explicit facing (bottom -up, top +up) since a fan's winding depends on which end it closes.
 	/// </summary>
 	public void Lathe( Skin skin, Vector3 baseCenter, Vector2[] profile, int sides, Rotation rotation, bool capBottom = true, bool capTop = true )
 	{
@@ -202,17 +204,18 @@ public sealed class MeshKit
 			var b = Ring( s + 1, profile[p] );
 			var c = Ring( s + 1, profile[p + 1] );
 			var d = Ring( s, profile[p + 1] );
-			var mid = (a + b + c + d) * 0.25f;
-			var axisPoint = baseCenter + rotation * new Vector3( 0f, 0f, (profile[p].y + profile[p + 1].y) * 0.5f );
-			var outward = mid - axisPoint;
-
 			var bottomApex = profile[p].x <= 0.0001f;
 			var topApex = profile[p + 1].x <= 0.0001f;
 
 			if ( bottomApex && topApex ) continue;
-			if ( topApex ) TriFacing( skin, outward, a, b, c );        // c == d: cone tip above
-			else if ( bottomApex ) TriFacing( skin, outward, a, c, d ); // a == b: cone tip below
-			else QuadFacing( skin, outward, a, b, c, d );
+			// Wound by construction, not by an outward test (a horizontal ledge has no radial component to test).
+			// Sweep is anticlockwise about +Z and the profile runs bottom to top, so cross( b - a, d - a ) points outward
+			// on a vertical wall, down where the radius grows, up where it shrinks: right for a solid of revolution,
+			// and rotation preserves handedness. Apex cases keep the quad's triangles: (a,b,c) when c == d,
+			// (a,c,d) when a == b, so their normals equal the quad's.
+			if ( topApex ) Tri( skin, a, b, c );
+			else if ( bottomApex ) Tri( skin, a, c, d );
+			else Quad( skin, a, b, c, d );
 		}
 
 		var up = rotation * Vector3.Up;
