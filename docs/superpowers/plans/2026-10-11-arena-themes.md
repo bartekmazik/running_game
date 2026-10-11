@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- `Arena` constants unchanged: GridSize 30, TileSize 56, TileThickness 12, FloorCount 8, FloorGap 220, LavaOffset 250.
+- `Arena` constants unchanged: GridSize 30, TileSize 56, TileThickness 12, FloorCount 8, FloorGap 220 (raised to 280 in Task 6c per user request, R35 in the SDD ledger), LavaOffset 250.
 - Tiles keep position, 56×56×12 box collision, `Enabled=false` lifecycle, arithmetic lookup, batched collapse RPC.
 - Everything generated is `GameObjectFlags.NotSaved` + `NetworkMode.Never`, deterministic from constant seeds.
 - `ModelRenderer.Tint` ≤ 1 per channel. `Light.LightColor` may exceed 1.
@@ -964,13 +964,13 @@ public sealed class FloorContext
 {
 	public int Floor { get; init; }
 	public float TileTopZ { get; init; }          // local z of this floor's walkable surface
-	public float CeilingZ { get; init; }          // local z of the underside above (TileTopZ + 208), roof base for floor 0
+	public float CeilingZ { get; init; }          // local z of the underside above (TileTopZ + ClearHeight; 268 since Task 6c), roof base for floor 0
 	public float BottomZ { get; init; }           // local z where this floor's wall segment starts (tile underside, or lava for floor 7)
 	public MeshKit Kit { get; init; }             // this floor's batch; everything the theme adds lands in one Model
 	public ArenaTheme Theme { get; init; }
 	public const float HalfSpan = Arena.GridSize * Arena.TileSize * 0.5f; // 840
 	public const float WallThickness = 64f;
-	public const float ClearHeight = Arena.FloorGap - Arena.TileThickness; // 208
+	public const float ClearHeight = Arena.FloorGap - Arena.TileThickness; // 268 since Task 6c (was 208)
 
 	/// <summary>Wall-space → room-local: side 0..3 (+X,+Y,-X,-Y), u along the wall from its left end
 	/// (0..1680, seen from inside), v up from the tile top, depth into the wall (0 = grid edge, + = into wall).</summary>
