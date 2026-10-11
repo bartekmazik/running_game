@@ -46,6 +46,15 @@ public sealed class Painter
 	readonly float[] _height;
 	readonly float[] _roughness;
 
+	/// <summary>
+	/// Scratch fields for the whole-surface passes (noise for Mottle and friends, the two blur passes),
+	/// made once per canvas and reused: every arena surface is painted in one go at load, and a fresh
+	/// 4 MB array per pass piled up enough large-object garbage to stall the build for a collection.
+	/// </summary>
+	float[] _scratchNoise;
+	float[] _scratchBlur;
+	float[] _scratchBlurOut;
+
 	/// <summary>A square canvas of <paramref name="size"/> pixels, filled with one colour at zero height and one roughness (0 = mirror, 1 = chalk).</summary>
 	public Painter( int size, Color fill, float roughness = 0.75f )
 	{
@@ -366,10 +375,20 @@ public sealed class Painter
 	/// lattice cells across the texture for the coarsest octave (each further octave doubles it); it
 	/// need not divide the size, because the lattice repeats after exactly one texture width either way.
 	/// </summary>
-	float[] Fbm( int period, int seed, int octaves )
+	float[] Fbm( int period, int seed, int octaves ) => Fbm( new float[Size * Size], period, seed, octaves );
+
+	/// <summary>Fractal noise into the canvas's own scratch field, for passes that use it once and drop it.</summary>
+	float[] ScratchFbm( int period, int seed, int octaves )
+	{
+		if ( _scratchNoise is null ) _scratchNoise = new float[Size * Size];
+		else Array.Clear( _scratchNoise );
+		return Fbm( _scratchNoise, period, seed, octaves );
+	}
+
+	/// <summary>Adds the octaves into <paramref name="field"/>, which must start at zero.</summary>
+	float[] Fbm( float[] field, int period, int seed, int octaves )
 	{
 		octaves = Math.Clamp( octaves, 1, MaxOctaves );
-		var field = new float[Size * Size];
 
 		// Amplitudes halve per octave and are pre-divided by their sum, so the field lands in 0..1.
 		var amplitude = 0.5f / (1f - MathF.Pow( 0.5f, octaves ));
@@ -474,6 +493,26 @@ public sealed class Painter
 		}
 	}
 
+	/// <summary>
+	/// The per-pixel counterpart of <see cref="Blend(float[], Color, float, float)"/> for surfaces made
+	/// of many pieces computed per pixel — planks, stones, column tops — each with a colour of its own:
+	/// every pixel moves toward <paramref name="palette"/>[<paramref name="index"/>] by that entry's
+	/// alpha, so an entry with alpha 0 (by convention entry 0) leaves its pixels alone. One pass and no
+	/// weight array, where a Blend per colour would cost a pass and a full-size array each.
+	/// </summary>
+	public void Blend( byte[] index, Color[] palette )
+	{
+		for ( var i = 0; i < index.Length; i++ )
+		{
+			var color = palette[index[i]];
+			var w = color.a;
+			if ( w <= 0f ) continue;
+			_red[i] += (color.r - _red[i]) * w;
+			_green[i] += (color.g - _green[i]) * w;
+			_blue[i] += (color.b - _blue[i]) * w;
+		}
+	}
+
 	/// <summary>Adds <paramref name="amount"/> × <paramref name="delta"/> to the height channel, pixel for pixel — for relief computed outside the canvas (ripples, weave).</summary>
 	public void AddHeight( float[] delta, float amount )
 	{
@@ -484,7 +523,7 @@ public sealed class Painter
 	/// <summary>Soft blotchy brightness variation so large surfaces do not read as one flat fill.</summary>
 	public void Mottle( float amount, int period, int seed, int octaves = 4 )
 	{
-		var noise = Fbm( period, seed, octaves );
+		var noise = ScratchFbm( period, seed, octaves );
 		for ( var i = 0; i < noise.Length; i++ )
 		{
 			var k = 1f + (noise[i] - 0.5f) * 2f * amount;
@@ -495,10 +534,14 @@ public sealed class Painter
 	/// <summary>Fine per-pixel luminance noise; keeps flat colour from looking digital.</summary>
 	public void Grain( float amount, int seed )
 	{
-		var random = new System.Random( seed );
+		// An inline xorshift rather than System.Random: a call per pixel was a measurable share of
+		// every surface's cost in the unoptimised build, and grain needs no better randomness.
+		var state = (uint)seed * 2654435761u | 1u;
+		var scale = 2f * amount / 16777216f;
 		for ( var i = 0; i < _red.Length; i++ )
 		{
-			var k = 1f + ((float)random.NextDouble() - 0.5f) * 2f * amount;
+			state ^= state << 13; state ^= state >> 17; state ^= state << 5;
+			var k = 1f - amount + (state >> 8) * scale;
 			_red[i] *= k; _green[i] *= k; _blue[i] *= k;
 		}
 	}
@@ -506,7 +549,7 @@ public sealed class Painter
 	/// <summary>Uneven surface relief (not colour), so the normal map breaks up perfectly flat faces.</summary>
 	public void HeightNoise( float amount, int period, int seed, int octaves = 4 )
 	{
-		var noise = Fbm( period, seed, octaves );
+		var noise = ScratchFbm( period, seed, octaves );
 		for ( var i = 0; i < noise.Length; i++ )
 			_height[i] += (noise[i] - 0.5f) * amount;
 	}
@@ -514,7 +557,7 @@ public sealed class Painter
 	/// <summary>Patchy variation of the finish — smudges, polished tracks, dull spots — so the sheen is never uniform.</summary>
 	public void RoughnessNoise( float amount, int period, int seed, int octaves = 4 )
 	{
-		var noise = Fbm( period, seed, octaves );
+		var noise = ScratchFbm( period, seed, octaves );
 		for ( var i = 0; i < noise.Length; i++ )
 			_roughness[i] += (noise[i] - 0.5f) * 2f * amount;
 	}
@@ -550,7 +593,7 @@ public sealed class Painter
 
 		// Patches roughly eight wear radii across, whatever the texture size; three octaves are
 		// plenty for a mask that only shows along edges.
-		var patches = Fbm( Math.Max( 2, Size / (radius * 8) ), seed, 3 );
+		var patches = ScratchFbm( Math.Max( 2, Size / (radius * 8) ), seed, 3 );
 
 		for ( var i = 0; i < blurred.Length; i++ )
 		{
@@ -574,13 +617,13 @@ public sealed class Painter
 	/// <summary>
 	/// Separable box blur of the height field, wrapping at the edges so the result stays seamless.
 	/// Running sums keep it linear in pixels whatever the radius; the vertical pass walks rows so it
-	/// reads memory in order.
+	/// reads memory in order. The result lives in a scratch field: use it before the next blur.
 	/// </summary>
 	float[] BlurHeight( int radius )
 	{
 		var size = Size;
-		var horizontal = new float[size * size];
-		var output = new float[size * size];
+		var horizontal = _scratchBlur ??= new float[size * size];
+		var output = _scratchBlurOut ??= new float[size * size];
 		var weight = 1f / (2 * radius + 1);
 
 		// Which pixel enters and which leaves the window when it steps past position p.

@@ -87,6 +87,23 @@ public abstract class ArenaTheme
 	protected static Color Mix( Color a, Color b, float t ) => new( a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t );
 
 	/// <summary>
+	/// A well-mixed hash of three integers, for properties of things a surface computes per pixel —
+	/// one plank, one stone, one boss — where a <see cref="Random"/> stream cannot be used because the
+	/// same thing is met again on every pixel it covers. Read different bit ranges for independent values.
+	/// </summary>
+	protected static uint Hash( int a, int b, int c )
+	{
+		var h = (uint)(a * 73856093) ^ (uint)(b * 19349663) ^ (uint)(c * 83492791);
+		h ^= h >> 16; h *= 0x7feb352du;
+		h ^= h >> 15; h *= 0x846ca68bu;
+		h ^= h >> 16;
+		return h;
+	}
+
+	/// <summary>Eight bits of a hash as 0..1: <paramref name="shift"/> picks which eight.</summary>
+	protected static float Bits( uint hash, int shift ) => ((hash >> shift) & 0xFF) / 255f;
+
+	/// <summary>
 	/// The outline of one hand-laid block inside an atlas cell, in pixels: a rounded rectangle whose
 	/// four sides sit different distances in from the cell edge (so the joint changes width around the
 	/// block), whose corners have different radii, and whose sides wander by up to
@@ -313,53 +330,5 @@ public abstract class ArenaTheme
 				mask[row + x] *= t <= 0f ? 0f : t * t * (3f - 2f * t);
 			}
 		}
-	}
-
-	/// <summary>
-	/// A plain but honest block surface: four blocks per atlas with uneven joints, a bevelled edge in
-	/// height, a tone shift per block, crevice darkening and soft colour drift. Floors 4–7 wear this
-	/// until their full surfaces are painted (Task 4b).
-	/// </summary>
-	protected Material PaintPlainFloor( Color baseColor, Color light, Color shade, float roughness )
-	{
-		var painter = new Painter( FloorSize, Mix( shade, Color.Black, 0.25f ), 0.95f );
-		var random = new Random( Seed );
-		var cell = FloorSize / 2;
-
-		for ( var c = 0; c < 4; c++ )
-		{
-			var tone = (float)random.NextDouble() * 2f - 1f;
-			var color = tone < 0f ? Mix( baseColor, shade, -tone * 0.5f ) : Mix( baseColor, light, tone * 0.5f );
-			var outline = SlabOutline( CellOrigin( c, FloorSize ), cell, 4f, 2.5f, 10f, Seed + c * 101 );
-			painter.Polygon( outline, color, height: 1f, bevel: Rim, roughness: roughness );
-		}
-
-		painter.HeightNoise( 0.8f, 4, Seed + 1, 5 );
-		painter.Mottle( 0.07f, 4, Seed + 2, 5 );
-		painter.Cavity( 0.45f, 8 );
-		painter.Grain( 0.015f, Seed + 3 );
-		return painter.ToMaterial( $"arena_{Floor}_floor", Painter.Matte, 8f );
-	}
-
-	/// <summary>The plain counterpart for ceilings: four undersides per atlas, same treatment at half the resolution.</summary>
-	protected Material PaintPlainCeiling( Color baseColor, Color light, Color shade, float roughness )
-	{
-		var painter = new Painter( CeilingSize, Mix( shade, Color.Black, 0.25f ), 0.95f );
-		var random = new Random( Seed + 500 );
-		var cell = CeilingSize / 2;
-
-		for ( var c = 0; c < 4; c++ )
-		{
-			var tone = (float)random.NextDouble() * 2f - 1f;
-			var color = tone < 0f ? Mix( baseColor, shade, -tone * 0.5f ) : Mix( baseColor, light, tone * 0.5f );
-			var outline = SlabOutline( CellOrigin( c, CeilingSize ), cell, 3f, 1f, 6f, Seed + 500 + c * 101 );
-			painter.Polygon( outline, color, height: 1f, bevel: 6f, roughness: roughness );
-		}
-
-		painter.HeightNoise( 0.5f, 4, Seed + 501, 4 );
-		painter.Mottle( 0.07f, 4, Seed + 502, 5 );
-		painter.Cavity( 0.45f, 4 );
-		painter.Grain( 0.015f, Seed + 503 );
-		return painter.ToMaterial( $"arena_{Floor}_ceiling", Painter.Matte, 5f );
 	}
 }

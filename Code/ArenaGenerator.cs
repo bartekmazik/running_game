@@ -286,9 +286,14 @@ public sealed class ArenaGenerator : Component
 			kit.Quad( surface,
 				P( half, -half, shoulder ), P( half, half, shoulder ), P( inner, inner, top ), P( inner, -inner, top ),
 				T( unfolded, -half ), T( unfolded, half ), T( inner, inner ), T( inner, -inner ) );
+			// The side's bottom edge (a, b) takes the outer UVs and its top edge (c, d) the inner ones,
+			// as on the chamfer above, where going up the face also moves inward on the unfolded cell.
+			// For the +X face that gives +U pointing down the face and +V along −Y: U × V = −X, the
+			// same sign against the outward normal as the top face (U × V = −Z) and the chamfer. The
+			// other way round the tangent frame is mirrored and the normal map's slopes flip.
 			kit.Quad( surface,
 				P( half, -half, -top ), P( half, half, -top ), P( half, half, shoulder ), P( half, -half, shoulder ),
-				T( foot, -half ), T( foot, half ), T( unfolded, half ), T( unfolded, -half ) );
+				T( unfolded, -half ), T( unfolded, half ), T( foot, half ), T( foot, -half ) );
 		}
 
 		// Anticlockwise seen from below.
