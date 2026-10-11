@@ -701,15 +701,17 @@ public sealed class GreenhouseTheme : ArenaTheme
 		Skin Foliage( Rect region, float v ) => new( v < EyeLevel ? _leaves : _trim, region );
 
 		/// <summary>
-		/// A leaf from <paramref name="root"/> toward <paramref name="direction"/>, its face toward
-		/// <paramref name="up"/> (default: the sky). One that would reach out of bounds — in front of the bay
-		/// below <see cref="WallProps.Clear"/>, too far over the room above it — is turned back toward the
-		/// glass, and if its curl or its width still carry it out, grown smaller; one that would go through
+		/// A leaf from <paramref name="root"/> toward <paramref name="direction"/>, its face toward the sky —
+		/// or, <paramref name="onGlass"/>, laid against the glass facing the room, where its back is never
+		/// seen: one-sided on the back-drawing copy at any height, half the faces. One that would reach out of
+		/// bounds — in front of the bay below <see cref="WallProps.Clear"/>, too far over the room above it —
+		/// is turned back toward the glass, and if its curl or its width still carry it out, grown smaller; one that would go through
 		/// the glass is shortened. A broad leaf gets a third segment, to curve.
 		/// </summary>
-		void Leaf( Vector3 root, Vector3 direction, float length, float width, float bend, float fold, Rect skin, float tip = 0.1f, float widest = 0.45f, Vector3 up = default )
+		void Leaf( Vector3 root, Vector3 direction, float length, float width, float bend, float fold, Rect skin, float tip = 0.1f, float widest = 0.45f, bool onGlass = false )
 		{
 			direction = direction.Normal;
+			var up = onGlass ? new Vector3( 0f, -1f, 0f ) : default;
 			var roll = Range( -25f, 25f );
 			// A little over a unit spare for the curl between the points Reach samples and the roll of the edges.
 			var nearest = Nearest( MathF.Min( root.z, root.z + direction.z * length ) ) + 1.2f;
@@ -729,7 +731,8 @@ public sealed class GreenhouseTheme : ArenaTheme
 			if ( direction.y > 0f && root.y + direction.y * length > Face ) length = MathF.Max( 0.6f, (Face - root.y) / direction.y );
 			// A third segment only where a leaf is big enough for its curl to show.
 			var segments = length > 14f ? 3 : 2;
-			Kit.Blade( Foliage( skin, root.z ), At( root ), Turn( aim ), length, width, bend, fold, segments, tip, widest, root.z < EyeLevel );
+			var single = onGlass || root.z < EyeLevel;
+			Kit.Blade( new Skin( single ? _leaves : _trim, skin ), At( root ), Turn( aim ), length, width, bend, fold, segments, tip, widest, single );
 		}
 
 		/// <summary>
@@ -789,7 +792,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 			Kit.SmoothLathe( TrimSkin( PotSwatch( clay ) ), At( foot ), profile, sides, Run, false, false, 40f, 0.25f + Range( -0.1f, 0.1f ) );
 
 			var middle = foot + Vector3.Up * (soil ? fill : floor);
-			if ( open ) Kit.Ellipsoid( TrimSkin( SoilSwatch( soil ? Pick( 2 ) : 1 ) ), At( middle ), soil ? new Vector3( inner, inner, r * 0.07f ) : new Vector3( r * 0.66f, r * 0.66f, 0.3f ), Run, 2, sides );
+			if ( open ) Kit.Dome( TrimSkin( SoilSwatch( soil ? Pick( 2 ) : 1 ) ), At( middle ), soil ? new Vector3( inner, inner, r * 0.07f ) : new Vector3( r * 0.66f, r * 0.66f, 0.3f ), Run, 1, sides );
 			return middle + Vector3.Up * (soil ? r * 0.05f : 0.2f);
 		}
 
@@ -814,16 +817,19 @@ public sealed class GreenhouseTheme : ArenaTheme
 
 		void Grow( Plant plant, Vector3 at, float size )
 		{
-			switch ( plant )
+			Apart( () =>
 			{
-				case Plant.Bushy: Bushy( at, size, Next() < 0.35f ); break;
-				case Plant.Strap: Strap( at, size ); break;
-				case Plant.Shrub: Shrub( at, size, size > 18f && Next() < 0.6f ); break;
-				case Plant.Fern: Fern( at, size, false ); break;
-				case Plant.Tall: Tall( at, size ); break;
-				case Plant.BigLeaf: BigLeaf( at, size ); break;
-				default: Succulent( at, size ); break;
-			}
+				switch ( plant )
+				{
+					case Plant.Bushy: Bushy( at, size, Next() < 0.35f ); break;
+					case Plant.Strap: Strap( at, size ); break;
+					case Plant.Shrub: Shrub( at, size, size > 18f && Next() < 0.6f ); break;
+					case Plant.Fern: Fern( at, size, false ); break;
+					case Plant.Tall: Tall( at, size ); break;
+					case Plant.BigLeaf: BigLeaf( at, size ); break;
+					default: Succulent( at, size ); break;
+				}
+			} );
 		}
 
 		/// <summary>A soft-stemmed leafy plant (a pelargonium, basil): several leaning stems with broad leaves at the nodes, some in flower.</summary>
@@ -914,30 +920,35 @@ public sealed class GreenhouseTheme : ArenaTheme
 			}
 		}
 
+		/// <summary>How far a frond's leaflets are lifted off its rib, as a share of their length: a shallow V.</summary>
+		const float Fold = 0.3f;
+
 		/// <summary>
 		/// A fern: fronds rising and arching over (or, <paramref name="hanging"/> from a basket, spilling down
 		/// over its rim) — see <see cref="Frond"/>.
 		/// </summary>
 		void Fern( Vector3 at, float size, bool hanging )
 		{
-			var fronds = (hanging ? 9 : 8) + Pick( 4 );
+			var fronds = (hanging ? 8 : 7) + Pick( 3 );
 			var spin = Next() * MathF.Tau;
 			for ( var f = 0; f < fronds; f++ )
 			{
 				var rise = hanging ? Range( 0.2f, 0.9f ) : Range( 0.7f, 1.3f );
-				Frond( at, spin + f * 2.4f + Range( -0.25f, 0.25f ), rise, rise + Range( 1.1f, 1.9f ), size * Range( 0.7f, 1.15f ), Range( 0.2f, 0.26f ), 0.7f, LeafSwatch( 5 ), 1.9f );
+				Frond( at, spin + f * 2.4f + Range( -0.25f, 0.25f ), rise, rise + Range( 1.1f, 1.9f ), size * Range( 0.7f, 1.15f ), Range( 0.24f, 0.3f ), LeafSwatch( 5 ), 1.5f, 0.6f, 1f );
 			}
 		}
 
 		/// <summary>
-		/// One pinnate frond — a fern's, a palm's: a long blade from <paramref name="root"/> heading
+		/// One pinnate frond — a fern's, a palm's: a rib from <paramref name="root"/> heading
 		/// <paramref name="yaw"/>, rising at <paramref name="rise"/> radians and arching over by
-		/// <paramref name="bend"/>, its edge toothed into leaflets (a pinnate texture does the rest).
-		/// Grown shorter where the arch would carry it out of bounds: in front of the bay below
-		/// <see cref="Clear"/>, further than <see cref="Overhang"/> over the room above it, through the glass,
-		/// or down past <see cref="Clear"/> while out over the room.
+		/// <paramref name="bend"/>, with a pair of leaflets every 2 × <paramref name="leaflet"/> units or so,
+		/// swept toward the tip by <paramref name="sweep"/> of their reach and standing on
+		/// <paramref name="spread"/> of their share of the rib (see <see cref="MeshKit.Pinnate"/>; a pinnate
+		/// texture does the rest). Grown shorter where the arch would carry it out of bounds: in front of the
+		/// bay below <see cref="Clear"/>, further than <see cref="Overhang"/> over the room above it, through
+		/// the glass, or down past <see cref="Clear"/> while out over the room.
 		/// </summary>
-		void Frond( Vector3 root, float yaw, float rise, float bend, float length, float width, float teeth, Rect skin, float leaflet = 2.2f )
+		void Frond( Vector3 root, float yaw, float rise, float bend, float length, float width, Rect skin, float leaflet, float sweep, float spread )
 		{
 			// The arch is a circle: its reach and its drop per unit of length follow from where it starts and how far it turns.
 			var reach = (MathF.Sin( rise ) - MathF.Sin( rise - bend )) / bend;
@@ -945,15 +956,16 @@ public sealed class GreenhouseTheme : ArenaTheme
 			var heading = Flat( yaw );
 			var high = root.z >= Clear;
 			var nearest = high ? -Overhang : Front;
-			// The frond's edge stands half its width (a share of its length) to the side of its rib.
-			if ( heading.y < -0.05f ) length = MathF.Min( length, (root.y - nearest - 2f) / (-heading.y * reach + width * 0.5f) );
+			// A leaflet's point stands half the frond's width (a share of its length) to the side of the rib, and
+			// a little more lifted off it by the fold.
+			if ( heading.y < -0.05f ) length = MathF.Min( length, (root.y - nearest - 2f) / (-heading.y * reach + width * 0.5f * (1f + Fold)) );
 			if ( heading.y > 0.05f ) length = MathF.Min( length, (Face - root.y - 1f) / (heading.y * reach) );
 			if ( high && drop > 0f ) length = MathF.Min( length, (root.z - Clear - 2f) / drop );
 			if ( length < 4f ) return;
 
 			var direction = heading * MathF.Cos( rise ) + Vector3.Up * MathF.Sin( rise );
-			Kit.Blade( Foliage( skin, root.z ), At( root ), Turn( Aim( direction, Range( -12f, 12f ) ) ), length, length * width, bend, 0.18f,
-				Math.Clamp( (int)(length / (leaflet * 3f)), 5, 11 ), 0.08f, 0.35f, root.z < EyeLevel, teeth );
+			Kit.Pinnate( Foliage( skin, root.z ), At( root ), Turn( Aim( direction, Range( -12f, 12f ) ) ), length, length * width, bend,
+				Math.Clamp( (int)(length / (leaflet * 2f)), 6, 16 ), Fold, sweep, spread, 0.08f, 0.35f, root.z < EyeLevel );
 		}
 
 		/// <summary>A tall leafy plant tied to a cane (a young tomato, a fig cutting): a stem winding up beside the cane, leaves alternating up it.</summary>
@@ -1025,15 +1037,15 @@ public sealed class GreenhouseTheme : ArenaTheme
 				for ( var low = 1 + Pick( 2 ); low > 0; low-- )
 				{
 					var rise = Range( 0.3f, 0.8f );
-					Frond( Along( stem, Range( 0.45f, 0.75f ) ), Next() * MathF.Tau, rise, rise + Range( 1f, 1.6f ), Range( 26f, 36f ), Range( 0.3f, 0.36f ), 0.8f, PalmSwatch, 1.6f );
+					Frond( Along( stem, Range( 0.45f, 0.75f ) ), Next() * MathF.Tau, rise, rise + Range( 1f, 1.6f ), Range( 26f, 36f ), Range( 0.3f, 0.36f ), PalmSwatch, 1.6f, 0.8f, 0.7f );
 				}
 
-				var fronds = 7 + Pick( 3 );
+				var fronds = 8 + Pick( 4 );
 				var spin = Next() * MathF.Tau;
 				for ( var f = 0; f < fronds; f++ )
 				{
 					var rise = Range( 0.6f, 1.3f );
-					Frond( crown, spin + f * MathF.Tau / fronds + Range( -0.3f, 0.3f ), rise, rise + Range( 0.9f, 1.6f ), Range( 38f, 52f ), Range( 0.3f, 0.36f ), 0.8f, PalmSwatch, 1.6f );
+					Frond( crown, spin + f * MathF.Tau / fronds + Range( -0.3f, 0.3f ), rise, rise + Range( 0.9f, 1.6f ), Range( 38f, 52f ), Range( 0.3f, 0.36f ), PalmSwatch, 1.6f, 0.8f, 0.7f );
 				}
 			}
 		}
@@ -1088,7 +1100,6 @@ public sealed class GreenhouseTheme : ArenaTheme
 		void Vine( Vector3 foot, float top )
 		{
 			var leaf = LeafSwatch( Next() < 0.5f ? 1 : 0 );
-			var toRoom = new Vector3( 0f, -1f, 0f );
 			var height = top - foot.z;
 			var phase = Next() * MathF.Tau;
 			var sway = Range( 6f, 16f );
@@ -1127,7 +1138,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 					flip = -flip;
 					var length = Range( 7f, 11.5f ) * (path == stem ? 1f : 0.8f);
 					Leaf( Along( path, d / span ), new Vector3( flip * Range( 0.6f, 1f ), -Range( 0.05f, 0.2f ), Range( -0.7f, 0.2f ) ), length, length * Range( 0.8f, 0.95f ),
-						0.25f, -0.1f, leaf, 0.25f, 0.45f, toRoom );
+						0.25f, -0.1f, leaf, 0.25f, 0.45f, true );
 				}
 			}
 		}
@@ -1168,8 +1179,8 @@ public sealed class GreenhouseTheme : ArenaTheme
 			for ( var l = (int)((u1 - u0) / 22f); l > 0; l-- )
 			{
 				var r = Range( 2f, 5f );
-				Kit.Ellipsoid( TrimSkin( SoilSwatch( Pick( 2 ) ) ), At( new Vector3( Range( u0 + r, u1 - r ), Range( front + r + 1f, Skirt - r ), soil ) ), new Vector3( r, r * Range( 0.6f, 1f ), r * 0.22f ),
-					Turn( Rotation.FromYaw( Next() * 180f ) ), 2, 6 );
+				Kit.Dome( TrimSkin( SoilSwatch( Pick( 2 ) ) ), At( new Vector3( Range( u0 + r, u1 - r ), Range( front + r + 1f, Skirt - r ), soil ) ), new Vector3( r, r * Range( 0.6f, 1f ), r * 0.22f ),
+					Turn( Rotation.FromYaw( Next() * 180f ) ), 1, 6 );
 			}
 
 			var previous = (Plant)(-1);
@@ -1191,7 +1202,9 @@ public sealed class GreenhouseTheme : ArenaTheme
 				Kit.Ellipsoid( TrimSkin( FoliageSwatch( Pick( 3 ) ) ), At( new Vector3( u, front + r.y + 0.3f, soil + r.z * 0.4f ) ), r, Turn( Rotation.FromYaw( Range( -15f, 15f ) ) ), 3, 7 );
 			}
 
-			Vine( new Vector3( Range( u0 + 8f, u1 - 8f ), Face - 3f, soil ), Range( 150f, 235f ) );
+			var vine = new Vector3( Range( u0 + 8f, u1 - 8f ), Face - 3f, soil );
+			var reach = Range( 150f, 235f );
+			Apart( () => Vine( vine, reach ) );
 		}
 
 		/// <summary>
@@ -1286,7 +1299,11 @@ public sealed class GreenhouseTheme : ArenaTheme
 					_ => r * Range( 2.2f, 2.9f ),
 				};
 				Grow( plant, soil, size );
-				if ( i == big && Next() < 0.5f ) Vine( soil + new Vector3( 0f, r * 0.6f, 0f ), Range( 140f, 220f ) );
+				if ( i == big && Next() < 0.5f )
+				{
+					var reach = Range( 140f, 220f );
+					Apart( () => Vine( soil + new Vector3( 0f, r * 0.6f, 0f ), reach ) );
+				}
 				u += 2f * r + Range( 1f, 6f );
 			}
 
@@ -1300,7 +1317,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 			const float R = 15.5f;
 			var middle = bay.Middle + Range( -bay.Width * 0.15f, bay.Width * 0.15f );
 			var soil = Pot( new Vector3( middle, Front + R * 1.05f + 0.8f, Ledge ), R, Next() < 0.5f ? 6 + Pick( 2 ) : Clay( false ), true );
-			Palm( soil );
+			Apart( () => Palm( soil ) );
 			for ( var side = -1; side <= 1; side += 2 )
 			{
 				if ( Next() < 0.4f ) continue;
@@ -1331,10 +1348,13 @@ public sealed class GreenhouseTheme : ArenaTheme
 				var r = Range( 4f, 6.5f );
 				var soil = Pot( new Vector3( u + r, Math.Clamp( Range( 28f, 32f ), 22.5f + r, Face - r * 1.05f ), v ), r, Clay(), true );
 				var p = Next();
-				if ( p < 0.35f ) Trail( soil + new Vector3( 0f, -r * 0.9f, 0f ), Range( 16f, 40f ) );
-				else if ( p < 0.6f ) Succulent( soil, r * Range( 1.4f, 1.9f ) );
-				else if ( p < 0.85f ) Bushy( soil, r * Range( 2.4f, 3.2f ), Next() < 0.4f );
-				else for ( var k = 0; k < 2; k++ ) Seedling( soil + new Vector3( Range( -r, r ) * 0.5f, Range( -r, r ) * 0.5f, 0f ), Range( 1.8f, 2.8f ), LeafSwatch( 2 ) );
+				Apart( () =>
+				{
+					if ( p < 0.35f ) Trail( soil + new Vector3( 0f, -r * 0.9f, 0f ), Range( 16f, 40f ) );
+					else if ( p < 0.6f ) Succulent( soil, r * Range( 1.4f, 1.9f ) );
+					else if ( p < 0.85f ) Bushy( soil, r * Range( 2.4f, 3.2f ), Next() < 0.4f );
+					else for ( var k = 0; k < 2; k++ ) Seedling( soil + new Vector3( Range( -r, r ) * 0.5f, Range( -r, r ) * 0.5f, 0f ), Range( 1.8f, 2.8f ), LeafSwatch( 2 ) );
+				} );
 				u += 2f * r + Range( 2.5f, 6f );
 			}
 		}
@@ -1354,7 +1374,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 			}
 			profile[5] = new Vector2( r + 0.5f, r * 0.85f + 0.4f );
 			Kit.SmoothLathe( TrimSkin( CoirSwatch ), At( centre - Vector3.Up * r * 0.85f ), profile, 10, Run, false, false, 50f, Next() );
-			Kit.Ellipsoid( TrimSkin( SoilSwatch( 1 ) ), At( centre ), new Vector3( r, r, r * 0.12f ), Run, 2, 10 );
+			Kit.Dome( TrimSkin( SoilSwatch( 1 ) ), At( centre ), new Vector3( r, r, r * 0.12f ), Run, 1, 10 );
 
 			var hook = new Vector3( u, depth, FloorContext.ClearHeight - 22f );
 			var spin = Next() * MathF.Tau;
@@ -1363,7 +1383,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 				var point = centre + Flat( spin + c * MathF.Tau / 3f ) * (r + 0.3f) + Vector3.Up * 0.4f;
 				Kit.Tube( TrimSkin( IronSwatch ), At( new[] { point, hook } ), 0.16f, 3 );
 			}
-			Fern( centre + Vector3.Up * 0.5f, Range( 30f, 42f ), true );
+			Apart( () => Fern( centre + Vector3.Up * 0.5f, Range( 30f, 42f ), true ) );
 		}
 
 		// ---- Things ----------------------------------------------------------------------------
@@ -1376,7 +1396,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 			var rotation = Rotation.FromYaw( Range( -4f, 4f ) );
 			Kit.Box( TrimSkin( Next() < 0.5f ? CedarSwatch : GreyWoodSwatch ), At( at + Vector3.Up * Height * 0.5f ), new Vector3( length, width, Height ), Turn( rotation ) );
 			var surface = at + Vector3.Up * Height;
-			Kit.Ellipsoid( TrimSkin( SoilSwatch( 1 ) ), At( surface ), new Vector3( length * 0.47f, width * 0.45f, 0.5f ), Turn( rotation ), 2, 8 );
+			Kit.Dome( TrimSkin( SoilSwatch( 1 ) ), At( surface ), new Vector3( length * 0.47f, width * 0.45f, 0.5f ), Turn( rotation ), 1, 8 );
 
 			var leaf = LeafSwatch( Next() < 0.5f ? 2 : 0 );
 			var rows = 2 + Pick( 2 );

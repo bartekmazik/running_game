@@ -418,16 +418,29 @@ public sealed class MeshKit
 	/// Normals are the true ellipsoid's (the unit sphere's scaled by the inverse radii), so a squashed one
 	/// is lit as a flat cushion rather than as a stretched ball. The region wraps once round it.
 	/// </summary>
-	public void Ellipsoid( Skin skin, Vector3 center, Vector3 radii, Rotation rotation, int rings, int sides )
+	public void Ellipsoid( Skin skin, Vector3 center, Vector3 radii, Rotation rotation, int rings, int sides ) =>
+		Ellipsoid( skin, center, radii, rotation, rings, sides, -MathF.PI * 0.5f );
+
+	/// <summary>
+	/// The upper half of an <see cref="Ellipsoid(Skin, Vector3, Vector3, Rotation, int, int)"/>, open at
+	/// its equator, in <paramref name="rings"/> bands from there to the top: soil in a pot or a tray, a heap
+	/// on a bed — whatever sits in something that hides its underside, for half the faces.
+	/// </summary>
+	public void Dome( Skin skin, Vector3 center, Vector3 radii, Rotation rotation, int rings, int sides ) =>
+		Ellipsoid( skin, center, radii, rotation, rings, sides, 0f );
+
+	/// <summary>An ellipsoid from latitude <paramref name="from"/> (−π/2, the bottom pole, for a whole one) up to the top pole.</summary>
+	void Ellipsoid( Skin skin, Vector3 center, Vector3 radii, Rotation rotation, int rings, int sides, float from )
 	{
 		var batch = For( skin.Material );
 		var region = skin.Region;
+		var closed = from <= -MathF.PI * 0.5f;
 
 		var start = batch.Vertices.Count;
 		for ( var ring = 0; ring <= rings; ring++ )
 		for ( var step = 0; step <= sides; step++ )
 		{
-			var latitude = MathF.PI * ring / rings - MathF.PI * 0.5f;
+			var latitude = from + (MathF.PI * 0.5f - from) * ring / rings;
 			var longitude = MathF.Tau * step / sides;
 			var c = MathF.Cos( latitude );
 			var unit = new Vector3( c * MathF.Cos( longitude ), c * MathF.Sin( longitude ), MathF.Sin( latitude ) );
@@ -438,30 +451,29 @@ public sealed class MeshKit
 		}
 
 		// One vertex per (ring, step), shared by the four quads round it; the poles keep a vertex per
-		// step, for their tangents and the texture's wrap.
+		// step, for their tangents and the texture's wrap. Only a closed one has a bottom pole to skip.
 		var row = sides + 1;
 		for ( var r = 0; r < rings; r++ )
 		for ( var s = 0; s < sides; s++ )
 		{
 			var a = start + r * row + s;
-			if ( r > 0 ) AddTriangle( batch, a, a + 1, a + row + 1 );
+			if ( r > 0 || !closed ) AddTriangle( batch, a, a + 1, a + row + 1 );
 			if ( r < rings - 1 ) AddTriangle( batch, a, a + row + 1, a + row );
 		}
 	}
 
 	/// <summary>
-	/// A leaf, a frond's leaflet, a ribbon, a ski: a blade from <paramref name="root"/> along the rotation's
-	/// Forward, its face toward the rotation's Up, <paramref name="width"/> across at its widest (at
-	/// <paramref name="widest"/> of the length), narrowing to <paramref name="tip"/> of that at the end and to
-	/// a stalk at the root. It bends by <paramref name="bend"/> radians from root to tip (positive droops
+	/// A leaf, a ribbon, a ski: a blade from <paramref name="root"/> along the rotation's Forward, its face
+	/// toward the rotation's Up, <paramref name="width"/> across at its widest (at <paramref name="widest"/>
+	/// of the length), narrowing to <paramref name="tip"/> of that at the end and to a stalk at the root
+	/// (<see cref="Outline"/>). It bends by <paramref name="bend"/> radians from root to tip (positive droops
 	/// away from Up) and is lit as if folded up along its midrib by <paramref name="fold"/> of its half-width,
-	/// so the two halves catch the light differently, as a real leaf's do. <paramref name="teeth"/> narrows every
-	/// other station by that share, so the edge runs in points — a fern's or a palm's leaflets. Both sides
-	/// are drawn, unless <paramref name="oneSided"/> — for a material that renders back faces itself. The
-	/// region maps along the blade left to right, its middle row on the midrib.
+	/// so the two halves catch the light differently, as a real leaf's do. Both sides are drawn, unless
+	/// <paramref name="oneSided"/> — for a material that renders back faces itself. The region maps along
+	/// the blade left to right, its middle row on the midrib. (A frond is a <see cref="Pinnate"/>.)
 	/// </summary>
 	public void Blade( Skin skin, Vector3 root, Rotation rotation, float length, float width, float bend, float fold = 0.25f, int segments = 4, float tip = 0f, float widest = 0.4f,
-		bool oneSided = false, float teeth = 0f )
+		bool oneSided = false )
 	{
 		var region = skin.Region;
 		var forward = rotation.Forward; var up = rotation.Up; var left = rotation.Left;
@@ -488,10 +500,7 @@ public sealed class MeshKit
 				var mid = bend * (t + stations[i - 1]) * 0.5f;
 				centres[i] = centres[i - 1] + (forward * MathF.Cos( mid ) - up * MathF.Sin( mid )) * (length * (t - stations[i - 1]));
 			}
-			var shape = t < widest
-				? 0.18f + 0.82f * MathF.Sin( t / widest * MathF.PI * 0.5f )
-				: tip + (1f - tip) * MathF.Cos( (t - widest) / (1f - widest) * MathF.PI * 0.5f );
-			halves[i] = width * 0.5f * shape * (i % 2 == 1 && i < segments ? 1f - teeth : 1f);
+			halves[i] = width * 0.5f * Outline( t, tip, widest );
 		}
 
 		// One strip from edge to edge: each station carries two vertices a side, shared by the segments either
@@ -567,6 +576,99 @@ public sealed class MeshKit
 				Face( batch, s0, s0 + 2, s0 + 3, s0 + 1, asBuilt );
 			}
 		}
+	}
+
+	/// <summary>
+	/// A blade's half-width at <paramref name="t"/> of its length, as a share of the widest: a stalk at the
+	/// root swelling to full width at <paramref name="widest"/>, then narrowing to <paramref name="tip"/>.
+	/// </summary>
+	static float Outline( float t, float tip, float widest ) => t < widest
+		? 0.18f + 0.82f * MathF.Sin( t / widest * MathF.PI * 0.5f )
+		: tip + (1f - tip) * MathF.Cos( (t - widest) / (1f - widest) * MathF.PI * 0.5f );
+
+	/// <summary>
+	/// A pinnate frond — a palm's, a fern's — as its leaflets alone: a rib from <paramref name="root"/>
+	/// along the rotation's Forward, bending by <paramref name="bend"/> radians from root to tip (positive
+	/// droops away from Up) as a <see cref="Blade"/> does, and <paramref name="leaflets"/> pairs of narrow
+	/// triangles off it. Each stands on <paramref name="spread"/> of its share of the rib and points out to
+	/// the side, swept toward the tip by <paramref name="sweep"/> of its reach and lifted by
+	/// <paramref name="fold"/> of it, so a pair stands in a shallow V. Their reach follows a blade's outline,
+	/// <paramref name="width"/> across at the widest. One face per leaflet: half a toothed blade's with as
+	/// many points, and the sky shows between them. Flat-shaded, each leaflet lit as the plane it is. Both
+	/// sides are drawn, unless <paramref name="oneSided"/>. The region maps as a blade's: along it left to
+	/// right, its middle row on the rib.
+	/// </summary>
+	public void Pinnate( Skin skin, Vector3 root, Rotation rotation, float length, float width, float bend, int leaflets,
+		float fold = 0.2f, float sweep = 0.5f, float spread = 0.6f, float tip = 0f, float widest = 0.4f, bool oneSided = false )
+	{
+		var region = skin.Region;
+		var forward = rotation.Forward; var up = rotation.Up; var left = rotation.Left;
+		leaflets = Math.Max( leaflets, 1 );
+
+		// The rib at every half pitch: leaflet k is centred on station 2k+1.
+		var count = leaflets * 2;
+		var step = length / count;
+		var rib = new Vector3[count + 1];
+		var ups = new Vector3[count + 1];
+		rib[0] = root;
+		for ( var i = 0; i <= count; i++ )
+		{
+			ups[i] = forward * MathF.Sin( bend * i / count ) + up * MathF.Cos( bend * i / count );
+			if ( i == 0 ) continue;
+			var mid = bend * (i - 0.5f) / count;
+			rib[i] = rib[i - 1] + (forward * MathF.Cos( mid ) - up * MathF.Sin( mid )) * step;
+		}
+
+		// A point on the rib (and the rib's Up there) at a fractional station.
+		Vector3 On( Vector3[] line, float at )
+		{
+			var i = Math.Min( (int)at, count - 1 );
+			return Vector3.Lerp( line[i], line[i + 1], at - i );
+		}
+		float U( float at ) => region.Left + region.Width * at / count;
+
+		var middle = region.Top + region.Height * 0.5f;
+		var batch = For( skin.Material );
+		for ( var k = 0; k < leaflets; k++ )
+		{
+			var a = 2 * k + 1 - spread;
+			var c = 2 * k + 1 + spread;
+			var reach = width * 0.5f * Outline( (2 * k + 1f) / count, tip, widest );
+			var at = Math.Min( 2 * k + 1 + sweep * reach / step, count );
+			var baseA = On( rib, a ); var baseC = On( rib, c );
+			var centre = On( rib, at ); var lift = On( ups, at ).Normal;
+			for ( var s = -1; s <= 1; s += 2 )
+			{
+				// Left of the rib on the region's top row, right on its bottom one, as a blade maps them.
+				var point = centre + left * (s * reach) + lift * (fold * reach);
+				var uvA = new Vector2( U( a ), middle );
+				var uvC = new Vector2( U( c ), middle );
+				var uvP = new Vector2( U( at ), s > 0 ? region.Top : region.Top + region.Height );
+				var faceUp = Vector3.Dot( Vector3.Cross( baseC - baseA, point - baseA ), lift ) >= 0f;
+				if ( faceUp ) Leaflet( batch, baseA, baseC, point, uvA, uvC, uvP );
+				else Leaflet( batch, baseA, point, baseC, uvA, uvP, uvC );
+				if ( oneSided ) continue;
+				if ( faceUp ) Leaflet( batch, baseA, point, baseC, uvA, uvP, uvC );
+				else Leaflet( batch, baseA, baseC, point, uvA, uvC, uvP );
+			}
+		}
+	}
+
+	/// <summary>One flat triangle a→b→c (anticlockwise from its front) with explicit UVs, its tangent taken from them.</summary>
+	void Leaflet( Batch batch, Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC )
+	{
+		var normal = Vector3.Cross( b - a, c - a ).Normal;
+		var e1 = b - a; var e2 = c - a;
+		var du1 = uvB.x - uvA.x; var dv1 = uvB.y - uvA.y;
+		var du2 = uvC.x - uvA.x; var dv2 = uvC.y - uvA.y;
+		var tangent = ((e1 * dv2 - e2 * dv1) / (du1 * dv2 - du2 * dv1)).Normal;
+		var handedness = Handedness( a, b, c, uvA, uvB, uvC );
+		var start = batch.Vertices.Count;
+		batch.Vertices.Add( Corner( a, normal, tangent, handedness, uvA ) );
+		batch.Vertices.Add( Corner( b, normal, tangent, handedness, uvB ) );
+		batch.Vertices.Add( Corner( c, normal, tangent, handedness, uvC ) );
+		AddTriangle( batch, start, start + 1, start + 2 );
+		Grow( a ); Grow( b ); Grow( c );
 	}
 
 	/// <summary>A quad a→b→c→d of shared vertices, as wound or (<paramref name="asWound"/> false) the other way round.</summary>

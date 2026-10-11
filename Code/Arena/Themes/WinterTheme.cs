@@ -888,15 +888,19 @@ public sealed class WinterTheme : ArenaTheme
 			}
 		}
 
-		/// <summary>A drift banked against the foot of the wall: a few overlapping heaps, high against the wall, sloping out.</summary>
+		/// <summary>
+		/// A drift banked against the foot of the wall: a few overlapping heaps, high against the wall, sloping
+		/// out. Each is a dome rising off the ledge (its underside would be in the slab), so the faces a full
+		/// ellipsoid spent there go on a rounder outline instead — soft snow, not a faceted rock.
+		/// </summary>
 		public void Drift( Bay bay )
 		{
 			var u = bay.From + Range( 4f, bay.Width * 0.4f );
 			for ( var k = 2 + Pick( 4 ); k > 0 && u < bay.To - 6f; k-- )
 			{
 				var r = new Vector3( Range( 12f, 30f ), Range( 7f, 12f ), Range( 6f, 16f ) );
-				var centre = new Vector3( u, MathF.Max( Face - r.y * 0.45f, Front + r.y ), Ledge + r.z * 0.15f );
-				Kit.Ellipsoid( TrimSkin( SnowSwatch ), At( centre ), r, Turn( Rotation.FromYaw( Range( -10f, 10f ) ) ), 4, 9 );
+				var centre = new Vector3( u, MathF.Max( Face - r.y * 0.45f, Front + r.y ), Ledge - 0.5f );
+				Kit.Dome( TrimSkin( SnowSwatch ), At( centre ), r.WithZ( r.z * 1.15f + 0.5f ), Turn( Rotation.FromYaw( Range( -10f, 10f ) ) ), 3, 12 );
 				u += r.x * Range( 0.7f, 1.3f );
 			}
 		}
@@ -1218,8 +1222,10 @@ public sealed class WinterTheme : ArenaTheme
 
 		// ---- Bays ------------------------------------------------------------------------------
 		// A storey is 268 high and a bay about 180 wide, so a single prop at the foot of one left the logs
-		// above it bare: each bay is dressed as a set — something on the floor and something hung at
-		// chest to head height — and the plain bays of a wall deal out four different sets in turn.
+		// above it bare: each bay is dressed as a set — something on the floor and something hung on the
+		// wall over it — and the plain bays of a wall deal out four different sets in turn. What a player
+		// would use (benches, boots, coats on their pegs, the sledge) is at a player's size; only the
+		// pure wall decor (woodpiles, shelves, skis, snowshoes, wreaths) is built large, to hold the logs.
 
 		/// <summary>The set-ups a plain bay is dressed as, after the snowman's and the skis'.</summary>
 		public enum Look { Woodpile, Mudroom, Shelves, Sledge }
@@ -1236,7 +1242,7 @@ public sealed class WinterTheme : ArenaTheme
 			SillSnow( bay.Middle, width );
 			var beside = (bay.Width - width) * 0.5f;
 			for ( var s = -1; s <= 1 && beside > 38f; s += 2 )
-				if ( Next() < 0.45f ) Peg( bay.Middle + s * (width * 0.5f + beside * Range( 0.45f, 0.55f )), Range( 160f, 182f ) );
+				if ( Next() < 0.45f ) Peg( bay.Middle + s * (width * 0.5f + beside * Range( 0.45f, 0.55f )), Range( 104f, 118f ) );
 			if ( Next() < 0.3f ) Wreath( bay.Middle + Range( -5f, 5f ), WindowSill + WindowHeight + 28f, Range( 10f, 13f ) );
 			var under = Next();
 			var room = MathF.Min( width + Range( -6f, 20f ), bay.Width - 16f );
@@ -1245,12 +1251,12 @@ public sealed class WinterTheme : ArenaTheme
 			if ( Next() < 0.65f ) Drift( bay );
 		}
 
-		/// <summary>The snowman's bay: the snowman to one side, a child's sledge leaning on the wall at the other, or a drift.</summary>
+		/// <summary>The snowman's bay: the snowman to one side, a child's sledge hung on the wall at the other, and a drift.</summary>
 		public void SnowmanBay( Bay bay )
 		{
 			var side = Next() < 0.5f ? -1f : 1f;
 			Snowman( bay.Middle + side * bay.Width * Range( 0.12f, 0.22f ) );
-			if ( bay.Width > 140f && Next() < 0.7f ) Sledge( bay.Middle - side * bay.Width * Range( 0.22f, 0.3f ), Range( 72f, 86f ) );
+			if ( bay.Width > 140f && Next() < 0.7f ) Sledge( bay.Middle - side * bay.Width * Range( 0.2f, 0.26f ), Range( 46f, 56f ), side );
 			Drift( bay );
 		}
 
@@ -1287,7 +1293,7 @@ public sealed class WinterTheme : ArenaTheme
 					var length = MathF.Min( bay.Width - 20f, Range( 100f, 150f ) );
 					var u = bay.Middle + side * Range( 0f, (bay.Width - 20f - length) * 0.5f );
 					Bench( u, length, true );
-					CoatPegs( u + Range( -8f, 8f ), MathF.Min( length + Range( -10f, 16f ), bay.Width - 24f ), Range( 172f, 188f ) );
+					CoatPegs( u + Range( -8f, 8f ), MathF.Min( length + Range( -10f, 16f ), bay.Width - 24f ), Range( 102f, 114f ) );
 					break;
 				}
 				case Look.Shelves:
@@ -1304,9 +1310,9 @@ public sealed class WinterTheme : ArenaTheme
 				}
 				default:
 				{
-					// A sledge leaning on the wall, snowshoes hung beside it.
+					// A sledge hung on the wall, snowshoes hung beside it.
 					var u = bay.Middle + side * bay.Width * Range( 0.14f, 0.22f );
-					Sledge( u, Range( 104f, 124f ) );
+					Sledge( u, Range( 46f, 56f ), -side );
 					Snowshoes( bay.Middle - side * bay.Width * Range( 0.18f, 0.26f ), Range( 140f, 176f ) );
 					break;
 				}
@@ -1387,7 +1393,7 @@ public sealed class WinterTheme : ArenaTheme
 			for ( var k = 0; k < pegs; k++ )
 			{
 				var at = u - length * 0.5f + pitch * (k + 0.5f) + Range( -2f, 2f );
-				var tip = new Vector3( at, Face - 10f, v + 3f );
+				var tip = new Vector3( at, Face - 7.5f, v + 2.5f );
 				Kit.Tube( Timber, At( new[] { new Vector3( at, Face - 1.5f, v ), tip } ), 0.95f, 4, 0.75f );
 
 				var kind = Pick( 5 );
@@ -1403,33 +1409,48 @@ public sealed class WinterTheme : ArenaTheme
 		void Peg( float u, float v )
 		{
 			Kit.BevelBox( Timber, At( new Vector3( u, Face - 1f, v ) ), new Vector3( 5f, 2f, 7f ), 0.4f, Run );
-			var tip = new Vector3( u, Face - 10f, v + 3f );
+			var tip = new Vector3( u, Face - 7.5f, v + 2.5f );
 			Kit.Tube( Timber, At( new[] { new Vector3( u, Face - 1.5f, v ), tip } ), 0.95f, 4, 0.75f );
 			if ( Next() < 0.5f ) Coat( tip );
 			else Scarf( tip );
 		}
 
-		/// <summary>A wool coat hung by its loop from the peg at <paramref name="tip"/>: a long soft body against the wall and the hood bunched at the top.</summary>
+		/// <summary>
+		/// A wool coat hung by its loop from the peg at <paramref name="tip"/>, at a player's size — 40 to 48
+		/// long, so its hem clears a bench seat under the rail: a soft slab of a body flat to the wall, rounded
+		/// shoulders, the sleeves hanging down its sides and the hood bunched over the peg.
+		/// </summary>
 		void Coat( Vector3 tip )
 		{
 			var cloth = TrimSkin( new[] { CoatSwatch, CoatSwatch, KnitSwatch( 1 ), PlaidSwatch, FeltSwatch, MustardKnitSwatch }[Pick( 6 )] );
-			var body = new Vector3( Range( 10f, 13f ), Range( 4.6f, 5.8f ), Range( 27f, 35f ) );
-			var roll = Turn( Rotation.FromAxis( new Vector3( 0f, 1f, 0f ), Range( -5f, 5f ) ) );
-			Kit.Ellipsoid( cloth, At( new Vector3( tip.x, Face - 1.2f - body.y, tip.z + 1f - body.z * 0.92f ) ), body, roll, 5, 9 );
-			Kit.Ellipsoid( cloth, At( new Vector3( tip.x + Range( -1f, 1f ), Face - 2.6f - body.y, tip.z - 2f ) ), new Vector3( 6.6f, 4.8f, 6f ), roll, 3, 7 );
+			var length = Range( 40f, 48f );
+			var width = Range( 14f, 17f );
+			var depth = Range( 3.4f, 4.4f );
+			var sleeve = length * Range( 0.58f, 0.66f );
+			// Hung a little askew, turned about the peg in the wall's plane.
+			var roll = Rotation.FromAxis( new Vector3( 0f, 1f, 0f ), Range( -4f, 4f ) );
+			var collar = new Vector3( tip.x, Face - 1.2f - depth * 0.5f, tip.z - 1f );
+			Vector3 Below( float across, float outward, float down ) => collar + roll * new Vector3( across, -outward, -down );
+
+			Kit.BevelBox( cloth, At( Below( 0f, 0f, length * 0.5f + 1.5f ) ), new Vector3( width, depth, length - 3f ), 1.2f, Turn( roll ) );
+			Kit.Ellipsoid( cloth, At( Below( 0f, 0.2f, 4f ) ), new Vector3( width * 0.56f, depth * 0.62f, 4.5f ), Turn( roll ), 3, 8 );
+			for ( var s = -1; s <= 1; s += 2 )
+				Kit.BevelBox( cloth, At( Below( s * (width * 0.5f - 1.4f), depth * 0.5f + 0.9f, 3.5f + sleeve * 0.5f ) ), new Vector3( 3.6f, 2f, sleeve ), 0.8f,
+					Turn( roll * Rotation.FromAxis( new Vector3( 0f, 1f, 0f ), s * Range( 2f, 5f ) ) ) );
+			Kit.Ellipsoid( cloth, At( Below( Range( -1f, 1f ), depth * 0.5f + 1.2f, 0.5f ) ), new Vector3( 5.2f, 3.4f, 4.6f ), Turn( roll ), 3, 7 );
 		}
 
 		/// <summary>A knitted scarf over the peg at <paramref name="tip"/>, its two tails hanging, one longer.</summary>
 		void Scarf( Vector3 tip )
 		{
 			var knit = TrimSkin( new[] { KnitSwatch( 0 ), KnitSwatch( 1 ), MustardKnitSwatch }[Pick( 3 )] );
-			var width = Range( 6.4f, 8.4f );
-			Kit.Ellipsoid( knit, At( tip + new Vector3( 0f, 0.8f, 0.6f ) ), new Vector3( width * 0.55f, 2.4f, 2f ), Run, 3, 6 );
+			var width = Range( 5f, 6.6f );
+			Kit.Ellipsoid( knit, At( tip + new Vector3( 0f, 0.8f, 0.6f ) ), new Vector3( width * 0.55f, 2f, 1.7f ), Run, 3, 6 );
 			for ( var s = -1; s <= 1; s += 2 )
 			{
 				var root = tip + new Vector3( s * width * 0.45f, s * 0.6f, -0.5f );
 				var down = new Vector3( s * Range( 0.02f, 0.1f ), Range( 0.08f, 0.16f ), -1f );
-				Kit.Blade( knit, At( root ), Turn( Aim( down, 0f, ToRoom ) ), (s < 0 ? Range( 44f, 60f ) : Range( 32f, 46f )), width, Range( 0.05f, 0.18f ), 0.15f, 3, 0.9f, 0.5f, true );
+				Kit.Blade( knit, At( root ), Turn( Aim( down, 0f, ToRoom ) ), (s < 0 ? Range( 32f, 43f ) : Range( 23f, 33f )), width, Range( 0.05f, 0.18f ), 0.15f, 3, 0.9f, 0.5f, true );
 			}
 		}
 
@@ -1514,48 +1535,56 @@ public sealed class WinterTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// A wooden sledge <paramref name="length"/> long stood on its tail at <paramref name="u"/>, leaning back
-		/// against the wall with its deck to the room: two runners curling over at the top, slats across
-		/// them, a towing rope hanging in a loop.
+		/// A wooden sledge <paramref name="length"/> long — a real one, about two thirds of a player — hung on
+		/// two pegs at <paramref name="u"/> at about a player's waist, side on to the room with its front toward
+		/// <paramref name="facing"/> (−1 or 1 along the wall): two bent-wood runners curling up and back at the
+		/// front to meet the seat, the seat's slats laid along it on short posts, the towing rope hanging in a
+		/// loop under the curls. Stood on its tail it read as a ladder, and lying on the ledge it sank behind
+		/// the tiles; hung side on, its profile is the shape everyone knows.
 		/// </summary>
-		void Sledge( float u, float length )
+		void Sledge( float u, float length, float facing )
 		{
-			var width = length * Range( 0.34f, 0.4f );
-			var foot = new Vector3( u, Face - Range( 14f, 18f ), Ledge );
-			var lean = (Face - 3f) - foot.y;
-			var axis = new Vector3( 0f, lean, MathF.Sqrt( length * length - lean * lean ) ) / length;
-			var deck = new Vector3( 0f, -axis.z, axis.y );
-			var tilt = Range( -3f, 3f );
-			var spin = Rotation.FromAxis( new Vector3( 0f, 1f, 0f ), tilt );
-			Vector3 P( float x, float along, float outward ) => foot + spin * (new Vector3( x, 0f, 0f ) + axis * along + deck * outward);
+			var width = Range( 17f, 20f );
+			var seat = length * Range( 0.2f, 0.24f );
+			var half = length * 0.5f;
+			var tilt = Rotation.FromAxis( new Vector3( 0f, 1f, 0f ), Range( -3f, 3f ) );
+			var centre = new Vector3( u, Face - 1.2f - width * 0.5f, Range( 44f, 54f ) );
+			// Along the sledge (to its front), across it (toward the wall), up.
+			Vector3 P( float along, float across, float up ) => centre + tilt * new Vector3( along * facing, across, up );
+			var turn = Turn( tilt );
+			// Varnished hickory, darker than the pine walls, as the skis are; the seat painted with their stripe.
+			var paint = SkiSwatch( Pick( 2 ) );
+			var hickory = TrimSkin( new Rect( paint.Left, paint.Top, paint.Width, paint.Height * 0.34f ) );
 
-			var runner = TrimSkin( IronSwatch );
 			for ( var s = -1; s <= 1; s += 2 )
 			{
-				var x = s * width * 0.5f;
-				Kit.Tube( runner, At( new[]
+				var a = s * width * 0.5f;
+				Kit.Tube( hickory, At( new[]
 				{
-					P( x, 0f, -2.6f ), P( x, length * 0.5f, -2.8f ), P( x, length - 6f, -2.6f ), P( x, length - 1f, -0.6f ),
-					P( x, length + 1f, 3f ), P( x, length - 1.5f, 6.5f ), P( x, length - 6f, 6f ),
-				} ), 0.9f, 4 );
-				for ( var k = 0; k < 2; k++ )
-					Kit.Box( Timber, At( P( x, length * (0.25f + k * 0.4f), -1.3f ) ), new Vector3( 1.6f, 2.4f, 2.6f ), Turn( spin * Rotation.LookAt( new Vector3( 1f, 0f, 0f ), axis ) ) );
+					P( -half, a, 1.8f ), P( -half + 3f, a, 1f ), P( half - 14f, a, 1f ), P( half - 5f, a, 2.8f ),
+					P( half - 0.5f, a, 7f ), P( half - 2f, a, seat - 1.5f ), P( half - 7f, a, seat - 0.8f ),
+				} ), 1.1f, 4 );
+				foreach ( var post in new[] { -half + 6f, -2f, half - 12f } )
+					Kit.Box( hickory, At( P( post, a, seat * 0.5f ) ), new Vector3( 1.8f, 1.8f, seat - 2.4f ), turn );
 			}
 
-			// The deck: boards laid tight with hairline gaps, so it reads as a sledge and not as a ladder.
-			var slat = Turn( spin * Rotation.LookAt( new Vector3( 1f, 0f, 0f ), axis ) );
-			var deck0 = length * 0.03f;
-			var deck1 = length * 0.84f;
-			var boards = Math.Max( 4, (int)((deck1 - deck0) / 13f) );
-			var pitch = (deck1 - deck0) / boards;
-			for ( var k = 0; k < boards; k++ )
-				Kit.Box( Timber, At( P( Range( -0.5f, 0.5f ), deck0 + pitch * (k + 0.5f), 0f ) ), new Vector3( width + 3f, 1.6f, pitch - Range( 0.6f, 1.4f ) ), slat );
+			// The battens under the seat rest on the two pegs.
+			foreach ( var batten in new[] { -half + 7.5f, half - 13.5f } )
+			{
+				Kit.Box( hickory, At( P( batten, 0f, seat - 2.4f ) ), new Vector3( 2.4f, width + 1.5f, 1.6f ), turn );
+				var peg = P( batten, 0f, seat - 4f );
+				Kit.Tube( Timber, At( new[] { new Vector3( peg.x, Face - 1.5f, peg.z - 0.6f ), new Vector3( peg.x, Face - width - 3f, peg.z ) } ), 0.8f, 4, 0.7f );
+			}
 
-			var sag = Range( 14f, 24f );
+			var across = (width + 2f) / 3f;
+			for ( var k = -1; k <= 1; k++ )
+				Kit.BevelBox( TrimSkin( paint ), At( P( -3f + Range( -0.5f, 0.5f ), k * across, seat - 0.8f ) ), new Vector3( length - 10f, across - Range( 0.6f, 1f ), 1.6f ), 0.3f, turn );
+
+			var drop = Range( 8f, 16f );
 			Kit.Tube( TrimSkin( JuteSwatch ), At( new[]
 			{
-				P( -width * 0.5f, length - 3f, 5.5f ), P( -width * 0.4f, length - sag * 0.6f, 6.5f ), P( 0f, length - sag, 7f ),
-				P( width * 0.4f, length - sag * 0.6f, 6.5f ), P( width * 0.5f, length - 3f, 5.5f ),
+				P( half - 1f, -width * 0.4f, 6.5f ), P( half + 1.5f, -width * 0.25f, -drop * 0.5f ), P( half + 0.5f, Range( -1f, 1f ), -drop ),
+				P( half + 1.5f, width * 0.25f, -drop * 0.5f ), P( half - 1f, width * 0.4f, 6.5f ),
 			} ), 0.5f, 3 );
 		}
 

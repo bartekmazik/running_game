@@ -54,6 +54,19 @@ public abstract class WallProps
 		Run = Rotation.LookAt( FloorContext.Along( side ), Vector3.Up );
 	}
 
+	/// <summary>
+	/// Builds <paramref name="build"/> from a stream of its own, seeded by one draw from the wall's: however
+	/// many draws it takes, the props after it come out the same, so a plant's detail can be retuned
+	/// without reshuffling the rest of the wall.
+	/// </summary>
+	protected void Apart( Action build )
+	{
+		var wall = _random;
+		_random = new Random( wall.Next() );
+		build();
+		_random = wall;
+	}
+
 	public float Next() => (float)_random.NextDouble();
 	protected float Range( float a, float b ) => a + (b - a) * Next();
 	protected int Pick( int count ) => _random.Next( count );
