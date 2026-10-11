@@ -51,12 +51,15 @@ public sealed class WinterTheme : ArenaTheme
 
 	/// <summary>
 	/// The structural front layer — hewn posts, a top plate, skirting — and frosted windows in about
-	/// half the bays. Icicles, wreaths, skis and the warm bulbs come in Task 7; lights in 6b.
+	/// half the bays; four warm bulbs under the top plate and two cool lights low by the walls for the
+	/// daylight off the snow. Icicles, wreaths, skis and the bulb string itself come in Task 7.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		var bays = BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 74f, Corner = 34f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 5f } );
 		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 64f, 84f, 70f, 0.45f, true, Seed + 800 );
+		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, 480f, new Color( 1.25f, 0.95f, 0.66f ) * 2.4f, Seed + 900 );
+		AddLamps( room, 2, 110f, -30f, 480f, LightColor * 2.2f, Seed + 901 );
 	}
 
 	/// <summary>

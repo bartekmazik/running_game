@@ -672,6 +672,51 @@ public abstract class ArenaTheme
 		}
 	}
 
+	/// <summary>
+	/// The room's own lamps: <paramref name="count"/> unshadowed point lights (<see cref="FloorContext.AddLight"/>)
+	/// spread round the room's perimeter in corner order from a seeded start, each slid along its wall
+	/// by up to <paramref name="jitter"/> of the spacing and kept clear of the corners, at height
+	/// <paramref name="v"/> and <paramref name="depth"/> (negative: out in the room, in front of the
+	/// wall plane). Every lamp is a few percent brighter or dimmer than <paramref name="color"/> — real
+	/// lamps never match.
+	///
+	/// The radius is kept short of the floor below: the lights cast no shadows, so a lamp that reached
+	/// through the tiles would light the next room down in this room's colour.
+	/// </summary>
+	protected static void AddLamps( FloorContext room, int count, float v, float depth, float radius, Color color, int seed, float jitter = 0.25f )
+	{
+		const float Span = FloorContext.Span;
+		const float Margin = 160f;
+		var order = new[] { 0, 3, 2, 1 };
+		var random = new Random( seed );
+		var spacing = 4f * Span / count;
+		var start = (float)random.NextDouble() * spacing;
+
+		for ( var k = 0; k < count; k++ )
+		{
+			var along = start + (k + ((float)random.NextDouble() - 0.5f) * 2f * jitter) * spacing;
+			along = (along % (4f * Span) + 4f * Span) % (4f * Span);
+			var side = order[(int)(along / Span)];
+			var u = Math.Clamp( along % Span, Margin, Span - Margin );
+			room.AddLight( room.OnWall( side, u, v, depth ), color * (0.94f + (float)random.NextDouble() * 0.12f), radius );
+		}
+	}
+
+	/// <summary>
+	/// Bakes a surface painted as it looks onto the metal base. A metal's colour is its reflectance,
+	/// and real metals reflect far more than their apparent grey suggests (zinc and steel about two
+	/// thirds of the light): the grey comes from the room they mirror (the floor's reflection probe).
+	/// So the painted colours are lifted <paramref name="lift"/> of the way toward white first; painted
+	/// as-is, the metal mirrored the room at a third of its brightness and read near black.
+	/// </summary>
+	protected static PaintedSurface BakeMetal( Painter painter, string name, float normalStrength, float lift )
+	{
+		var weight = new float[painter.Size * painter.Size];
+		Array.Fill( weight, lift );
+		painter.Blend( weight, Color.White );
+		return painter.Bake( name, Painter.Metal, normalStrength );
+	}
+
 	/// <summary>Smooth step from 0 at <paramref name="a"/> to 1 at <paramref name="b"/> (either order).</summary>
 	protected static float Step( float a, float b, float t )
 	{
@@ -734,13 +779,17 @@ public abstract class ArenaTheme
 		const float Recess = FloorContext.Recess;
 		const float Deep = Recess + FloorContext.Embed;
 
+		// A bay a pattern can't stretch over would repeat its first strip at its far end; a modular
+		// pattern repeats by design, so it takes any width.
+		var widest = WallModule > 0f ? float.MaxValue : WallRepeat * MaxWallStretch;
+
 		for ( var side = 0; side < 4; side++ )
 		{
 			var posts = new List<(float From, float To)> { (0f, style.Corner) };
 			var pier = style.Pier * 0.5f;
-			AddPosts( posts, style.Corner, Half - pier, style.Post, new Random( Seed * 13 + side * 7919 + 3 ) );
+			AddPosts( posts, style.Corner, Half - pier, style.Post, widest, new Random( Seed * 13 + side * 7919 + 3 ) );
 			posts.Add( (Half - pier, Half + pier) );
-			AddPosts( posts, Half + pier, Span - style.Corner, style.Post, new Random( Seed * 17 + side * 6151 + 11 ) );
+			AddPosts( posts, Half + pier, Span - style.Corner, style.Post, widest, new Random( Seed * 17 + side * 6151 + 11 ) );
 
 			// The corner this wall owns runs on to the wall face of the next, filling the corner square.
 			posts.Add( (Span - style.Corner, Span + Deep) );
@@ -865,21 +914,38 @@ public abstract class ArenaTheme
 		return ((first - edge) % WallRepeat + WallRepeat) % WallRepeat;
 	}
 
-	/// <summary>Posts between <paramref name="from"/> and <paramref name="to"/>: gaps jittered ±30 % and rescaled to fit exactly, widths ±15 %.</summary>
-	static void AddPosts( List<(float From, float To)> posts, float from, float to, float width, Random random )
+	/// <summary>
+	/// Posts between <paramref name="from"/> and <paramref name="to"/>: gaps jittered ±30 % and rescaled
+	/// to fit exactly, widths ±15 %, and no bay wider than <paramref name="widest"/>. A draw that breaks
+	/// that is drawn again from the same stream (a layout that keeps it is the same as ever), and after
+	/// a few tries the run gets one more post.
+	/// </summary>
+	static void AddPosts( List<(float From, float To)> posts, float from, float to, float width, float widest, Random random )
 	{
 		var length = to - from;
 		var segments = Math.Max( 1, (int)MathF.Round( length / PostSpacing ) );
-		var weights = new float[segments];
-		var sum = 0f;
-		for ( var k = 0; k < segments; k++ ) sum += weights[k] = 1f + ((float)random.NextDouble() - 0.5f) * 0.6f;
-
-		var at = from;
-		for ( var k = 0; k + 1 < segments; k++ )
+		var placed = new List<(float From, float To)>();
+		for ( var attempt = 1; ; attempt++ )
 		{
-			at += length * weights[k] / sum;
-			var half = width * (0.85f + (float)random.NextDouble() * 0.3f) * 0.5f;
-			posts.Add( (at - half, at + half) );
+			var weights = new float[segments];
+			var sum = 0f;
+			for ( var k = 0; k < segments; k++ ) sum += weights[k] = 1f + ((float)random.NextDouble() - 0.5f) * 0.6f;
+
+			placed.Clear();
+			var at = from;
+			var fits = true;
+			for ( var k = 0; k + 1 < segments; k++ )
+			{
+				at += length * weights[k] / sum;
+				var half = width * (0.85f + (float)random.NextDouble() * 0.3f) * 0.5f;
+				fits &= at - half - (k == 0 ? from : placed[k - 1].To) <= widest;
+				placed.Add( (at - half, at + half) );
+			}
+			fits &= to - (segments > 1 ? placed[^1].To : from) <= widest;
+
+			if ( fits ) break;
+			if ( attempt % 8 == 0 ) segments++;
 		}
+		posts.AddRange( placed );
 	}
 }

@@ -98,10 +98,12 @@ public sealed class MeshKit
 	/// from the front. The tangent (+U direction) is taken from the UV layout rather than the first
 	/// edge, so the normal map is lit from the right side however the UVs are turned. Give UVs whose
 	/// layout matches the face's shape (an unfolding), and the two triangles share one mapping — no kink.
+	/// <paramref name="shading"/>, when given, is the normal the face is lit with instead of its own
+	/// (the winding, which decides which side is drawn, still follows the corners).
 	/// </summary>
-	public void Quad( Material material, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD )
+	public void Quad( Material material, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 uvA, Vector2 uvB, Vector2 uvC, Vector2 uvD, Vector3? shading = null )
 	{
-		var normal = Vector3.Cross( b - a, d - a ).Normal;
+		var normal = shading ?? Vector3.Cross( b - a, d - a ).Normal;
 		var e1 = b - a; var e2 = d - a;
 		var du1 = uvB.x - uvA.x; var dv1 = uvB.y - uvA.y;
 		var du2 = uvD.x - uvA.x; var dv2 = uvD.y - uvA.y;

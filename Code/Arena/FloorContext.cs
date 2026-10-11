@@ -64,6 +64,13 @@ public sealed class FloorContext
 	/// <summary>Lights per floor (spec budget: ≤ 48 for the tower, none casting shadows).</summary>
 	public const int MaxLights = 6;
 
+	/// <summary>
+	/// Softer than the default inverse-square falloff (1): with a short radius — kept short of the
+	/// floor below, since the lights cast no shadows — a lamp's pool would otherwise end in a hot spot
+	/// by the wall and leave the floor in front of it unlit.
+	/// </summary>
+	const float LampFalloff = 0.8f;
+
 	int _lights;
 
 	/// <summary>Into the wall (+depth), exact per side so faces on the grid edge land on exactly ±840.</summary>
@@ -101,6 +108,7 @@ public sealed class FloorContext
 		var light = holder.AddComponent<PointLight>();
 		light.LightColor = color;
 		light.Radius = radius;
+		light.Attenuation = LampFalloff;
 		light.Shadows = false;
 	}
 

@@ -7,8 +7,10 @@ using System;
 /// Overhead (the undersides of the library floor), galvanised sheet: zinc spangle, a cross-break
 /// crease, a hemmed edge with screws, white rust blooming here and there.
 ///
-/// Steel is painted on the matte base with a low roughness: <see cref="Painter.Metal"/> renders
-/// black until the rooms have something to reflect (controller ruling R17, revisited in Task 6).
+/// The walls, corrugated zinc, are metal (<see cref="ArenaTheme.BakeMetal"/>), mirroring the room
+/// through its reflection probe. The floor and ceiling stay on the matte base with a low roughness
+/// (ruling R17): a room of nothing but metal mirrors itself — metal takes no ambient light — and
+/// came out near black even after the probe's extra bounces, and the floor is what a player reads.
 /// </summary>
 public sealed class WorkshopTheme : ArenaTheme
 {
@@ -30,9 +32,19 @@ public sealed class WorkshopTheme : ArenaTheme
 	static Color BrassDull => Palette.Hex( 0x8C7550 );
 	static Color Oil => Palette.Hex( 0x2F2D2E );
 
-	static Color Zinc => Palette.Hex( 0x8E959C );
-	static Color ZincLight => Palette.Hex( 0xA9AFB5 );
-	static Color ZincDark => Palette.Hex( 0x777E86 );
+	/// <summary>Galvanised zinc, warm grey: a blue-grey read as cold under the room's lamps (4b review).</summary>
+	static Color Zinc => Palette.Hex( 0x9A9993 );
+	static Color ZincLight => Palette.Hex( 0xB5B4AD );
+	static Color ZincDark => Palette.Hex( 0x7C7B76 );
+
+	/// <summary>Old zinc gone dull and dark with age.</summary>
+	static Color ZincDull => Palette.Hex( 0x83817A );
+
+	/// <summary>Rust bleeding from the screws: a dull brown-orange, well away from the danger colours.</summary>
+	static Color Rust => Palette.Hex( 0x8A5E42 );
+
+	/// <summary>Machinery paint on the steelwork, a muted khaki near the floor's brass.</summary>
+	static Color Khaki => Palette.Hex( 0x8E7E58 );
 
 	/// <summary>White rust: the chalky bloom zinc grows where it stays damp.</summary>
 	static Color WhiteRust => Palette.Hex( 0xC9CCC8 );
@@ -42,67 +54,227 @@ public sealed class WorkshopTheme : ArenaTheme
 	const float BossHalfLength = 27f;
 	const float BossHalfWidth = 7f;
 
-	/// <summary>Structural front layer only (pipes, gauges, cage lamps and lights come in Tasks 6b and 9).</summary>
+	/// <summary>
+	/// The structural front layer, and cool-white light where the cage lamps will hang under the
+	/// girders (pipes, gauges and the lamps themselves come in Task 9).
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 64f, Corner = 28f, Cornice = 24f, Skirting = 10f, SkirtingDepth = 4f } );
+		AddLamps( room, 5, FloorContext.ClearHeight - 28f, -24f, 480f, LightColor * 3f, Seed + 900 );
 	}
 
 	/// <summary>
-	/// Plain corrugated sheet: galvanised zinc with spangle, a lapped seam riveted at uneven spacing,
-	/// grime running down the troughs, white rust here and there.
+	/// Corrugated galvanised sheet, as clad on a shed: sheets of uneven width lapped over each other at
+	/// a crest, in two lengths with an end lap at a different height on every sheet, each sheet its own
+	/// age — fresher or duller zinc, more or less white rust. Screws with washers on every other crest
+	/// along three girts, some haloed with rust and a few bleeding a thin streak down the sheet. Grime
+	/// runs down the troughs and gathers in a splash band along the floor. The zinc is warm grey, and
+	/// the spangle is a faint patchwork of crystal grains.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
-		// Full surface in Task 6b.
-		const int Pitch = 32;
+		const float Ppu = WallSize / WallRepeat;
+		const int Crests = 40;
+		const float Pitch = WallSize / (float)Crests;
+		float Row( float v ) => (WallRepeat - v) * Ppu;
 		var painter = new Painter( WallSize, Zinc, 0.45f );
 		var random = new Random( Seed + 600 );
-		var relief = new float[WallSize * WallSize];
-		for ( var y = 0; y < WallSize; y++ )
-		for ( var x = 0; x < WallSize; x++ )
-			relief[y * WallSize + x] = 0.5f + 0.5f * MathF.Cos( x * MathF.Tau / Pitch );
-		painter.AddHeight( relief, 1f );
+		float Next() => (float)random.NextDouble();
 
-		painter.Mottle( 0.05f, 64, Seed + 601, 2 );
-		painter.Blend( Ramp( painter.Noise( 5, Seed + 602, 4 ), 0.6f, 0.85f, 0.5f ), ZincLight );
-
-		var streaks = painter.Noise( 64, Seed + 603, 2 );
-		var grime = new float[WallSize * WallSize];
-		for ( var y = 0; y < WallSize; y++ )
-		for ( var x = 0; x < WallSize; x++ )
+		// Sheet widths in crests, 7 to 9, adding up to the repeat; each sheet's end lap at its own height.
+		var widths = new[] { 8, 8, 8, 8, 8 };
+		for ( var k = 0; k < 6; k++ )
 		{
-			var s = Streak( streaks, WallSize, x, y / 40f );
-			var trough = 1f - relief[y * WallSize + x];
-			grime[y * WallSize + x] = s > 0.55f ? MathF.Min( (s - 0.55f) * 3f, 1f ) * trough * 0.35f : 0f;
+			var a = random.Next( 5 ); var b = random.Next( 5 );
+			if ( a != b && widths[a] < 9 && widths[b] > 7 ) { widths[a]++; widths[b]--; }
 		}
-		painter.Blend( grime, Grime );
+		var starts = new int[6];
+		starts[0] = random.Next( Crests );
+		for ( var k = 0; k < 5; k++ ) starts[k + 1] = starts[k] + widths[k];
+		var laps = new float[5];
+		for ( var k = 0; k < 5; k++ ) laps[k] = Row( 98f + Next() * 22f );
 
-		var seam = WallSize / 2 + 20;
-		painter.Rect( 0f, seam, WallSize, 6f, ZincDark, height: 1.3f, bevel: 2f, roughness: 0.5f );
-		for ( var x = random.Next( 40 ); x < WallSize - 20; x += 120 + random.Next( 60 ) )
-			painter.Circle( x + 0.5f, seam + 12f, 4f, ZincLight, height: 1.6f, bevel: 3f, roughness: 0.3f );
+		// Ten sheets (five columns, two lengths), each its own zinc and its own weathering.
+		var palette = new Color[11];
+		var weather = new float[11];
+		for ( var k = 1; k <= 10; k++ )
+		{
+			var tone = Next() * 2f - 1f;
+			var zinc = tone < 0f ? Mix( Zinc, ZincDark, -tone * 0.45f ) : Mix( Zinc, ZincLight, tone * 0.45f );
+			weather[k] = Next();
+			palette[k] = Mix( zinc, ZincDull, weather[k] * 0.55f );
+		}
 
-		painter.Blend( Ramp( painter.Noise( 7, Seed + 604, 4 ), 0.72f, 0.9f, 0.25f ), WhiteRust, roughness: 0.85f );
-		painter.ShadeFromHeight( 0.12f, 0.18f );
-		painter.Cavity( 0.3f, 6 );
-		painter.Grain( 0.01f, Seed + 605 );
-		return painter.Bake( "arena_5_wall", Painter.Matte, 4f );
+		var warp = painter.Noise( 16, Seed + 601, 2 );
+		var rustNoise = painter.Noise( 7, Seed + 602, 3 );
+		var runs = painter.Noise( 48, Seed + 603, 2 );
+		var owner = new byte[WallSize * WallSize];
+		var relief = new float[WallSize * WallSize];
+		var spangle = new float[WallSize * WallSize];
+		var bloom = new float[WallSize * WallSize];
+		var grime = new float[WallSize * WallSize];
+		var edge = new float[WallSize * WallSize];
+		var wave = new float[WallSize];
+		for ( var x = 0; x < WallSize; x++ ) wave[x] = 0.5f + 0.5f * MathF.Cos( x * MathF.Tau / Pitch );
+
+		for ( var y = 0; y < WallSize; y++ )
+		{
+			var v = WallRepeat - y / Ppu;
+			var splash = v < 30f ? (30f - v) / 30f : 0f;
+			for ( var x = 0; x < WallSize; x++ )
+			{
+				var i = y * WallSize + x;
+
+				// Which sheet: the column by crest (wrapping), the length by that column's lap.
+				var crest = (x / Pitch - starts[0] + Crests * 2) % Crests;
+				var column = 0;
+				while ( column < 4 && crest >= starts[column + 1] - starts[0] ) column++;
+				var upper = y < laps[column];
+				var sheet = 1 + column * 2 + (upper ? 1 : 0);
+				owner[i] = (byte)sheet;
+
+				// Corrugation, a hair proud where a sheet laps over its neighbour and over the length below.
+				var intoColumn = crest - (starts[column] - starts[0]);
+				var side = intoColumn < 0.5f ? 0.07f : 0f;
+				var end = upper && laps[column] - y < 5f ? 0.08f : 0f;
+				relief[i] = wave[x] * 0.8f + side + end;
+				if ( !upper && y - laps[column] < 7f ) edge[i] = (1f - (y - laps[column]) / 7f) * 0.55f;
+				if ( intoColumn > 0.48f && intoColumn < 0.56f ) edge[i] = MathF.Max( edge[i], 0.4f );
+
+				// Spangle: crystal grains as a warped patchwork, each a little brighter or duller.
+				var gx = (int)((x + (warp[i] - 0.5f) * 30f) / 14f);
+				var gy = (int)((y + (warp[(i + 512 * WallSize + 512) % (WallSize * WallSize)] - 0.5f) * 30f) / 14f);
+				spangle[i] = (Bits( Hash( gx, gy, Seed ), 0 ) - 0.5f) * (1f - weather[sheet]) * 0.5f;
+
+				var r = rustNoise[i];
+				bloom[i] = r > 0.62f ? MathF.Min( (r - 0.62f) * 4f, 1f ) * (0.15f + weather[sheet] * 0.45f) : 0f;
+
+				// Grime down the troughs, read as long thin streaks; and the splash band at the foot.
+				var s = StreakX( runs, WallSize, y, x, 37 );
+				grime[i] = (s > 0.55f ? MathF.Min( (s - 0.55f) * 3f, 1f ) * (1f - wave[x]) * 0.35f : 0f) + splash * splash * 0.5f;
+			}
+		}
+
+		painter.AddHeight( relief, 1f );
+		painter.Blend( owner, palette );
+		var lighter = new float[WallSize * WallSize];
+		for ( var i = 0; i < spangle.Length; i++ ) { lighter[i] = spangle[i] > 0f ? spangle[i] : 0f; spangle[i] = spangle[i] < 0f ? -spangle[i] : 0f; }
+		painter.Blend( lighter, ZincLight );
+		painter.Blend( spangle, ZincDark );
+		painter.Blend( bloom, WhiteRust, roughness: 0.85f );
+		painter.Blend( grime, Grime, roughness: 0.7f );
+		painter.Blend( edge, Mix( ZincDark, Grime, 0.5f ) );
+
+		// Screws with washers on every other crest along three girts; some rusty, a few bleeding.
+		for ( var c = 0; c < 5; c++ )
+		{
+			var girts = new[] { Row( 24f ), laps[c] + 10f, Row( 170f ) };
+			for ( var k = starts[c] + 1; k < starts[c + 1]; k += 2 )
+			foreach ( var gy in girts )
+			{
+				var x = (k % Crests) * Pitch + (Next() - 0.5f) * 1.5f;
+				var y = gy + (Next() - 0.5f) * 3f;
+				var rusty = Next();
+				if ( rusty < 0.35f ) painter.Circle( x, y, 7f, Rust, 0.18f + rusty * 0.4f );
+				if ( rusty < 0.12f )
+				{
+					var length = 40f + Next() * 110f;
+					var width = 2.5f + Next() * 2.5f;
+					for ( var s = 0; s < 6; s++ )
+						painter.Line( new Vector2( x, y + length * s / 6f ), new Vector2( x + (Next() - 0.5f) * 2f, y + length * (s + 1) / 6f ), width * (1f - s * 0.12f), Rust, 0.22f * (1f - s / 7f) );
+				}
+				painter.Circle( x, y, 4.6f, ZincLight, height: 1.05f, bevel: 2f, roughness: 0.4f );
+				painter.Circle( x, y, 2.3f, Mix( ZincDark, rusty < 0.35f ? Rust : ZincDark, 0.5f ), height: 1.25f, bevel: 1.6f, roughness: 0.5f );
+			}
+		}
+
+		painter.HeightNoise( 0.15f, 3, Seed + 604, 2 );
+		painter.ShadeFromHeight( 0.08f, 0.14f );
+		painter.Mottle( 0.04f, 8, Seed + 605, 3 );
+		painter.RoughnessNoise( 0.08f, 6, Seed + 606, 3 );
+		painter.Cavity( 0.3f, 5 );
+		painter.Grain( 0.01f, Seed + 607 );
+		return BakeMetal( painter, "arena_5_wall", 4f, 0.5f );
 	}
 
-	/// <summary>Plain painted steel: posts and beams with rivets along the post edges.</summary>
+	/// <summary>
+	/// The steelwork in machinery khaki, chipped to bare steel at the arrises: the cornice is a girder
+	/// (flanges proud of the web, rivets along both), the posts riveted columns with flange plates down
+	/// their edges, the skirting a band of worn hazard stripes in ink and paper (never the warning
+	/// colour), the slab edge a bolted steel angle.
+	/// </summary>
 	protected override PaintedSurface PaintTrim()
 	{
-		// Full surface in Task 6b.
-		return PaintTrimAtlas( "arena_5_trim", SteelShade, Grime, 0.5f, 0f, Seed + 700, painter =>
+		return PaintTrimAtlas( "arena_5_trim", Khaki, Grime, 0.55f, 0f, Seed + 700, painter =>
 		{
-			var (top, height) = TrimRows( TrimBand.Pilaster );
-			for ( var x = 12; x < TrimSize; x += 42 )
+			PaintBand( painter, TrimBand.Cornice, Khaki, GirderProfile, 0.55f );
+			ShadeBand( painter, TrimBand.Cornice, GirderProfile, Grime, 0.6f );
+			PaintBand( painter, TrimBand.Pilaster, Khaki, ColumnProfile, 0.55f );
+			ShadeBand( painter, TrimBand.Pilaster, ColumnProfile, Grime, 0.5f );
+
+			// Rivets along both flanges of the girder and both plates of the columns, at an even rivet
+			// pitch that divides the band, so they run on seamlessly along the run.
+			const float RivetPitch = TrimSize / 24f;
+			foreach ( var (band, rows) in new[] { (TrimBand.Cornice, new[] { 0.08f, 0.92f }), (TrimBand.Pilaster, new[] { 0.07f, 0.93f }) } )
 			{
-				painter.Circle( x, top + height * 0.16f, 3.2f, Steel, height: 1.25f, bevel: 2.5f, roughness: 0.35f );
-				painter.Circle( x + 21, top + height * 0.84f, 3.2f, Steel, height: 1.25f, bevel: 2.5f, roughness: 0.35f );
+				var (top, height) = TrimRows( band );
+				for ( var k = 0; k < 24; k++ )
+				foreach ( var t in rows )
+					painter.Circle( k * RivetPitch + RivetPitch * 0.5f, top + height * t, 3f, Khaki, height: 1.3f, bevel: 2.4f, roughness: 0.45f );
 			}
+
+			// Hazard stripes on the skirting, worn through to steel where boots and trolleys hit them.
+			{
+				var (top, height) = TrimRows( TrimBand.Skirting );
+				for ( var y = top; y < top + height; y++ )
+				for ( var x = 0; x < TrimSize; x++ )
+				{
+					var stripe = ((x + y) / 24) % 2 == 0;
+					painter.Fill( x, y, 1, 1, stripe ? Mix( Palette.Ink, Grime, 0.2f ) : Mix( Palette.PaperShade, Khaki, 0.25f ) );
+				}
+				var scuffs = Ramp( painter.Noise( 32, Seed + 710, 3 ), 0.6f, 0.8f, 0.6f );
+				for ( var i = 0; i < scuffs.Length; i++ )
+					if ( i / TrimSize < top || i / TrimSize >= top + height ) scuffs[i] = 0f;
+				painter.Blend( scuffs, SteelShade, roughness: 0.4f );
+			}
+
+			// The slab edge: a steel angle, bolted.
+			{
+				var (top, height) = TrimRows( TrimBand.SlabEdge );
+				TintBand( painter, TrimBand.SlabEdge, SteelShade, 0.4f, NosingProfile, Grime, 0.5f );
+				for ( var x = 16; x < TrimSize; x += 64 )
+				{
+					painter.Circle( x, top + height * 0.6f, 5f, Steel, height: 1.25f, bevel: 3f, roughness: 0.35f );
+					painter.Circle( x, top + height * 0.6f, 2.2f, SteelShade, height: 1.35f, bevel: 1f, roughness: 0.4f );
+				}
+			}
+
+			// Paint chipped to steel in small flakes over all the khaki.
+			var chips = Ramp( painter.Noise( 48, Seed + 711, 3 ), 0.7f, 0.8f, 0.7f );
+			var (skirt, skirtHeight) = TrimRows( TrimBand.Skirting );
+			var infill = TrimRows( TrimBand.Infill ).Top;
+			for ( var i = 0; i < chips.Length; i++ )
+			{
+				var row = i / TrimSize;
+				if ( row >= infill || row >= skirt && row < skirt + skirtHeight ) chips[i] = 0f;
+			}
+			painter.Blend( chips, SteelShade, roughness: 0.35f );
 		} );
+	}
+
+	/// <summary>A girder seen from the side: the flanges at top and bottom proud of the web between them.</summary>
+	static float GirderProfile( float t )
+	{
+		var flange = MathF.Min( t, 1f - t );
+		return flange < 0.16f ? 1f : flange < 0.2f ? 1f - (flange - 0.16f) / 0.04f * 0.4f : 0.6f;
+	}
+
+	/// <summary>A built-up column's face: riveted flange plates down both edges, proud of the plate between.</summary>
+	static float ColumnProfile( float t )
+	{
+		var edge = MathF.Min( t, 1f - t );
+		return edge < 0.02f ? 0.7f + edge * 15f : edge < 0.14f ? 1f : edge < 0.16f ? 1f - (edge - 0.14f) / 0.02f * 0.15f : 0.85f;
 	}
 
 	protected override PaintedSurface PaintFloor()

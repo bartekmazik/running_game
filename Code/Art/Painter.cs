@@ -513,6 +513,9 @@ public sealed class Painter
 		}
 	}
 
+	/// <summary>Copies the height channel into <paramref name="into"/>, for masks that follow the relief (moss in the joints).</summary>
+	public void CopyHeight( float[] into ) => Array.Copy( _height, into, _height.Length );
+
 	/// <summary>Adds <paramref name="amount"/> × <paramref name="delta"/> to the height channel, pixel for pixel — for relief computed outside the canvas (ripples, weave).</summary>
 	public void AddHeight( float[] delta, float amount )
 	{

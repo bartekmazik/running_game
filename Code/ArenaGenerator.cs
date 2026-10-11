@@ -38,8 +38,15 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	public const string GlowMaterialPath = "materials/dev/primary_white_emissive.vmat";
 
-	/// <summary>Height of the lava glow light above the slab.</summary>
-	const float LavaGlowHeight = 120f;
+	/// <summary>Height of the lava glow light above the slab's centre: just over its top face.</summary>
+	const float LavaGlowHeight = 32f;
+
+	/// <summary>
+	/// Reach of the lava glow: the shaft, the last floor's undersides over it and the sides of its tiles,
+	/// and no further. The light casts no shadows, so a longer reach (it was 0.8 of the grid) lit the
+	/// sides of the tiles a floor higher through the forge floor, as pink slivers along the dungeon's joints.
+	/// </summary>
+	const float LavaGlowRadius = 420f;
 
 	/// <summary>Where the floor plaques hang: centred on every wall, at this height above the tile top.</summary>
 	const float PlaqueHeight = 150f;
@@ -70,7 +77,13 @@ public sealed class ArenaGenerator : Component
 	const float ExposureCompensation = 0f;
 
 	static readonly Color SunColor = new Color( 1.00f, 0.95f, 0.88f );
-	static readonly Color SunSkyColor = new Color( 0.74f, 0.80f, 0.94f );
+	/// <summary>
+	/// The sky's ambient fill, which reaches every room alike — the rooms are closed, but ambient light
+	/// is not occluded. A neutral grey at a little over half strength, so each room's own lamps carry its
+	/// light and colour (the old blue-lilac fill at 0.8 gave every floor the same cool, flat cast) and
+	/// still no corner goes black — at 0.5 the forge's ceiling did.
+	/// </summary>
+	static readonly Color SunSkyColor = new Color( 0.55f, 0.55f, 0.58f );
 
 	/// <summary>Chamfer on the tile's top edges: catches the light, so neighbouring tiles read as separate blocks.</summary>
 	public const float TileBevel = 2f;
@@ -100,6 +113,17 @@ public sealed class ArenaGenerator : Component
 	Material _roofPanes;
 
 	Material _glowMaterial;
+
+	/// <summary>
+	/// A doomed tile's glow: <see cref="WarnColor"/> painted into the emissive material's own colour,
+	/// with the renderer's tint left as a grey brightness. Tinting the shipped emissive white orange
+	/// came out cream — its glow doesn't take the tint's hue — however dim the tint.
+	/// </summary>
+	Material _warnMaterial;
+
+	/// <summary>Glow brightness of a doomed tile when it starts warning, and when it is about to drop: above about 0.7 the orange blows out toward cream.</summary>
+	const float WarnEmber = 0.18f;
+	const float WarnGlow = 0.6f;
 
 	ModelRenderer _lavaRenderer;
 	PointLight _lavaLight;
@@ -156,6 +180,7 @@ public sealed class ArenaGenerator : Component
 
 		var boxModel = Model.Load( "models/dev/box.vmdl" );
 		_glowMaterial = Material.Load( GlowMaterialPath );
+		_warnMaterial = new Painter( 16, WarnColor, 1f ).Bake( "arena_tile_warning", GlowMaterialPath, 1f ).Upload();
 
 		PaintThemes();
 
@@ -262,8 +287,9 @@ public sealed class ArenaGenerator : Component
 	///     turned by <paramref name="turn"/> quarter-turns with the tangent following them, so the
 	///     normal map stays lit from the right side; each chamfer's UV trapezoid has the shape of the
 	///     chamfer itself, so its two triangles share one mapping and nothing kinks.
-	///   * sides: the outermost sliver of the same strip, the joint colour, stretched down the side —
-	///     no decal from the middle of the tile can land on them.
+	///   * sides: a sliver from the middle of the same strip, the stone at its arris, stretched down
+	///     the side — no decal from the middle of the tile can land on them, and the joint colour
+	///     stays on the chamfer's foot, where it reads from above.
 	///   * underside: the ceiling of the room below, full size and unchamfered, so neighbouring
 	///     undersides meet edge to edge and read as one ceiling; the cell with the same index as the
 	///     top, unturned, so boards and stripes keep one direction across the room.
@@ -295,7 +321,15 @@ public sealed class ArenaGenerator : Component
 
 		// The +X side, then the same quarter-turned three times; geometry and unfolded UV points are
 		// turned by the same rotation, so every side samples its own edge of the cell.
-		var foot = unfolded - 0.25f;
+		// A side is seen only at grazing angles, a pixel or less wide at the far end of a seam, where
+		// it alternates with the chamfer above it pixel by pixel: in the dark joint colour it drew the
+		// far seams as dashed lines (on the dungeon and forge floors most). It takes the middle of the
+		// chamfer's strip instead — the stone's own colour at its arris, which the Rim rule keeps free
+		// of decals — and is lit as if it faced up, like the top: facing the camera it caught the lamps
+		// behind it and drew the seams as bright dashes instead. Whichever a pixel lands on, it is the
+		// same stone in the same light. (In a hole the sides read as evenly lit stone, which they are.)
+		var sideOuter = inner + (unfolded - inner) * 0.55f;
+		var sideInner = inner + (unfolded - inner) * 0.35f;
 		for ( var side = 0; side < 4; side++ )
 		{
 			var rotation = Rotation.FromYaw( side * 90f );
@@ -312,7 +346,7 @@ public sealed class ArenaGenerator : Component
 			// other way round the tangent frame is mirrored and the normal map's slopes flip.
 			kit.Quad( surface,
 				P( half, -half, -top ), P( half, half, -top ), P( half, half, shoulder ), P( half, -half, shoulder ),
-				T( unfolded, -half ), T( unfolded, half ), T( foot, half ), T( foot, -half ) );
+				T( sideOuter, -half ), T( sideOuter, half ), T( sideInner, half ), T( sideInner, -half ), Vector3.Up );
 		}
 
 		// Anticlockwise seen from below.
@@ -375,12 +409,13 @@ public sealed class ArenaGenerator : Component
 		var renderer = _renderers?[floor, x, y];
 		if ( renderer is null ) return;
 
-		renderer.MaterialOverride = _glowMaterial;
+		renderer.MaterialOverride = _warnMaterial;
 
 		// Orange on every floor from the first frame — blending from the floor's own colour made a
 		// teal tile go beige, which reads as nothing. Dim ember to full glow over the delay.
 		var eased = t * t;
-		renderer.Tint = Color.Lerp( WarnColor.Darken( 0.6f ), WarnColor, eased );
+		var glow = WarnEmber + (WarnGlow - WarnEmber) * eased;
+		renderer.Tint = new Color( glow, glow, glow );
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y ) + Vector3.Down * (6f * eased);
 	}
 
@@ -488,7 +523,7 @@ public sealed class ArenaGenerator : Component
 
 		lava.AddComponent<LavaZone>();
 
-		CreateLavaGlow( z, span );
+		CreateLavaGlow( z );
 	}
 
 	/// <summary>
@@ -595,7 +630,7 @@ public sealed class ArenaGenerator : Component
 	/// LocalScale, and a child would inherit it — both its offset and the light's radius would
 	/// come out stretched.
 	/// </summary>
-	void CreateLavaGlow( float lavaZ, float span )
+	void CreateLavaGlow( float lavaZ )
 	{
 		var glow = new GameObject( GameObject, true, "Lava Glow" );
 		glow.LocalPosition = new Vector3( 0f, 0f, lavaZ + LavaGlowHeight );
@@ -603,7 +638,7 @@ public sealed class ArenaGenerator : Component
 
 		_lavaLight = glow.AddComponent<PointLight>();
 		_lavaLight.LightColor = LavaGlowColor;
-		_lavaLight.Radius = span * 0.8f;
+		_lavaLight.Radius = LavaGlowRadius;
 
 		// Thousands of tiles between this light and the camera. Shadow-casting it would be the single
 		// most expensive thing in the scene, and it lights an area nobody stands in.

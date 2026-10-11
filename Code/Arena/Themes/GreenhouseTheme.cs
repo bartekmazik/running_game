@@ -45,12 +45,14 @@ public sealed class GreenhouseTheme : ArenaTheme
 	static Color WeatheredWood => Palette.Hex( 0x9C9485 );
 
 	/// <summary>
-	/// The structural front layer: slender painted posts, a plate beam under the roof, skirting. The
-	/// planting beds, ferns and potting shelves come in Task 7; lights in 6b (the room is sun-lit).
+	/// The structural front layer: slender painted posts, a plate beam under the roof, skirting; and a
+	/// warm fill of four dim lamps under the plate beam — the sun through the glass does the rest. The
+	/// planting beds, ferns and potting shelves come in Task 7.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 20f, Pier = 64f, Corner = 26f, Cornice = 22f, Skirting = 12f, SkirtingDepth = 4f } );
+		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, 480f, LightColor * 1.2f, Seed + 900 );
 	}
 
 	/// <summary>

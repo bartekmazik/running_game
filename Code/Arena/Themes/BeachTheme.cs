@@ -40,12 +40,13 @@ public sealed class BeachTheme : ArenaTheme
 	static readonly uint[] Grit = { 0xEFE3D0, 0xA9A39A, 0xE3B3A3, 0x9C7B5B, 0x5A5550 };
 
 	/// <summary>
-	/// The structural front layer: painted posts, a top plate, skirting. Awnings, surfboards, the life
-	/// ring and palm fronds come in Task 8; lights in 6b.
+	/// The structural front layer: painted posts, a top plate, skirting; and five warm lamps under the
+	/// top plate, a high-key summer light. Awnings, surfboards, the life ring and palm fronds come in Task 8.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 70f, Corner = 28f, Cornice = TopPlate, Skirting = Skirting, SkirtingDepth = 4f } );
+		AddLamps( room, 5, FloorContext.ClearHeight - 30f, -24f, 480f, LightColor * 2.6f, Seed + 900 );
 	}
 
 	/// <summary>Height of the top plate under the ceiling and of the skirting: between them is the wall a hut shows.</summary>

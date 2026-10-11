@@ -38,70 +38,294 @@ public sealed class LibraryTheme : ArenaTheme
 	static Color WalnutDeep => Palette.Hex( 0x4D3528 );
 	static Color WalnutGrain => Palette.Hex( 0x3E2A20 );
 
+	/// <summary>The bookcases' boarded back, in shadow behind the books.</summary>
+	static Color CaseBack => Palette.Hex( 0x3A2820 );
+
+	/// <summary>Gilt tooling on the spines: old gold, worn soft.</summary>
+	static Color Gilt => Palette.Hex( 0xB89D62 );
+
+	/// <summary>Dust settled along the front of the shelves.</summary>
+	static Color Dust => Palette.Hex( 0x9A8E80 );
+
+	/// <summary>One bookcase per module, so every length of wall starts on a case's upright and no bay ends in a sliver of a case.</summary>
+	protected override float WallModule => WallRepeat / 4f;
+
 	/// <summary>Plank width in pixels (about 7 units, an 18 cm plank) and its length in widths.</summary>
 	const int PlankWidth = 64;
 	const int PlankRatio = 4;
 
-	/// <summary>Structural front layer only (props, lamps and lights come in Tasks 6b and 9).</summary>
+	/// <summary>
+	/// The structural front layer, and warm lamplight where the chandeliers will hang under the cornice
+	/// (the chandeliers, reading lamps and ladders come in Task 9).
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 78f, Corner = 32f, Cornice = 30f, Skirting = 14f, SkirtingDepth = 6f } );
+		AddLamps( room, 5, FloorContext.ClearHeight - 28f, -24f, 480f, LightColor * 3f, Seed + 900 );
 	}
 
 	/// <summary>
-	/// Plain bookcases: walnut uprights every 52 units, a shelf every 34, books standing in every
-	/// compartment — each its own width, height and muted colour, a few leaning at the row ends —
-	/// against the case's dark back.
+	/// Built-in walnut bookcases, one per <see cref="WallModule"/>: a plinth, side uprights shared
+	/// with the next case, five shelves set at their own heights in every case (shelves are moved to
+	/// fit what is on them), a dark boarded back. Books are generated per shelf: each its own width,
+	/// height, colour from a muted set of bindings (oxblood, bottle green, navy, ochre, vellum, plum and
+	/// the floor's own dusty rose), cloth or leather — leather with raised bands and gilt, cloth with a
+	/// paper label or a pair of gilt rules — and a rounded spine. Now and then a run of matching
+	/// volumes, a few books lying flat, a gap, and the last book of a row leaning on its neighbour.
+	/// Spines fade toward the head, where the light reaches; each shelf throws a shadow over the
+	/// tops of the books under it.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
-		// Full surface in Task 6b.
 		const float Ppu = WallSize / WallRepeat;
-		const int Bay = WallSize / 4;
-		var painter = new Painter( WallSize, Mix( WalnutDeep, WalnutGrain, 0.5f ), 0.85f );
+		const int Case = WallSize / 4;
+		const float Upright = 3.4f * Ppu;
+		const float Shelf = 2.2f * Ppu;
+		float Row( float v ) => (WallRepeat - v) * Ppu;
+		var painter = new Painter( WallSize, CaseBack, 0.85f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();
-		var bindings = new[] { 0x7A4A44u, 0x4F6A55u, 0x48557Au, 0xA88A5Cu, 0xA9864Cu, 0x6E4E6Au };
 
-		for ( var level = 0; level < 6; level++ )
+		// The case back: vertical boards, each its own shade, in deep shadow behind the books.
+		for ( var x = 0f; x < WallSize; )
 		{
-			var shelfV = 2f + level * 34f;
-			var bottom = (WallRepeat - shelfV) * Ppu;
-			var gap = (34f - 2.5f) * Ppu;
-			for ( var c = 0; c < 4; c++ )
+			var board = (9f + Next() * 5f) * Ppu;
+			var w = MathF.Min( board, WallSize - x );
+			painter.Rect( x + 0.5f, 0f, w - 1f, WallSize, Mix( CaseBack, WalnutGrain, Next() * 0.5f ), height: 0.2f, roughness: 0.85f );
+			x += board;
+		}
+
+		var shade = new float[WallSize * WallSize];
+		for ( var c = 0; c < 4; c++ )
+		{
+			var left = c * Case + Upright * 0.5f;
+			var right = (c + 1) * Case - Upright * 0.5f;
+
+			// Plinth top and five shelves, every case set at its own heights.
+			var plinth = 13f + Next() * 3f;
+			var levels = new float[6];
+			levels[0] = plinth;
+			var pitch = (WallRepeat - 33f - plinth) / 5f;
+			for ( var k = 1; k < 6; k++ ) levels[k] = plinth + k * pitch + (k < 5 ? (Next() - 0.5f) * 4f : 0f);
+
+			painter.Rect( left, Row( plinth ), right - left, WallSize - Row( plinth ), Walnut, height: 1.2f, bevel: 3f, roughness: 0.55f );
+
+			for ( var k = 0; k < 5; k++ )
 			{
-				var x = c * Bay + 9f + Next() * 6f;
-				var end = (c + 1) * Bay - 9f;
-				while ( x < end - 18f )
+				var floorV = levels[k] + (k == 0 ? 0f : Shelf / Ppu);
+				var clear = levels[k + 1] - floorV;
+				ShelfOfBooks( painter, random, left + 2f, right - 2f, Row( floorV ), clear * Ppu );
+
+				// The shelf above throws its shadow over the tops of the books.
+				var under = Row( levels[k + 1] ) + Shelf;
+				for ( var y = (int)under; y < (int)under + 34 && y < WallSize; y++ )
 				{
-					var width = (4f + Next() * 5f) * Ppu;
-					if ( x + width > end ) break;
-					var height = MathF.Min( (22f + Next() * 8f) * Ppu, gap - 4f );
-					var color = Mix( Palette.Hex( bindings[random.Next( bindings.Length )] ), Next() < 0.5f ? Gap : Bare, Next() * 0.3f );
-					var lean = x + width * 2.2f > end || Next() < 0.06f ? (Next() - 0.5f) * 12f : 0f;
-					painter.Rect( x, bottom - height, width - 1.5f, height, color, radius: 1.5f, height: 1f, bevel: 3f, roughness: 0.7f, angle: lean );
-					x += width + (Next() < 0.08f ? Next() * 24f : 0.5f);
+					var w = 0.55f * (1f - (y - under) / 34f);
+					for ( var x = (int)left; x < (int)right; x++ ) shade[y * WallSize + x] = MathF.Max( shade[y * WallSize + x], w * w );
 				}
 			}
 
-			painter.Rect( 0f, bottom, WallSize, 2.5f * Ppu, Walnut, height: 1.3f, bevel: 3f, roughness: 0.55f );
+			// Shelves: walnut boards with a lit front arris and a grey line of dust along it.
+			for ( var k = 1; k < 6; k++ )
+			{
+				var top = Row( levels[k] );
+				var tone = Mix( Walnut, Next() < 0.5f ? WalnutLight : WalnutDeep, Next() * 0.25f );
+				painter.Rect( left - 1f, top, right - left + 2f, Shelf, tone, height: 1.25f, bevel: 3f, roughness: 0.5f );
+				painter.Rect( left, top + 1f, right - left, 1.5f, Mix( tone, Dust, 0.5f ), alpha: 0.6f );
+			}
+
+			// The crown rail over the top shelf, hidden for the most part behind the cornice beam.
+			painter.Rect( left - 1f, 0f, right - left + 2f, Row( WallRepeat - 28f ), WalnutDeep, height: 1.1f, bevel: 3f, roughness: 0.6f );
 		}
 
-		for ( var c = 0; c < 4; c++ )
-			painter.Rect( c * Bay - 8f, 0f, 16f, WallSize, Walnut, height: 1.4f, bevel: 4f, roughness: 0.55f );
+		painter.Blend( shade, Palette.Hex( 0x1E1512 ) );
 
-		painter.Mottle( 0.05f, 6, Seed + 601, 4 );
-		painter.Cavity( 0.5f, 5 );
-		painter.EdgeWear( 0.2f, 3, Seed + 602 );
-		painter.Grain( 0.012f, Seed + 603 );
+		// The uprights, shared by neighbouring cases, their grain running down them.
+		var grain = painter.Noise( 8, Seed + 601, 2 );
+		var lines = new float[WallSize * WallSize];
+		for ( var c = 0; c < 4; c++ )
+		{
+			var x0 = c * Case - Upright * 0.5f;
+			var tone = Mix( Walnut, WalnutLight, Next() * 0.3f );
+			painter.Rect( x0, 0f, Upright, WallSize, tone, height: 1.45f, bevel: 4f, roughness: 0.5f );
+			for ( var x = (int)x0 + 2; x < (int)(x0 + Upright) - 2; x++ )
+			{
+				var px = (x + WallSize) % WallSize;
+				for ( var y = 0; y < WallSize; y++ )
+				{
+					// Read down the upright: thin across it, long along it.
+					var g = grain[(px * 37 % WallSize) * WallSize + y];
+					lines[y * WallSize + px] = g > 0.58f ? MathF.Min( (g - 0.58f) * 3f, 1f ) * 0.35f : 0f;
+				}
+			}
+		}
+		painter.Blend( lines, WalnutGrain );
+
+		painter.Mottle( 0.05f, 6, Seed + 602, 4 );
+		painter.RoughnessNoise( 0.05f, 16, Seed + 603, 2 );
+		painter.Cavity( 0.5f, 4 );
+		painter.EdgeWear( 0.15f, 2, Seed + 604 );
+		painter.Grain( 0.012f, Seed + 605 );
 		return painter.Bake( "arena_4_wall", Painter.Matte, 5f );
 	}
 
-	/// <summary>Plain walnut mouldings and posts.</summary>
+	/// <summary>
+	/// One shelf's books from <paramref name="left"/> to <paramref name="right"/>, standing on pixel
+	/// row <paramref name="foot"/> with <paramref name="clear"/> pixels of headroom.
+	/// </summary>
+	static void ShelfOfBooks( Painter painter, Random random, float left, float right, float foot, float clear )
+	{
+		const float Ppu = WallSize / WallRepeat;
+		float Next() => (float)random.NextDouble();
+		var x = left + Next() * 4f;
+		var run = 0;
+		var runColor = Bindings[0];
+		float runHeight = 0f, runWidth = 0f;
+		var runLeather = false;
+
+		while ( x < right - 4f )
+		{
+			// A gap now and then, where a book is out.
+			if ( Next() < 0.035f ) { x += (4f + Next() * 9f) * Ppu; continue; }
+
+			// A few books lying flat, the longest at the bottom.
+			if ( Next() < 0.04f && right - x > 30f * Ppu )
+			{
+				var length = (19f + Next() * 6f) * Ppu;
+				var y = foot;
+				var count = 2 + random.Next( 3 );
+				for ( var k = 0; k < count && foot - y < clear - 10f; k++ )
+				{
+					var thick = (2.6f + Next() * 2.2f) * Ppu;
+					var l = length * (1f - k * 0.08f) - Next() * 6f;
+					painter.Rect( x + (length - l) * Next(), y - thick, l, thick - 1f, Binding( random ), radius: 1.5f, height: 0.9f, bevel: thick * 0.4f, roughness: 0.7f );
+					y -= thick;
+				}
+				x += length + 2f;
+				continue;
+			}
+
+			// A run of matching volumes, or a single book.
+			if ( run == 0 )
+			{
+				run = Next() < 0.2f ? 3 + random.Next( 5 ) : 1;
+				runColor = Binding( random );
+				runHeight = MathF.Min( clear * (0.62f + Next() * 0.3f), clear - 6f );
+				runWidth = (3.2f + Next() * Next() * 4.5f) * Ppu;
+				runLeather = Next() < 0.3f;
+			}
+			run--;
+
+			var width = runWidth * (0.94f + Next() * 0.12f);
+			var height = MathF.Min( runHeight + (Next() - 0.5f) * 3f, clear - 4f );
+			if ( x + width > right ) break;
+
+			// The last book of a row, with room to fall, leans on its neighbour.
+			var lean = 0f;
+			var room = right - (x + width);
+			if ( room < width * 1.6f && room > 4f ) lean = 8f + Next() * 12f;
+			else if ( Next() < 0.03f ) lean = (Next() - 0.5f) * 10f;
+
+			var tone = Mix( runColor, Next() < 0.5f ? Color.Black : Color.White, Next() * 0.1f );
+			PaintBook( painter, random, x, foot, width, height, tone, runLeather, lean );
+			x += width + (lean != 0f ? MathF.Abs( MathF.Sin( lean * MathF.PI / 180f ) ) * height : 0.6f + Next() * 1.2f);
+		}
+	}
+
+	/// <summary>
+	/// One book seen by its spine: a rounded spine (the bevel across its width is the curve), faded
+	/// toward its head, leather with raised bands and a gilt panel or cloth with a label or gilt
+	/// rules. <paramref name="lean"/> in degrees tips its head toward the book on its left (Painter's
+	/// angle turns clockwise in the image), the foot sliding out to the right.
+	/// </summary>
+	static void PaintBook( Painter painter, Random random, float x, float foot, float width, float height, Color color, bool leather, float lean )
+	{
+		float Next() => (float)random.NextDouble();
+		var radians = lean * MathF.PI / 180f;
+		var sin = MathF.Abs( MathF.Sin( radians ) ); var cos = MathF.Cos( radians );
+
+		// Centre placed so the lowest corner of the tipped book rests on the shelf.
+		var cx = x + width * 0.5f + (lean > 0f ? height * sin * 0.5f : 0f);
+		var cy = foot - (sin * width + cos * height) * 0.5f;
+		var rough = leather ? 0.55f : 0.78f;
+		painter.Rect( cx - width * 0.5f, cy - height * 0.5f, width - 1f, height, color, radius: 1.2f, height: 1f, bevel: MathF.Min( width * 0.45f, 7f ), roughness: rough, angle: lean );
+
+		// The sun-faded head of the spine.
+		painter.Rect( cx - width * 0.5f, cy - height * 0.5f, width - 1f, height * 0.3f, Mix( color, Palette.Hex( 0xCFC3AE ), 0.35f ), alpha: 0.25f + Next() * 0.15f, angle: lean );
+
+		if ( lean != 0f ) return;
+		var top = cy - height * 0.5f;
+		if ( leather )
+		{
+			var bands = 3 + random.Next( 2 );
+			for ( var b = 0; b < bands; b++ )
+			{
+				var y = top + height * (0.14f + 0.72f * b / (bands - 1));
+				painter.Rect( x + 1f, y, width - 3f, 2.4f, Mix( color, Palette.Hex( 0x1E1512 ), 0.35f ), height: 1.15f, bevel: 1f, roughness: 0.5f );
+			}
+			painter.Rect( x + 2f, top + height * 0.22f, width - 5f, height * 0.13f, Gilt, alpha: 0.35f + Next() * 0.2f, roughness: 0.35f );
+		}
+		else if ( Next() < 0.45f )
+		{
+			painter.Rect( x + 2f, top + height * (0.12f + Next() * 0.1f), width - 5f, height * 0.12f, Palette.Hex( 0xDCD0B6 ), alpha: 0.55f + Next() * 0.2f, roughness: 0.85f );
+		}
+		else
+		{
+			foreach ( var at in new[] { 0.08f, 0.9f } )
+				painter.Rect( x + 1.5f, top + height * at, width - 4f, 1.6f, Gilt, alpha: 0.4f + Next() * 0.2f, roughness: 0.35f );
+		}
+	}
+
+	/// <summary>A binding from the muted set, a few percent off its neighbours.</summary>
+	static Color Binding( Random random ) => Mix( Bindings[random.Next( Bindings.Length )], Palette.Hex( 0x8A7A6A ), (float)random.NextDouble() * 0.15f );
+
+	/// <summary>Muted bindings: oxblood, bottle green, navy, ochre, tan, plum, the floor's dusty rose, vellum, brown calf, teal, maroon, sage.</summary>
+	static readonly Color[] Bindings =
+	{
+		Palette.Hex( 0x7A3E3E ), Palette.Hex( 0x3F5B49 ), Palette.Hex( 0x3E4A66 ), Palette.Hex( 0xA88452 ),
+		Palette.Hex( 0xB59A72 ), Palette.Hex( 0x6A4B66 ), Palette.Hex( 0x9C6F7C ), Palette.Hex( 0xD6C8AA ),
+		Palette.Hex( 0x6E4C36 ), Palette.Hex( 0x4D6B6C ), Palette.Hex( 0x5E3A34 ), Palette.Hex( 0x7E8A6A ),
+	};
+
+	/// <summary>
+	/// Walnut mouldings and posts with continuous grain: the cornice's fascia carries a row of dentils,
+	/// the posts are fluted pilasters, the skirting a plinth with a bead, the slab edge a walnut nosing.
+	/// </summary>
 	protected override PaintedSurface PaintTrim()
 	{
-		// Full surface in Task 6b.
-		return PaintTrimAtlas( "arena_4_trim", WalnutLight, WalnutDeep, 0.55f, 0.3f, Seed + 700 );
+		return PaintTrimAtlas( "arena_4_trim", WalnutLight, WalnutDeep, 0.5f, 0.3f, Seed + 700, painter =>
+		{
+			// Dentils along the fascia: blocks stood proud, the gaps between them in shadow.
+			var (top, height) = TrimRows( TrimBand.Cornice );
+			var y0 = top + height * 0.6f; var y1 = top + height * 0.9f;
+			for ( var x = 0; x < TrimSize; x += 16 )
+			{
+				painter.Rect( x + 3f, y0, 10f, y1 - y0, WalnutLight, alpha: 0f, height: 0.98f, bevel: 1.5f );
+				painter.Rect( x - 3f, y0, 6f, y1 - y0, WalnutDeep, alpha: 0.55f, height: 0.62f );
+			}
+
+			// Flutes down the posts: five narrow grooves between flat fillets, shaded in their hollows.
+			var (ptop, pheight) = TrimRows( TrimBand.Pilaster );
+			var relief = new float[TrimSize * TrimSize];
+			var hollow = new float[TrimSize * TrimSize];
+			for ( var y = 0; y < pheight; y++ )
+			{
+				var t = (y + 0.5f) / pheight;
+				var groove = 0f;
+				for ( var f = 0; f < 5; f++ )
+				{
+					var u = (t - (0.22f + f * 0.115f)) / 0.08f;
+					if ( u > 0f && u < 1f ) groove = MathF.Sin( u * MathF.PI );
+				}
+				for ( var x = 0; x < TrimSize; x++ )
+				{
+					relief[(ptop + y) * TrimSize + x] = -groove * 0.2f;
+					hollow[(ptop + y) * TrimSize + x] = groove * 0.22f;
+				}
+			}
+			painter.AddHeight( relief, 1f );
+			painter.Blend( hollow, WalnutDeep );
+		} );
 	}
 
 	protected override PaintedSurface PaintFloor()

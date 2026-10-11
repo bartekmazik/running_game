@@ -98,6 +98,45 @@ public sealed class TowerBuilder
 
 		var renderer = root.AddComponent<ModelRenderer>();
 		renderer.Model = room.Kit.Build( $"tower_floor{floor}" );
+
+		AddReflections( room );
+	}
+
+	/// <summary>
+	/// A reflection probe filling the room: it renders the room once, lamps and all, when the arena is
+	/// built, and box-projects that onto every surface inside, so metal reflects its own room (without
+	/// it metal had nothing to reflect but the scene's default cubemap and rendered black) and glossy
+	/// surfaces pick up the room's colour rather than the sky's.
+	/// </summary>
+	static void AddReflections( FloorContext room )
+	{
+		// Made disabled and switched on once set up: the probe builds its cubemap from its settings
+		// when it is enabled, and one enabled on creation kept the defaults.
+		var holder = new GameObject( room.Root, false, "Reflections" );
+		holder.LocalPosition = Vector3.Up * (room.TileTopZ + FloorContext.ClearHeight * 0.5f);
+		ArenaGenerator.MakeLocalOnly( holder );
+
+		var probe = holder.AddComponent<EnvmapProbe>();
+		probe.Mode = EnvmapProbe.EnvmapProbeMode.Realtime;
+		probe.UpdateStrategy = EnvmapProbe.CubemapDynamicUpdate.OnEnabled;
+		probe.Projection = SceneCubemap.ProjectionMode.Box;
+		probe.Resolution = EnvmapProbe.CubemapResolution.Small;
+		// The room out to the outer face of its walls and down into the tile slabs: a surface outside
+		// the box gets no reflection at all, and the wall face stands 40 units behind the grid edge.
+		const float Reach = FloorContext.HalfSpan + FloorContext.WallThickness;
+		var half = new Vector3( Reach, Reach, FloorContext.ClearHeight * 0.5f + Arena.TileThickness );
+		probe.Bounds = new BBox( -half, half );
+		probe.Feathering = 0.02f;
+		probe.Priority = 1;
+
+		// It renders only while the camera is within this distance; the menu orbit starts three
+		// thousand units out, and a probe that never rendered reflects black.
+		probe.MaxDistance = 100000f;
+
+		// A few extra renders at load, so metal seen in the probe already shows its own reflection
+		// (on the first render every metal surface in the room is still black).
+		probe.MultiBounce = true;
+		holder.Enabled = true;
 	}
 
 	/// <summary>
@@ -544,6 +583,9 @@ public sealed class TowerBuilder
 
 		painter.HeightNoise( 0.15f, 32, 4121, 3 );
 		painter.Mottle( 0.03f, 8, 4122, 3 );
+
+		// The stone's pits and the frames' bevels darken in their hollows, as the facade's stone does.
+		painter.Cavity( 0.35f, 3 );
 		painter.Grain( 0.01f, 4123 );
 		return painter.Bake( "tower_facade_detail", Painter.Matte, 3f );
 	}

@@ -43,66 +43,280 @@ public sealed class DungeonTheme : ArenaTheme
 	static Color Lime => Palette.Hex( 0x75707A );
 	static Color Soot => Palette.Hex( 0x2E2B33 );
 
-	/// <summary>Structural front layer only (arches, torches and lights come in Tasks 6b and 10).</summary>
+	/// <summary>
+	/// The walls' stone, greyer and warmer than the floor's flags: under the torches a lilac granite
+	/// wall read pink. A neutral grey, a warm grey and a slate, with lilac only as a lean in a few.
+	/// </summary>
+	static Color WallStoneGrey => Palette.Hex( 0x7E7A77 );
+	static Color WallStoneWarm => Palette.Hex( 0x85796E );
+	static Color WallStoneSlate => Palette.Hex( 0x67676F );
+
+	/// <summary>Iron leaching out of the odd stone: a dull ochre-brown.</summary>
+	static Color IronStain => Palette.Hex( 0x8A6A4E );
+
+	/// <summary>
+	/// The structural front layer, and six torches' worth of low, warm light at torch height along the
+	/// walls (the torches themselves, arches and the rest come in Task 10).
+	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 34f, Pier = 80f, Corner = 36f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 6f } );
+		AddLamps( room, 6, 125f, -12f, 460f, LightColor * 3f, Seed + 900 );
 	}
 
 	/// <summary>
-	/// Plain ashlar: courses of different heights, blocks of different lengths and tones (slate, lilac,
-	/// warm grey), pillowed and pitted, set in deep mortar, damp toward the floor.
+	/// Coursed ashlar, old and damp: courses of different heights, blocks of different lengths and
+	/// now and then two small stones stacked in one slot, every block cut a little out of true (its
+	/// sides wander, its corners differ), pillowed, dressed with diagonal tooling that runs its own way
+	/// on each stone, chipped along its arrises. Grey granite leaning slate, lilac or warm, a few
+	/// stones iron-stained. Lime mortar sits deep and crumbled in the joints. Damp rises from the floor
+	/// with a tide line of salts above it and moss in the low joints; soot hangs under the cornice.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
-		// Full surface in Task 6b.
 		const float Ppu = WallSize / WallRepeat;
-		var painter = new Painter( WallSize, Mix( Mortar, Soot, 0.35f ), 0.95f );
+		var joints = Mix( Mortar, Soot, 0.3f );
+		var painter = new Painter( WallSize, joints, 0.95f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();
-		var tones = new[] { Granite, GraniteLight, GraniteShade, GraniteWarm, GraniteLilac };
+		var tones = new[] { WallStoneGrey, WallStoneWarm, WallStoneSlate, Mix( WallStoneGrey, GraniteLilac, 0.35f ), Mix( WallStoneWarm, Rubble, 0.4f ) };
 
+		// The mortar bed: sunk, rough, crumbled.
+		var bed = painter.Noise( 48, Seed + 601, 3 );
+		for ( var i = 0; i < bed.Length; i++ ) bed[i] = 0.18f + (bed[i] - 0.5f) * 0.25f;
+		painter.AddHeight( bed, 1f );
+
+		var stones = new System.Collections.Generic.List<(Vector2 Min, Vector2 Size)>();
 		var y = 0f;
 		while ( y < WallSize - 1f )
 		{
-			var course = (26f + Next() * 14f) * Ppu;
+			var course = (24f + Next() * 14f) * Ppu;
 			if ( WallSize - (y + course) < 22f * Ppu ) course = WallSize - y;
 			var x = Next() * WallSize;
 			var end = x + WallSize;
 			while ( x < end - 1f )
 			{
-				var length = (36f + Next() * 54f) * Ppu;
-				if ( end - (x + length) < 30f * Ppu ) length = end - x;
-				var joint = 6f + Next() * 6f;
-				var stone = Mix( tones[random.Next( tones.Length )], tones[random.Next( tones.Length )], Next() );
-				painter.Rect( x + joint * 0.5f, y + joint * 0.5f, length - joint, course - joint, stone, radius: 4f + Next() * 6f, height: 1f,
-					bevel: 10f + Next() * 6f, roughness: 0.88f, angle: (Next() - 0.5f) * 0.8f );
+				var length = (30f + Next() * 52f) * Ppu;
+				if ( end - (x + length) < 26f * Ppu ) length = end - x;
+
+				// Now and then a slot filled by two smaller stones, one over the other.
+				if ( Next() < 0.1f && length < 55f * Ppu )
+				{
+					var split = course * (0.4f + Next() * 0.2f);
+					stones.Add( (new Vector2( x, y ), new Vector2( length, split )) );
+					stones.Add( (new Vector2( x, y + split ), new Vector2( length, course - split )) );
+				}
+				else stones.Add( (new Vector2( x, y ), new Vector2( length, course )) );
 				x += length;
 			}
 			y += course;
 		}
 
-		var damp = Ramp( painter.Noise( 6, Seed + 601, 4 ), 0.4f, 0.8f, 0.5f );
+		var tooling = new float[WallSize * WallSize];
+		var stain = new float[WallSize * WallSize];
+		foreach ( var (min, size) in stones )
+		{
+			var joint = 8f + Next() * 6f;
+			var outline = WallStone( min, size, joint, random.Next() );
+			var tone = Mix( tones[random.Next( tones.Length )], tones[random.Next( tones.Length )], Next() );
+			tone = Mix( tone, Next() < 0.5f ? Feldspar : Mix( Rubble, Soot, 0.3f ), Next() * 0.3f );
+			painter.Polygon( outline, tone, height: 0.85f + Next() * 0.3f, bevel: 14f + Next() * 10f, roughness: 0.86f + Next() * 0.08f );
+
+			// Tooling: fine parallel strokes across the face at the mason's angle for this stone.
+			var angle = (Next() < 0.5f ? -1f : 1f) * (0.5f + Next() * 0.5f);
+			var direction = new Vector2( MathF.Cos( angle ), MathF.Sin( angle ) );
+			var across = new Vector2( -direction.y, direction.x );
+			var centre = min + size * 0.5f;
+			var reach = (size.x + size.y) * 0.5f;
+			for ( var s = -reach; s < reach; s += 4f + Next() * 4f )
+			{
+				var from = centre + across * s - direction * reach;
+				var to = centre + across * s + direction * reach;
+				ClipLine( tooling, from, to, min + new Vector2( joint + 6f, joint + 6f ), size - new Vector2( joint * 2f + 12f, joint * 2f + 12f ), 0.25f + Next() * 0.2f );
+			}
+
+			// Chips off the arrises: a bite or two from some edges, sunk to the joint.
+			var chips = random.Next( 3 ) - 1;
+			for ( var c = 0; c < chips; c++ )
+			{
+				var horizontal = Next() < 0.5f;
+				var low = Next() < 0.5f;
+				var at = horizontal
+					? new Vector2( min.x + joint + Next() * (size.x - joint * 2f), low ? min.y + size.y - joint * 0.5f : min.y + joint * 0.5f )
+					: new Vector2( low ? min.x + size.x - joint * 0.5f : min.x + joint * 0.5f, min.y + joint + Next() * (size.y - joint * 2f) );
+				var along = horizontal ? new Vector2( 1f, 0f ) : new Vector2( 0f, 1f );
+				var into = horizontal ? new Vector2( 0f, low ? -1f : 1f ) : new Vector2( low ? -1f : 1f, 0f );
+				painter.Polygon( NickOutline( at, along, into, 6f + Next() * 10f, 4f + Next() * 5f, random.Next() ), Mix( tone, Soot, 0.25f ), height: 0.55f, bevel: 4f, roughness: 0.95f );
+			}
+
+			// An iron stain on the odd stone, soaked into its face.
+			if ( Next() < 0.08f )
+				painter.Polygon( Organic( centre + new Vector2( (Next() - 0.5f) * size.x * 0.4f, (Next() - 0.5f) * size.y * 0.3f ), size * new Vector2( 0.3f, 0.35f ), 0.9f, random.Next(), Next() * MathF.Tau ), IronStain, alpha: 0.18f );
+		}
+
+		painter.AddHeight( Scaled( tooling, -0.06f ), 1f );
+		painter.Blend( Scaled( tooling, 0.25f ), WallStoneSlate );
+
+		// Weathered faces: blotches of darker and paler stone, and pits where softer grains washed out.
+		var blotch = painter.Noise( 24, Seed + 611, 3 );
+		var pits = painter.Noise( 192, Seed + 612, 2 );
+		var darker = new float[WallSize * WallSize];
+		var paler = new float[WallSize * WallSize];
+		var pitted = new float[WallSize * WallSize];
+		for ( var i = 0; i < blotch.Length; i++ )
+		{
+			var b = (blotch[i] - 0.5f) * 2f;
+			darker[i] = b < 0f ? -b * 0.22f : 0f;
+			paler[i] = b > 0f ? b * 0.14f : 0f;
+			pitted[i] = pits[i] < 0.3f ? (0.3f - pits[i]) * 3f : 0f;
+		}
+		painter.Blend( darker, Mix( Rubble, Soot, 0.4f ) );
+		painter.Blend( paler, Feldspar );
+		painter.Blend( Scaled( pitted, 0.4f ), Mix( Rubble, Soot, 0.5f ) );
+		painter.AddHeight( Scaled( pitted, -0.12f ), 1f );
+
+		// Rising damp: dark stone at the foot, a pale tide line of salts at its edge, moss in the low joints.
+		var damp = painter.Noise( 6, Seed + 602, 3 );
+		var mossNoise = painter.Noise( 24, Seed + 603, 3 );
+		var soot = painter.Noise( 5, Seed + 604, 3 );
+		var wet = new float[WallSize * WallSize];
+		var salt = new float[WallSize * WallSize];
+		var moss = new float[WallSize * WallSize];
+		var smoke = new float[WallSize * WallSize];
+		var height = new float[WallSize * WallSize];
+		painter.CopyHeight( height );
 		for ( var py = 0; py < WallSize; py++ )
 		{
-			var low = Math.Clamp( (py / (float)WallSize - 0.6f) * 2.5f, 0f, 1f );
-			for ( var px = 0; px < WallSize; px++ ) damp[py * WallSize + px] *= low;
+			var v = WallRepeat - py / Ppu;
+			for ( var px = 0; px < WallSize; px++ )
+			{
+				var i = py * WallSize + px;
+				var line = 34f + (damp[i] - 0.5f) * 40f;
+				wet[i] = v < line ? MathF.Min( (line - v) / 12f, 1f ) * 0.45f : 0f;
+				var edge = MathF.Abs( v - line - 2f );
+				salt[i] = edge < 4f ? (1f - edge / 4f) * 0.3f * damp[i] : 0f;
+				var low = v < 50f ? (50f - v) / 50f : 0f;
+				moss[i] = height[i] < 0.5f && mossNoise[i] > 0.55f ? MathF.Min( (mossNoise[i] - 0.55f) * 5f, 1f ) * low * 0.6f : 0f;
+				var high = v > 150f ? (v - 150f) / 58f : 0f;
+				smoke[i] = high * (0.25f + soot[i] * 0.35f);
+			}
 		}
-		painter.Blend( damp, Damp, roughness: 0.7f );
+		painter.Blend( wet, Damp, roughness: 0.6f );
+		painter.Blend( salt, Palette.Hex( 0xCFCBC4 ), roughness: 0.95f );
+		painter.Blend( moss, Mix( Moss, Granite, 0.35f ), roughness: 0.95f );
+		painter.Blend( smoke, Soot );
 
-		painter.HeightNoise( 0.5f, 16, Seed + 602, 3 );
-		painter.Mottle( 0.08f, 8, Seed + 603, 4 );
+		painter.HeightNoise( 0.35f, 16, Seed + 605, 3 );
+		painter.HeightNoise( 0.12f, 96, Seed + 606, 2 );
+		painter.Mottle( 0.07f, 8, Seed + 607, 4 );
+		painter.RoughnessNoise( 0.05f, 12, Seed + 608, 2 );
 		painter.Cavity( 0.6f, 6 );
-		painter.EdgeWear( 0.3f, 4, Seed + 604 );
-		painter.Grain( 0.015f, Seed + 605 );
+		painter.EdgeWear( 0.2f, 4, Seed + 609 );
+		painter.Grain( 0.015f, Seed + 610 );
 		return painter.Bake( "arena_6_wall", Painter.Matte, 6f );
 	}
 
-	/// <summary>Plain dressed granite.</summary>
+	/// <summary>
+	/// A dressed stone in its slot: a rounded rectangle inset by half the joint on every side, each
+	/// side pushed in or out a little along its length, so no two stones are quite square.
+	/// </summary>
+	static Vector2[] WallStone( Vector2 min, Vector2 size, float joint, int seed )
+	{
+		var random = new Random( seed );
+		float Next() => (float)random.NextDouble();
+		float Inset() => joint * (0.4f + Next() * 0.3f);
+		var left = min.x + Inset(); var right = min.x + size.x - Inset();
+		var top = min.y + Inset(); var bottom = min.y + size.y - Inset();
+		var corners = new[] { new Vector2( left, top ), new Vector2( right, top ), new Vector2( right, bottom ), new Vector2( left, bottom ) };
+		var cut = new float[4];
+		for ( var k = 0; k < 4; k++ ) cut[k] = 3f + Next() * 7f;
+
+		var points = new System.Collections.Generic.List<Vector2>();
+		for ( var k = 0; k < 4; k++ )
+		{
+			// Each side runs from just past its corner's cut to just before the next one's, bowed a
+			// little and wandering a pixel or so, so the stone is never a true rectangle.
+			var a = corners[k]; var b = corners[(k + 1) % 4];
+			var direction = (b - a).Normal;
+			var from = a + direction * cut[k];
+			var to = b - direction * cut[(k + 1) % 4];
+			var normal = new Vector2( direction.y, -direction.x );
+			var bulge = (Next() - 0.5f) * 3f;
+			var steps = Math.Max( 2, (int)((to - from).Length / 24f) );
+			for ( var s = 0; s <= steps; s++ )
+			{
+				var t = s / (float)steps;
+				var push = MathF.Sin( t * MathF.PI ) * bulge + (s == 0 || s == steps ? 0f : (Next() - 0.5f) * 1.5f);
+				points.Add( from + (to - from) * t + normal * push );
+			}
+		}
+		return points.ToArray();
+	}
+
+	/// <summary>A line clipped to a rectangle, written into a weight field (seamless), for tooling strokes.</summary>
+	static void ClipLine( float[] field, Vector2 from, Vector2 to, Vector2 min, Vector2 size, float weight )
+	{
+		if ( size.x <= 0f || size.y <= 0f ) return;
+		var length = (to - from).Length;
+		var steps = (int)length;
+		for ( var s = 0; s <= steps; s++ )
+		{
+			var p = from + (to - from) * (s / (float)steps);
+			if ( p.x < min.x || p.y < min.y || p.x > min.x + size.x || p.y > min.y + size.y ) continue;
+			var x = ((int)p.x % WallSize + WallSize) % WallSize;
+			var y = ((int)p.y % WallSize + WallSize) % WallSize;
+			field[y * WallSize + x] = MathF.Max( field[y * WallSize + x], weight );
+		}
+	}
+
+	/// <summary>A copy of a field scaled by <paramref name="amount"/>.</summary>
+	static float[] Scaled( float[] field, float amount )
+	{
+		var copy = new float[field.Length];
+		for ( var i = 0; i < field.Length; i++ ) copy[i] = field[i] * amount;
+		return copy;
+	}
+
+	/// <summary>
+	/// Dressed granite for the front layer: every moulding is laid in blocks, with a mortar joint across
+	/// the run every 15 to 35 units, each block its own tone; the faces have a smooth drafted margin
+	/// round a rougher, pitched middle, as quoins and lintels are cut. The cornice is a moulded corbel
+	/// course, the skirting a plinth course, the slab edge a kerb.
+	/// </summary>
 	protected override PaintedSurface PaintTrim()
 	{
-		// Full surface in Task 6b.
-		return PaintTrimAtlas( "arena_6_trim", Mix( Granite, GraniteShade, 0.3f ), Rubble, 0.85f, 0f, Seed + 700 );
+		var body = Mix( WallStoneGrey, Feldspar, 0.25f );
+		return PaintTrimAtlas( "arena_6_trim", body, Rubble, 0.85f, 0f, Seed + 700, painter =>
+		{
+			var random = new Random( Seed + 710 );
+			float Next() => (float)random.NextDouble();
+			var pitch = painter.Noise( 64, Seed + 711, 3 );
+			var relief = new float[TrimSize * TrimSize];
+			foreach ( var band in new[] { TrimBand.Cornice, TrimBand.Skirting, TrimBand.Pilaster, TrimBand.SlabEdge, TrimBand.Stock } )
+			{
+				var (top, height) = TrimRows( band );
+
+				// Block lengths across the band's run, laid out to fill the repeat exactly.
+				var x = 0f;
+				while ( x < TrimSize - 1f )
+				{
+					var length = (15f + Next() * 20f) * 4f;
+					if ( TrimSize - (x + length) < 50f ) length = TrimSize - x;
+					var tone = Mix( body, Next() < 0.5f ? Feldspar : WallStoneSlate, Next() * 0.35f );
+					tone = Mix( tone, Next() < 0.5f ? WallStoneWarm : GraniteLilac, Next() * 0.3f );
+					painter.Rect( x + 2f, top, length - 4f, height, tone, alpha: 0.8f );
+
+					// The drafted margin stays smooth; the middle is pitched rough.
+					for ( var py = top + 6; py < top + height - 6; py++ )
+					for ( var px = (int)x + 8; px < (int)(x + length) - 8; px++ )
+						relief[py * TrimSize + px] = (pitch[py * TrimSize + px] - 0.5f) * 0.12f;
+
+					painter.Rect( x - 2f, top, 4f, height, Mix( Mortar, Soot, 0.25f ), height: 0.35f, roughness: 0.95f );
+					x += length;
+				}
+			}
+			painter.AddHeight( relief, 1f );
+		} );
 	}
 
 	protected override PaintedSurface PaintFloor()
@@ -265,7 +479,9 @@ public sealed class DungeonTheme : ArenaTheme
 		painter.Blend( owners, palette );
 		painter.Blend( pale, Feldspar );
 		painter.Blend( dark, Mica );
-		painter.Blend( joint, Mortar, roughness: 0.5f );
+		// The joint a shade darker than the lime on the walls, and dull: the chamfers that carry it
+		// face the torches, and in the light lime they drew every seam as a bright salmon line.
+		painter.Blend( joint, Mix( Mortar, GraniteShade, 0.4f ), roughness: 0.85f );
 		painter.Blend( moss, Mix( Mix( Moss, Granite, 0.45f ), Mortar, 0.25f ), roughness: 0.9f );
 	}
 
