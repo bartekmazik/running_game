@@ -152,7 +152,7 @@ public sealed class Painter
 		for ( var y = 0; y < Size; y++ )
 		for ( var x = 0; x < Size; x++ )
 		{
-			var slope = (_height[Index( x - 1, y )] - _height[Index( x + 1, y )]) + (_height[Index( x, y - 1 )] - _height[Index( x, y + 1 )]);
+			var slope = (_height[Index( x + 1, y )] - _height[Index( x - 1, y )]) + (_height[Index( x, y + 1 )] - _height[Index( x, y - 1 )]);
 			var i = y * Size + x;
 			_color[i] *= slope > 0f ? 1f + MathF.Min( slope, 1f ) * light : 1f + MathF.Max( slope, -1f ) * shadow;
 		}
