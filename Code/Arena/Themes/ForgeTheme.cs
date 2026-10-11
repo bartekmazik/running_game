@@ -60,7 +60,8 @@ public sealed class ForgeTheme : ArenaTheme
 
 	/// <summary>
 	/// The bounce lights' cone and reach, which keep them out of the dungeon upstairs. Its walls start
-	/// a storey above them and at least 440 across, past the reach and well outside the cone. Its floor
+	/// at least 488 above them (<see cref="BounceDepth"/> plus the forge's clear height) and 440 across,
+	/// past the reach and well outside the cone. Its floor
 	/// is only a slab's thickness above the ceiling they light, so the cone does it: a 45° chamfer
 	/// facing a light below it is lit only from more than 45° off the vertical, and the cone stops well
 	/// short of that (the dungeon keeps its chamfers free of painted relief that would tilt them
@@ -81,8 +82,8 @@ public sealed class ForgeTheme : ArenaTheme
 	/// </summary>
 	static float BounceStrength => 70f * MathF.Pow( (BounceDepth + FloorContext.ClearHeight) / 428f, 2f );
 
-	/// <summary>Facet size of the wall rock in pixels: about 22 units, and a whole number of facets across the wall, so the rock tiles.</summary>
-	const int WallFacet = 112;
+	/// <summary>Facet size of the wall rock in pixels: ten facets across the wall, so the rock tiles; 128 px, about 27 units, the approved rock scale.</summary>
+	const int WallFacet = WallSize / 10;
 
 	/// <summary>
 	/// The structural front layer, and the forge's light: four ember-orange lamps over the forge mouths

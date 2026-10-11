@@ -88,6 +88,8 @@ public sealed class WorkshopTheme : ArenaTheme
 		const int Sheets = 6;
 		const float Pitch = WallSize / (float)Crests;
 		const int GrainSize = 16;
+		// How many times a crest is traded between two random sheets to unsettle the even split.
+		const int Swaps = 6;
 		float Row( float v ) => (WallRepeat - v) * Ppu;
 		var painter = new Painter( WallSize, Zinc, 0.58f );
 		var random = new Random( Seed + 600 );
@@ -96,7 +98,7 @@ public sealed class WorkshopTheme : ArenaTheme
 		// Sheet widths in crests, 5 to 8, adding up to the repeat; each sheet's end lap at its own height.
 		var widths = new int[Sheets];
 		for ( var k = 0; k < Sheets; k++ ) widths[k] = Crests / Sheets + (k < Crests % Sheets ? 1 : 0);
-		for ( var k = 0; k < 6; k++ )
+		for ( var k = 0; k < Swaps; k++ )
 		{
 			var a = random.Next( Sheets ); var b = random.Next( Sheets );
 			if ( a != b && widths[a] < 8 && widths[b] > 5 ) { widths[a]++; widths[b]--; }

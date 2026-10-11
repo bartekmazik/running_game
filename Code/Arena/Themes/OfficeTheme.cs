@@ -43,19 +43,37 @@ public sealed class OfficeTheme : ArenaTheme
 	/// <summary>The partition module, about 54 units (a 1.35 m panel): five per wall repeat, so bays start on a whole panel.</summary>
 	protected override float WallModule => WallRepeat / Modules;
 
+	/// <summary>Partition modules per wall repeat: 256 px each, so every post and panel edge falls on a whole pixel.</summary>
 	const int Modules = 5;
 
-	/// <summary>
-	/// The partition's tiers, in units above the tile top: a vinyl kick, two fabric panels split by a
-	/// rail, a clerestory of frosted glass, and the top rail; plaster above it to the bulkhead. Panels
-	/// keep a real height, so the taller room gets the glazed tier rather than taller fabric.
-	/// </summary>
+	// The partition's tiers, in units above the tile top: a vinyl kick, two fabric panels split by a
+	// rail, a clerestory of frosted glass, and the top rail; plaster above it to the bulkhead. Panels
+	// keep a real height, so the taller room gets the glazed tier rather than taller fabric.
+
+	/// <summary>Top of the vinyl kick.</summary>
 	const float Kick = 10f;
+
+	/// <summary>Foot of the rail between the two fabric panels.</summary>
 	const float LowerRail = 90f;
+
+	/// <summary>Foot of the rail over the fabric, under the clerestory; the windows' heads meet it.</summary>
 	const float UpperRail = 160f;
+
+	/// <summary>Head of the clerestory glass, under the top rail.</summary>
 	const float GlassTop = 214f;
+
+	/// <summary>Top of the partition's head rail; plaster runs on above it to the bulkhead.</summary>
 	const float PartitionTop = 218f;
+
+	/// <summary>Height of the lower and upper rails.</summary>
 	const float RailHeight = 3f;
+
+	/// <summary>
+	/// Window sill. The window fills the fabric tier from here up to <see cref="UpperRail"/>, so its
+	/// head is flush with the rail and the clerestory runs on unbroken above every window, as office
+	/// glazing does (with the head mid-clerestory the frame cut across the milky band, 6c review).
+	/// </summary>
+	const float WindowSill = 52f;
 
 	static Color Frosted => Palette.Hex( 0xD5DBDF );
 
@@ -70,7 +88,7 @@ public sealed class OfficeTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		var bays = BuildFrontLayer( room, new FrontStyle { Post = 28f, Pier = 72f, Corner = 30f, Cornice = 26f, Skirting = 10f, SkirtingDepth = 3f } );
-		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 52f, 140f, 124f, 0.5f, false, Seed + 800 );
+		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), WindowSill, UpperRail - WindowSill, 124f, 0.5f, false, Seed + 800 );
 		AddLamps( room, 6, FloorContext.ClearHeight - 28f, -160f, LightColor * 3.6f, Seed + 900 );
 	}
 

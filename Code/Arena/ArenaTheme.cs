@@ -29,12 +29,14 @@ public abstract class ArenaTheme
 	protected const int CeilingSize = 512;
 
 	/// <summary>
-	/// Wall resolution: one <see cref="WallRepeat"/> square, floor to ceiling, a little over five pixels
-	/// per unit. 21 × 64, so a 32 px or 64 px period (corrugation, spangle grains) divides it and halves
-	/// cleanly through the first mips. It grew with the room when the floors were raised (it was 1024
-	/// px): the same detail per unit, more of it, never stretched.
+	/// Wall resolution: one <see cref="WallRepeat"/> square, floor to ceiling, about 4.8 pixels per
+	/// unit. 20 × 64, so a 32 px or 64 px period (corrugation, spangle grains) divides it and halves
+	/// cleanly through the first mips, and every wall's module comes out in whole pixels: ten 128 px
+	/// greenhouse bays and forge facets, five 256 px partitions and bookcases, forty zinc crests. It
+	/// grew with the room when the floors were raised (it was 1024 px): about the same detail per unit,
+	/// more of it, never stretched. (1344 was tried first; this is 9 % fewer pixels on the slowest jobs.)
 	/// </summary>
-	protected const int WallSize = 1344;
+	protected const int WallSize = 1280;
 
 	/// <summary>Trim atlas resolution: <see cref="TrimRepeat"/> units of moulding per 512 px, four pixels per unit.</summary>
 	protected const int TrimSize = 512;
@@ -117,16 +119,11 @@ public abstract class ArenaTheme
 	protected virtual float WallLift( int wall, Random random ) => 0f;
 
 	/// <summary>
-	/// Most a bay's pattern is stretched along the wall so a bay a little wider than
-	/// <see cref="WallRepeat"/> shows it once instead of repeating its first strip at its far end.
-	/// </summary>
-	const float MaxWallStretch = 1.1f;
-
-	/// <summary>
-	/// The widest bay <see cref="AddPosts"/> lets a non-modular wall have. It was the lower rooms' repeat
-	/// stretched by <see cref="MaxWallStretch"/> before the floors were raised; the repeat is now wider
-	/// than any bay, but the cap stays, so every wall keeps the post layout the user approved and no
-	/// bay grows past about the spacing of a real post-and-panel wall.
+	/// The widest bay <see cref="AddPosts"/> lets a non-modular wall have, kept under
+	/// <see cref="WallRepeat"/> so no bay shows its pattern's first strip again at its far end. It was
+	/// the lower rooms' repeat stretched 10 % before the floors were raised (when a wider bay stretched
+	/// its pattern to fit); the repeat is now wider than any bay, so nothing is stretched, and the cap
+	/// keeps its value, so every wall keeps the post layout the user approved.
 	/// </summary>
 	const float MaxBay = 228.8f;
 
@@ -810,7 +807,7 @@ public abstract class ArenaTheme
 		const float Recess = FloorContext.Recess;
 		const float Deep = Recess + FloorContext.Embed;
 
-		// A bay a pattern can't stretch over would repeat its first strip at its far end; a modular
+		// A bay wider than the repeat would show its first strip again at its far end; a modular
 		// pattern repeats by design, so it takes any width.
 		var widest = WallModule > 0f ? float.MaxValue : MaxBay;
 
@@ -859,8 +856,8 @@ public abstract class ArenaTheme
 	/// repeats every <see cref="WallRepeat"/> units never shows the same strip in two bays (with one
 	/// start per wall, bays about a repeat wide all showed the same bands, 6a review): on a module
 	/// edge where the pattern has one (<see cref="WallModule"/>), at its own height where it may
-	/// (<see cref="WallLift"/>), stretched by up to <see cref="MaxWallStretch"/> where the bay is wider
-	/// than a repeat (not for a modular pattern, whose module would no longer fit), and in its own one
+	/// (<see cref="WallLift"/>), never stretched (a non-modular bay is narrower than a repeat,
+	/// <see cref="MaxBay"/>; a modular one repeats by design), and in its own one
 	/// of the <see cref="Walls"/> (<see cref="PickWall"/>), or one of them either way round
 	/// (<see cref="PickLook"/>) where the theme allows it. Faces of neighbouring walls meet only along
 	/// the corner edges, so the end lengths run through both corners.
@@ -874,11 +871,9 @@ public abstract class ArenaTheme
 		for ( var k = 1; k < posts.Count; k++ )
 		{
 			var end = k < posts.Count - 1 ? (posts[k].From + posts[k].To) * 0.5f : FloorContext.Span + Recess;
-			var bay = posts[k].From - posts[k - 1].To;
-			var span = WallModule > 0f ? WallRepeat : WallRepeat * Math.Clamp( bay / WallRepeat, 1f, MaxWallStretch );
 			var offset = WallModule > 0f
 				? ModuleOffset( posts[k - 1].To, posts[k].From, random )
-				: (float)random.NextDouble() * span;
+				: (float)random.NextDouble() * WallRepeat;
 			var look = MirrorWalls ? PickLook( huts, closing && k == posts.Count - 1, random ) : PickWall( huts, closing ? posts.Count - k : 0, random ) * 2;
 			var wall = look / 2;
 			var mirror = look % 2 == 1 ? -1f : 1f;
@@ -886,7 +881,7 @@ public abstract class ArenaTheme
 
 			// A mirrored length runs its pattern the other way; a module edge stays a module edge.
 			room.WallFace( side, Walls[wall], start, end, bottom, FloorContext.ClearHeight, Recess, false,
-				( u, v ) => new Vector2( mirror * (u + offset) / span, (WallRepeat - v + lift) / WallRepeat ) );
+				( u, v ) => new Vector2( mirror * (u + offset) / WallRepeat, (WallRepeat - v + lift) / WallRepeat ) );
 			start = end;
 		}
 	}
