@@ -423,15 +423,20 @@ public sealed class Painter
 	{
 		var size = Size;
 
-		// Lattice column and smoothed fraction depend only on x, so they are computed once per octave.
-		var column = new int[size];
+		// The smoothed fraction depends only on x, so it is computed once per octave, and so is where
+		// each lattice cell starts: a row is filled cell by cell, its two lattice values read once per
+		// cell rather than once per pixel (this loop runs a few hundred times per arena build).
 		var fraction = new float[size];
+		var cellStart = new int[period + 1];
+		var lastColumn = -1;
 		for ( var x = 0; x < size; x++ )
 		{
 			var g = (float)(x * period) / size;
-			column[x] = (int)g;
-			fraction[x] = Smooth( g - column[x] );
+			var column = (int)g;
+			fraction[x] = Smooth( g - column );
+			while ( lastColumn < column ) cellStart[++lastColumn] = x;
 		}
+		while ( lastColumn < period ) cellStart[++lastColumn] = size;
 
 		// period + 1 entries, so column + 1 never needs wrapping; the last entry is lattice 0 again.
 		var upper = new float[period + 1];
@@ -447,10 +452,20 @@ public sealed class Painter
 
 			if ( row != cachedRow )
 			{
-				for ( var lx = 0; lx <= period; lx++ )
+				// Stepping down one lattice row, the row below becomes the row above: only the new one is hashed.
+				if ( cachedRow >= 0 && row == cachedRow + 1 )
 				{
-					upper[lx] = Lattice( lx, row, period, seed );
-					lower[lx] = Lattice( lx, row + 1, period, seed );
+					(upper, lower) = (lower, upper);
+					for ( var lx = 0; lx <= period; lx++ )
+						lower[lx] = Lattice( lx, row + 1, period, seed );
+				}
+				else
+				{
+					for ( var lx = 0; lx <= period; lx++ )
+					{
+						upper[lx] = Lattice( lx, row, period, seed );
+						lower[lx] = Lattice( lx, row + 1, period, seed );
+					}
 				}
 				cachedRow = row;
 			}
@@ -459,11 +474,12 @@ public sealed class Painter
 				blended[lx] = (upper[lx] + (lower[lx] - upper[lx]) * ty) * amplitude;
 
 			var offset = y * size;
-			for ( var x = 0; x < size; x++ )
+			for ( var c = 0; c < period; c++ )
 			{
-				var c = column[x];
 				var left = blended[c];
-				field[offset + x] += left + (blended[c + 1] - left) * fraction[x];
+				var rise = blended[c + 1] - left;
+				for ( var x = cellStart[c]; x < cellStart[c + 1]; x++ )
+					field[offset + x] += left + rise * fraction[x];
 			}
 		}
 	}

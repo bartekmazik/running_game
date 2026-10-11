@@ -40,8 +40,24 @@ public sealed class OfficeTheme : ArenaTheme
 	static Color Sky => Palette.Sky;
 	static Color Slat => Palette.Hex( 0xE4E4DF );
 
-	/// <summary>The partition module: four per wall repeat, so bays start on a whole panel.</summary>
-	protected override float WallModule => WallRepeat / 4f;
+	/// <summary>The partition module, about 54 units (a 1.35 m panel): five per wall repeat, so bays start on a whole panel.</summary>
+	protected override float WallModule => WallRepeat / Modules;
+
+	const int Modules = 5;
+
+	/// <summary>
+	/// The partition's tiers, in units above the tile top: a vinyl kick, two fabric panels split by a
+	/// rail, a clerestory of frosted glass, and the top rail; plaster above it to the bulkhead. Panels
+	/// keep a real height, so the taller room gets the glazed tier rather than taller fabric.
+	/// </summary>
+	const float Kick = 10f;
+	const float LowerRail = 90f;
+	const float UpperRail = 160f;
+	const float GlassTop = 214f;
+	const float PartitionTop = 218f;
+	const float RailHeight = 3f;
+
+	static Color Frosted => Palette.Hex( 0xD5DBDF );
 
 	/// <summary>Pile rows across the yarn, in pixels: about a third of a unit, close to real loop pile.</summary>
 	const int PileRow = 3;
@@ -54,61 +70,76 @@ public sealed class OfficeTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		var bays = BuildFrontLayer( room, new FrontStyle { Post = 28f, Pier = 72f, Corner = 30f, Cornice = 26f, Skirting = 10f, SkirtingDepth = 3f } );
-		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 48f, 104f, 124f, 0.5f, false, Seed + 800 );
+		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 52f, 140f, 124f, 0.5f, false, Seed + 800 );
 		AddLamps( room, 6, FloorContext.ClearHeight - 28f, -160f, LightColor * 3.6f, Seed + 900 );
 	}
 
 	/// <summary>
-	/// System partitions, 52-unit modules: aluminium posts with a shadow groove, a dark vinyl kick, a
-	/// lower and an upper fabric panel split by a rail, plaster above to the bulkhead. The fabric is a
-	/// fine weave with a heathered yarn, every panel its own small drift in tone and hue (no single odd
-	/// panel: anything one-off in a 208-unit repeat comes back in every bay, 6a review / R18), with
-	/// the faint ghosts of notices that hung there and the pinholes that held them.
+	/// System partitions in <see cref="WallModule"/> modules: aluminium posts with a shadow groove, a
+	/// dark vinyl kick, a lower and an upper fabric panel split by a rail, a clerestory of frosted glass
+	/// over them, plaster above to the bulkhead. The fabric is a fine weave with a heathered yarn, every
+	/// panel its own small drift in tone and hue (no single odd panel: anything one-off in one repeat
+	/// comes back in every bay, 6a review / R18), with the faint ghosts of notices that hung there and
+	/// the pinholes that held them; the glass is milky, a shade lighter toward its head, each pane its
+	/// own faint tint.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		const int Module = WallSize / 4;
+		const float Module = WallSize / (float)Modules;
 		int Row( float v ) => (int)MathF.Round( (WallRepeat - v) * Ppu );
 		var painter = new Painter( WallSize, Plaster, 0.85f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();
 
-		painter.Fill( 0, 0, WallSize, Row( 153f ), Plaster, height: 0.8f, roughness: 0.85f );
-		painter.Fill( 0, Row( 153f ), WallSize, WallSize - Row( 153f ), Aluminium, height: 0.9f, roughness: 0.35f );
+		var head = Row( PartitionTop );
+		painter.Fill( 0, 0, WallSize, head, Plaster, height: 0.8f, roughness: 0.85f );
+		painter.Fill( 0, head, WallSize, WallSize - head, Aluminium, height: 0.9f, roughness: 0.35f );
 
-		var panels = new[] { (Top: Row( 150f ), Bottom: Row( 99f )), (Top: Row( 96f ), Bottom: Row( 10f )) };
-		for ( var m = 0; m < 4; m++ )
+		var panels = new[] { (Top: Row( UpperRail ), Bottom: Row( LowerRail + RailHeight )), (Top: Row( LowerRail ), Bottom: Row( Kick )) };
+		for ( var m = 0; m < Modules; m++ )
 		{
 			for ( var p = 0; p < 2; p++ )
 			{
-				var (top, bottom) = panels[p];
+				var (panelTop, panelBottom) = panels[p];
 				var x0 = m * Module + 9f;
 				var tone = Next() * 2f - 1f;
 				var fabric = tone < 0f ? Mix( Fabric, FabricDark, -tone * 0.18f ) : Mix( Fabric, FabricLight, tone * 0.2f );
 				fabric = Mix( fabric, FabricBlue, Next() * 0.12f );
-				painter.Rect( x0, top + 1f, Module - 18f, bottom - top - 2f, fabric, radius: 2f, height: 0.7f, bevel: 3f, roughness: 0.95f );
+				painter.Rect( x0, panelTop + 1f, Module - 18f, panelBottom - panelTop - 2f, fabric, radius: 2f, height: 0.7f, bevel: 3f, roughness: 0.95f );
 
 				// The ghost of a notice: a paler rectangle where the fabric was kept out of the light, and its pinholes.
 				if ( Next() < 0.3f )
 				{
 					var w = 40f + Next() * 60f; var h = 50f + Next() * 70f;
-					var nx = x0 + 15f + Next() * (Module - 48f - w); var ny = top + 20f + Next() * MathF.Max( 1f, bottom - top - 40f - h );
+					var nx = x0 + 15f + Next() * (Module - 48f - w); var ny = panelTop + 20f + Next() * MathF.Max( 1f, panelBottom - panelTop - 40f - h );
 					painter.Rect( nx, ny, w, h, FabricLight, alpha: 0.06f );
 					foreach ( var (cx, cy) in new[] { (nx + 3f, ny + 3f), (nx + w - 3f, ny + 3f), (nx + 3f, ny + h - 3f), (nx + w - 3f, ny + h - 3f) } )
 						painter.Circle( cx + (Next() - 0.5f) * 2f, cy + (Next() - 0.5f) * 2f, 0.8f, FabricDark, 0.6f );
 				}
 			}
 
+			// The clerestory pane: milky glass set back in its frame, lighter toward the head.
+			{
+				var glassTop = Row( GlassTop ); var glassBottom = Row( UpperRail + RailHeight );
+				var x0 = m * Module + 9f;
+				var pane = Mix( Frosted, FabricBlue, Next() * 0.1f );
+				painter.Rect( x0, glassTop + 1f, Module - 18f, glassBottom - glassTop - 2f, pane, radius: 1f, height: 0.6f, bevel: 2f, roughness: 0.25f );
+				var span = glassBottom - glassTop;
+				for ( var y = 0; y < span * 0.6f; y++ )
+					painter.Rect( x0, glassTop + 1f + y, Module - 18f, 1f, Color.White, alpha: 0.12f * (1f - y / (span * 0.6f)) );
+			}
+
 			// The post between modules, with its shadow groove.
 			var post = m * Module;
-			painter.Rect( post - 9f, Row( 153f ), 18f, WallSize - Row( 153f ), Aluminium, height: 1f, bevel: 3f, roughness: 0.3f );
-			painter.Rect( post - 1.5f, Row( 153f ), 3f, WallSize - Row( 153f ), AluminiumShade, height: 0.6f, roughness: 0.5f );
+			painter.Rect( post - 9f, head, 18f, WallSize - head, Aluminium, height: 1f, bevel: 3f, roughness: 0.3f );
+			painter.Rect( post - 1.5f, head, 3f, WallSize - head, AluminiumShade, height: 0.6f, roughness: 0.5f );
 		}
 
-		painter.Rect( 0f, Row( 99f ), WallSize, Row( 96f ) - Row( 99f ), Aluminium, height: 1f, bevel: 2f, roughness: 0.3f );
-		painter.Rect( 0f, Row( 153f ), WallSize, Row( 150f ) - Row( 153f ), Aluminium, height: 1f, bevel: 2f, roughness: 0.3f );
-		painter.Fill( 0, Row( 10f ), WallSize, WallSize - Row( 10f ), Vinyl, height: 0.95f, roughness: 0.6f );
+		foreach ( var rail in new[] { LowerRail, UpperRail } )
+			painter.Rect( 0f, Row( rail + RailHeight ), WallSize, Row( rail ) - Row( rail + RailHeight ), Aluminium, height: 1f, bevel: 2f, roughness: 0.3f );
+		painter.Rect( 0f, head, WallSize, Row( GlassTop ) - head, Aluminium, height: 1f, bevel: 2f, roughness: 0.3f );
+		painter.Fill( 0, Row( Kick ), WallSize, WallSize - Row( Kick ), Vinyl, height: 0.95f, roughness: 0.6f );
 
 		// The weave and its heathered yarn, only on the fabric (the weave pattern is two pixels a thread).
 		var heather = painter.Noise( 256, Seed + 601, 2 );
@@ -121,8 +152,8 @@ public sealed class OfficeTheme : ArenaTheme
 			for ( var y = top + 3; y < bottom - 3; y++ )
 			for ( var x = 0; x < WallSize; x++ )
 			{
-				var inModule = x % Module;
-				if ( inModule < 12 || inModule > Module - 12 ) continue;
+				var inModule = x - MathF.Floor( x / Module ) * Module;
+				if ( inModule < 12f || inModule > Module - 12f ) continue;
 				var i = y * WallSize + x;
 				var over = ((x >> 1) + (y >> 1)) & 1;
 				weave[i] = over == 0 ? 0.04f : -0.04f;

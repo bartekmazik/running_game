@@ -135,19 +135,8 @@ public sealed class BeachTheme : ArenaTheme
 		// One butt joint per board, anywhere along it. The replaced board runs the hut's whole length
 		// like the rest: a stretch of one would come round again in every repeat, and so twice in a
 		// bay wider than the gap between them.
-		var joints = new List<float>[boards];
-		for ( var b = 0; b < boards; b++ ) joints[b] = new List<float> { Next() * WallSize };
-
-		float JointDistance( int b, float x )
-		{
-			var nearest = float.MaxValue;
-			foreach ( var joint in joints[b] )
-			{
-				var d = Wrap( x - joint );
-				nearest = MathF.Min( nearest, MathF.Min( d, WallSize - d ) );
-			}
-			return nearest;
-		}
+		var joints = new float[boards];
+		for ( var b = 0; b < boards; b++ ) joints[b] = Next() * WallSize;
 
 		var wear = painter.Noise( 24, Seed + 601 + variant, 4 );
 		var grainField = painter.Noise( 6, Seed + 602, 2 );
@@ -183,7 +172,9 @@ public sealed class BeachTheme : ArenaTheme
 
 					// Flaking: crisp-edged patches, more along the laps and around the joints, where water sits;
 					// the newer replaced board has had less time to weather.
-					var dj = JointDistance( b, px );
+					// Distance to the board's butt joint, round the wrap (inline: this runs per pixel).
+					var dj = ((px - joints[b]) % WallSize + WallSize) % WallSize;
+					dj = MathF.Min( dj, WallSize - dj );
 					var exposure = wear[i] + MathF.Max( 0f, t - 0.6f ) * 0.45f + MathF.Max( 0f, 1f - dj / 30f ) * 0.3f - (patched ? 0.08f : 0f);
 					bare[i] = exposure > 0.745f ? MathF.Min( (exposure - 0.745f) * 7f, 1f ) * 0.65f : 0f;
 				}
@@ -198,8 +189,7 @@ public sealed class BeachTheme : ArenaTheme
 
 		// The butt joints: a dark hairline gap where two lengths meet.
 		for ( var b = 0; b < boards; b++ )
-			foreach ( var joint in joints[b] )
-				painter.Line( new Vector2( Wrap( joint ), tops[b] ), new Vector2( Wrap( joint ), tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
+			painter.Line( new Vector2( Wrap( joints[b] ), tops[b] ), new Vector2( Wrap( joints[b] ), tops[b + 1] - 4f ), 1.6f, Mix( Driftwood, Palette.Ink, 0.3f ), 0.45f, 0.3f );
 
 		// Salt bleaching in broad patches.
 		painter.Blend( Ramp( painter.Noise( 4, Seed + 603 + variant, 4 ), 0.55f, 0.85f, 0.25f ), HutWhite );
@@ -216,11 +206,8 @@ public sealed class BeachTheme : ArenaTheme
 				if ( Next() < 0.4f ) painter.Circle( nx, ny + (Next() - 0.5f) * 3f, 3f + Next() * 3f, Rust, 0.08f );
 				painter.Circle( nx, ny, 1.8f, NailHead, 0.9f, height: 1.05f, bevel: 1f, roughness: 0.5f );
 			}
-			foreach ( var joint in joints[b] )
-			{
-				painter.Circle( Wrap( joint ) - 6f, ny, 1.8f, NailHead, 0.9f );
-				painter.Circle( Wrap( joint ) + 6f, ny, 1.8f, NailHead, 0.9f );
-			}
+			painter.Circle( Wrap( joints[b] ) - 6f, ny, 1.8f, NailHead, 0.9f );
+			painter.Circle( Wrap( joints[b] ) + 6f, ny, 1.8f, NailHead, 0.9f );
 		}
 
 		painter.Mottle( 0.04f, 6, Seed + 604 + variant, 4 );

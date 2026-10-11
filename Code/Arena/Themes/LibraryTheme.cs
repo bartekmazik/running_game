@@ -48,10 +48,19 @@ public sealed class LibraryTheme : ArenaTheme
 	static Color Dust => Palette.Hex( 0x9A8E80 );
 
 	/// <summary>One bookcase per module, so every length of wall starts on a case's upright and no bay ends in a sliver of a case.</summary>
-	protected override float WallModule => WallRepeat / 4f;
+	protected override float WallModule => WallRepeat / Cases;
+
+	/// <summary>Bookcases to a wall repeat: each about 54 units, a 1.35 m case.</summary>
+	const int Cases = 5;
 
 	/// <summary>
-	/// Three walls of four bookcases each, worn by the lengths of wall either way round (six looks, never
+	/// Shelves in a case, the plinth to the crown rail divided among them: seven at about 32 units, a
+	/// shelf of books at their real size. A taller room gets more shelves, never taller books.
+	/// </summary>
+	const int Shelves = 7;
+
+	/// <summary>
+	/// Three walls of five bookcases each, worn by the lengths of wall either way round (six looks, never
 	/// the one the length before wore): with one, every bay — three and a half to four and a half cases
 	/// wide — showed the same four cases in the same order, and a distinctive shelf came round about
 	/// thirty times (6b review); with three and no mirror, the lengths ran A-B-C-A-B-C.
@@ -89,7 +98,7 @@ public sealed class LibraryTheme : ArenaTheme
 
 	/// <summary>
 	/// Built-in walnut bookcases, one per <see cref="WallModule"/>: a plinth, side uprights shared
-	/// with the next case, five shelves set at their own heights in every case (shelves are moved to
+	/// with the next case, <see cref="Shelves"/> shelves set at their own heights in every case (shelves are moved to
 	/// fit what is on them), a dark boarded back. Books are generated per shelf: each its own width,
 	/// height, colour from a muted set of bindings (oxblood, bottle green, navy, ochre, vellum, plum and
 	/// the floor's own dusty rose), cloth or leather — leather with raised bands and gilt, cloth with a
@@ -102,7 +111,7 @@ public sealed class LibraryTheme : ArenaTheme
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		const int Case = WallSize / 4;
+		const float Case = WallSize / (float)Cases;
 		const float Upright = 3.4f * Ppu;
 		const float Shelf = 2.2f * Ppu;
 		float Row( float v ) => (WallRepeat - v) * Ppu;
@@ -120,21 +129,21 @@ public sealed class LibraryTheme : ArenaTheme
 		}
 
 		var shade = new float[WallSize * WallSize];
-		for ( var c = 0; c < 4; c++ )
+		for ( var c = 0; c < Cases; c++ )
 		{
 			var left = c * Case + Upright * 0.5f;
 			var right = (c + 1) * Case - Upright * 0.5f;
 
-			// Plinth top and five shelves, every case set at its own heights.
+			// Plinth top and the shelves, every case set at its own heights.
 			var plinth = 13f + Next() * 3f;
-			var levels = new float[6];
+			var levels = new float[Shelves + 1];
 			levels[0] = plinth;
-			var pitch = (WallRepeat - 33f - plinth) / 5f;
-			for ( var k = 1; k < 6; k++ ) levels[k] = plinth + k * pitch + (k < 5 ? (Next() - 0.5f) * 4f : 0f);
+			var pitch = (WallRepeat - 33f - plinth) / Shelves;
+			for ( var k = 1; k <= Shelves; k++ ) levels[k] = plinth + k * pitch + (k < Shelves ? (Next() - 0.5f) * 4f : 0f);
 
 			painter.Rect( left, Row( plinth ), right - left, WallSize - Row( plinth ), Walnut, height: 1.2f, bevel: 3f, roughness: 0.55f );
 
-			for ( var k = 0; k < 5; k++ )
+			for ( var k = 0; k < Shelves; k++ )
 			{
 				var floorV = levels[k] + (k == 0 ? 0f : Shelf / Ppu);
 				var clear = levels[k + 1] - floorV;
@@ -150,7 +159,7 @@ public sealed class LibraryTheme : ArenaTheme
 			}
 
 			// Shelves: walnut boards with a lit front arris and a grey line of dust along it.
-			for ( var k = 1; k < 6; k++ )
+			for ( var k = 1; k <= Shelves; k++ )
 			{
 				var top = Row( levels[k] );
 				var tone = Mix( Walnut, Next() < 0.5f ? WalnutLight : WalnutDeep, Next() * 0.25f );
@@ -167,7 +176,7 @@ public sealed class LibraryTheme : ArenaTheme
 		// The uprights, shared by neighbouring cases, their grain running down them.
 		var grain = painter.Noise( 8, Seed + 601 + variant, 2 );
 		var lines = new float[WallSize * WallSize];
-		for ( var c = 0; c < 4; c++ )
+		for ( var c = 0; c < Cases; c++ )
 		{
 			var x0 = c * Case - Upright * 0.5f;
 			var tone = Mix( Walnut, WalnutLight, Next() * 0.3f );

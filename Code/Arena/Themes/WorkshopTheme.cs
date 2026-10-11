@@ -77,11 +77,15 @@ public sealed class WorkshopTheme : ArenaTheme
 	/// mip below the first few, which baked beating bands into the mips themselves, and crest shading
 	/// in the colour plus a strong normal and a tight highlight beat against the screen as moiré
 	/// (6b review). At 32 px each mip halves the period exactly until the crests average out flat.
+	///
+	/// Six sheets across a repeat, in two lengths: the end lap and the middle girt sit about half way
+	/// up, the top girt under the cornice, so a taller room is longer sheets, not wider corrugation.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		const int Crests = 32;
+		const int Crests = WallSize / 32;
+		const int Sheets = 6;
 		const float Pitch = WallSize / (float)Crests;
 		const int GrainSize = 16;
 		float Row( float v ) => (WallRepeat - v) * Ppu;
@@ -90,22 +94,23 @@ public sealed class WorkshopTheme : ArenaTheme
 		float Next() => (float)random.NextDouble();
 
 		// Sheet widths in crests, 5 to 8, adding up to the repeat; each sheet's end lap at its own height.
-		var widths = new[] { 7, 7, 6, 6, 6 };
+		var widths = new int[Sheets];
+		for ( var k = 0; k < Sheets; k++ ) widths[k] = Crests / Sheets + (k < Crests % Sheets ? 1 : 0);
 		for ( var k = 0; k < 6; k++ )
 		{
-			var a = random.Next( 5 ); var b = random.Next( 5 );
+			var a = random.Next( Sheets ); var b = random.Next( Sheets );
 			if ( a != b && widths[a] < 8 && widths[b] > 5 ) { widths[a]++; widths[b]--; }
 		}
-		var starts = new int[6];
+		var starts = new int[Sheets + 1];
 		starts[0] = random.Next( Crests );
-		for ( var k = 0; k < 5; k++ ) starts[k + 1] = starts[k] + widths[k];
-		var laps = new float[5];
-		for ( var k = 0; k < 5; k++ ) laps[k] = Row( 98f + Next() * 22f );
+		for ( var k = 0; k < Sheets; k++ ) starts[k + 1] = starts[k] + widths[k];
+		var laps = new float[Sheets];
+		for ( var k = 0; k < Sheets; k++ ) laps[k] = Row( WallRepeat * 0.47f + Next() * 28f );
 
-		// Ten sheets (five columns, two lengths), each its own zinc and its own weathering.
-		var palette = new Color[11];
-		var weather = new float[11];
-		for ( var k = 1; k <= 10; k++ )
+		// Twelve sheets (six columns, two lengths), each its own zinc and its own weathering.
+		var palette = new Color[Sheets * 2 + 1];
+		var weather = new float[Sheets * 2 + 1];
+		for ( var k = 1; k <= Sheets * 2; k++ )
 		{
 			var tone = Next() * 2f - 1f;
 			var zinc = tone < 0f ? Mix( Zinc, ZincDark, -tone * 0.45f ) : Mix( Zinc, ZincLight, tone * 0.45f );
@@ -137,7 +142,7 @@ public sealed class WorkshopTheme : ArenaTheme
 				// Which sheet: the column by crest (wrapping), the length by that column's lap.
 				var crest = (x / Pitch - starts[0] + Crests * 2) % Crests;
 				var column = 0;
-				while ( column < 4 && crest >= starts[column + 1] - starts[0] ) column++;
+				while ( column < Sheets - 1 && crest >= starts[column + 1] - starts[0] ) column++;
 				var upper = y < laps[column];
 				var sheet = 1 + column * 2 + (upper ? 1 : 0);
 				owner[i] = (byte)sheet;
@@ -179,9 +184,9 @@ public sealed class WorkshopTheme : ArenaTheme
 		painter.Blend( edge, Mix( ZincDark, Grime, 0.5f ) );
 
 		// Screws with washers on every other crest along three girts; some rusty, a few bleeding.
-		for ( var c = 0; c < 5; c++ )
+		for ( var c = 0; c < Sheets; c++ )
 		{
-			var girts = new[] { Row( 24f ), laps[c] + 10f, Row( 170f ) };
+			var girts = new[] { Row( 24f ), laps[c] + 10f, Row( WallRepeat - 38f ) };
 			for ( var k = starts[c] + 1; k < starts[c + 1]; k += 2 )
 			foreach ( var gy in girts )
 			{

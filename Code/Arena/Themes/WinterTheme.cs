@@ -51,26 +51,36 @@ public sealed class WinterTheme : ArenaTheme
 
 	/// <summary>
 	/// The structural front layer — hewn posts, a top plate, skirting — and frosted windows in about
-	/// half the bays; four warm bulbs under the top plate and two cool lights low by the walls for the
-	/// daylight off the snow. Icicles, wreaths, skis and the bulb string itself come in Task 7.
+	/// half the bays; four warm bulbs under the top plate and two cool lights by the walls at the
+	/// windows' height, for the daylight off the snow. Icicles, wreaths, skis and the bulb string itself
+	/// come in Task 7.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		var bays = BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 74f, Corner = 34f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 5f } );
-		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 64f, 84f, 70f, 0.45f, true, Seed + 800 );
+		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), WindowSill, WindowHeight, 84f, 0.45f, true, Seed + 800 );
 		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, new Color( 1.25f, 0.95f, 0.66f ) * 3.6f, Seed + 900 );
-		AddLamps( room, 2, 110f, -30f, LightColor * 3f, Seed + 901 );
+		AddLamps( room, 2, WindowSill + WindowHeight * 0.5f, -30f, LightColor * 3f, Seed + 901 );
 	}
 
+	/// <summary>Cabin windows: sill a little over waist height, tall enough to leave a log or two above them under the plate.</summary>
+	const float WindowSill = 70f;
+	const float WindowHeight = 112f;
+
 	/// <summary>
-	/// Log-cabin wall: eight round logs stacked floor to ceiling, each its own girth and tone, their
+	/// Round logs to a repeat: one about every 26 units (a 65 cm log, its chinking included), so a
+	/// taller room is more courses of the same logs, never fatter ones.
+	/// </summary>
+	const int Logs = (int)(WallRepeat / 26f + 0.5f);
+
+	/// <summary>
+	/// Log-cabin wall: <see cref="Logs"/> round logs stacked floor to ceiling, each its own girth and tone, their
 	/// edges wandering along the length; grain running with the log, drying checks along the upper
 	/// shoulder that start and stop, knots in a halo of darker grain, the faces silvered by weather;
 	/// pale lime chinking pressed between them, with a little snow lodged on the top of some logs.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
-		const int Logs = 8;
 		var painter = new Painter( WallSize, Chinking, 0.92f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();

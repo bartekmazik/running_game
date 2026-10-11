@@ -54,20 +54,35 @@ public sealed class ForgeTheme : ArenaTheme
 	/// middle of two opposite walls, mirrored.
 	/// </summary>
 	static readonly Vector2 BounceAt = new( 400f, 150f );
-	const float BounceDepth = 220f;
+
+	/// <summary>How far under the forge's tile tops the bounce lights stand: a little over the lava, which lies about <see cref="Arena.LavaOffset"/> below.</summary>
+	const float BounceDepth = Arena.LavaOffset - 30f;
 
 	/// <summary>
 	/// The bounce lights' cone and reach, which keep them out of the dungeon upstairs. Its walls start
-	/// 440 units above them and at least 440 across: out of reach at 560. Its floor is only a slab's
-	/// thickness above the ceiling they light, so the cone does it: a 45° chamfer facing a light below
-	/// it is lit only from more than 45° off the vertical, and the cone stops well short of that (the
-	/// dungeon keeps its chamfers free of painted relief that would tilt them further). The old fills
-	/// lit those chamfers from below and drew every dungeon tile edge as a salmon line — the 6b
-	/// review's "salmon seams". The forge's own walls lie outside the cone too, which leaves the
-	/// ceiling as the one thing they light, and the undersides of the floor seen through holes.
+	/// a storey above them and at least 440 across, past the reach and well outside the cone. Its floor
+	/// is only a slab's thickness above the ceiling they light, so the cone does it: a 45° chamfer
+	/// facing a light below it is lit only from more than 45° off the vertical, and the cone stops well
+	/// short of that (the dungeon keeps its chamfers free of painted relief that would tilt them
+	/// further). The old fills lit those chamfers from below and drew every dungeon tile edge as a
+	/// salmon line — the 6b review's "salmon seams". The forge's own walls lie outside the cone too,
+	/// which leaves the ceiling as the one thing they light, and the undersides of the floor seen
+	/// through holes. The reach runs <see cref="BounceOvershoot"/> past the ceiling, so the pools on
+	/// the rock stay as bright whatever the room's height.
 	/// </summary>
 	const float BounceCone = 35f;
-	const float BounceReach = 560f;
+	const float BounceOvershoot = 132f;
+	const float BounceReach = BounceDepth + FloorContext.ClearHeight + BounceOvershoot;
+
+	/// <summary>
+	/// Strength of each bounce light. Light falls off with the square of the distance it travels, so it
+	/// scales with the throw from the lamp to the rock overhead, from the strength tuned (70) at a throw
+	/// of 428 units, when the rooms were lower: the pools on the ceiling keep their brightness.
+	/// </summary>
+	static float BounceStrength => 70f * MathF.Pow( (BounceDepth + FloorContext.ClearHeight) / 428f, 2f );
+
+	/// <summary>Facet size of the wall rock in pixels: about 22 units, and a whole number of facets across the wall, so the rock tiles.</summary>
+	const int WallFacet = 112;
 
 	/// <summary>
 	/// The structural front layer, and the forge's light: four ember-orange lamps over the forge mouths
@@ -79,7 +94,7 @@ public sealed class ForgeTheme : ArenaTheme
 		BuildFrontLayer( room, new FrontStyle { Post = 36f, Pier = 80f, Corner = 38f, Cornice = 30f, Skirting = 12f, SkirtingDepth = 6f } );
 		AddLamps( room, 4, 150f, -40f, LightColor * 7f, Seed + 900 );
 		foreach ( var sign in new[] { 1f, -1f } )
-			room.AddLight( new Vector3( BounceAt.x * sign, BounceAt.y * sign, room.TileTopZ - BounceDepth ), LavaBounce * 70f, BounceReach, Vector3.Up, BounceCone );
+			room.AddLight( new Vector3( BounceAt.x * sign, BounceAt.y * sign, room.TileTopZ - BounceDepth ), LavaBounce * BounceStrength, BounceReach, Vector3.Up, BounceCone );
 	}
 
 	/// <summary>
@@ -121,12 +136,13 @@ public sealed class ForgeTheme : ArenaTheme
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
+		const float SootBand = 88f;
 		var stream = Seed + 610 + variant * 31;
 		var painter = new Painter( WallSize, RockFace, 0.9f );
 		var random = new Random( stream );
 		float Next() => (float)random.NextDouble();
 
-		PaintFacets( painter, 128, stream + 1, 1.1f, 0.7f );
+		PaintFacets( painter, WallFacet, stream + 1, 1.1f, 0.7f );
 
 		painter.Blend( Ramp( painter.Noise( 4, stream + 2, 4 ), 0.5f, 0.8f, 0.3f ), RockLight );
 		painter.Blend( Ramp( painter.Noise( 6, stream + 3, 4 ), 0.55f, 0.85f, 0.3f ), RockDark );
@@ -146,7 +162,7 @@ public sealed class ForgeTheme : ArenaTheme
 		for ( var y = 0; y < WallSize; y++ )
 		{
 			var v = WallRepeat - y / Ppu;
-			var high = v > 120f ? (v - 120f) / 88f : 0f;
+			var high = v > WallRepeat - SootBand ? (v - WallRepeat + SootBand) / SootBand : 0f;
 			for ( var x = 0; x < WallSize; x++ ) smoke[y * WallSize + x] = high * (0.25f + smoke[y * WallSize + x] * 0.35f);
 		}
 		painter.Blend( smoke, Soot );

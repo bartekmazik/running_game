@@ -57,15 +57,19 @@ public sealed class GreenhouseTheme : ArenaTheme
 
 	/// <summary>
 	/// A greenhouse side, floor to roof: a brick dwarf wall up to bench height, a painted timber sill,
-	/// then glazing — white-sage bars every 26 units bedded in putty, a vent rail across them, and
-	/// between them panes of opaque frosted glass lapped in uneven courses, each its own tint, with
-	/// grime and a green bloom caught in the laps and condensation gathered at the foot of each pane.
+	/// then glazing — white-sage bars about every 27 units (ten to a repeat) bedded in putty, a vent
+	/// rail across them a little under the eaves, where top-hung vents open, and between them panes of
+	/// opaque frosted glass lapped in uneven courses, each its own tint, with grime and a green bloom
+	/// caught in the laps and condensation gathered at the foot of each pane. The dwarf wall keeps bench
+	/// height and the panes their size whatever the room's height: a taller room has more courses of glass.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		const int Column = WallSize / 8;
+		const int Bars = 10;
+		const float Column = WallSize / (float)Bars;
 		const float Bar = 12f;
+		const float VentBelowEaves = 55f;
 		int Row( float v ) => (int)MathF.Round( (WallRepeat - v) * Ppu );
 		var painter = new Painter( WallSize, Glass, 0.15f );
 		var random = new Random( Seed + 600 );
@@ -75,7 +79,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 		var kneeTop = Row( 44f );
 
 		// Panes, column by column, lapped in courses of uneven height that differ between columns.
-		for ( var c = 0; c < 8; c++ )
+		for ( var c = 0; c < Bars; c++ )
 		{
 			var x0 = c * Column + Bar * 0.5f;
 			var width = Column - Bar;
@@ -112,13 +116,13 @@ public sealed class GreenhouseTheme : ArenaTheme
 		}
 
 		// Putty fillets either side of each bar, the bars over them, the vent rail across.
-		for ( var c = 0; c < 8; c++ )
+		for ( var c = 0; c < Bars; c++ )
 		{
 			var x = c * Column;
 			painter.Rect( x - Bar * 0.5f - 3f, 0f, Bar + 6f, sillTop, Putty, height: 0.72f, bevel: 2f, roughness: 0.7f );
 			painter.Rect( x - Bar * 0.5f, 0f, Bar, sillTop, Mix( BarPaint, BarShade, Next() * 0.15f ), radius: 2f, height: 1f, bevel: 4f, roughness: 0.45f );
 		}
-		painter.Rect( 0f, Row( 153f ), WallSize, Row( 149f ) - Row( 153f ), BarPaint, height: 1.05f, bevel: 4f, roughness: 0.45f );
+		painter.Rect( 0f, Row( WallRepeat - VentBelowEaves ), WallSize, Row( WallRepeat - VentBelowEaves - 4f ) - Row( WallRepeat - VentBelowEaves ), BarPaint, height: 1.05f, bevel: 4f, roughness: 0.45f );
 
 		// Sill, then the dwarf wall: a running bond of soft red bricks, every brick its own length and tone.
 		painter.Rect( 0f, sillTop, WallSize, kneeTop - sillTop + 3f, BarPaint, height: 1.2f, bevel: 6f, roughness: 0.5f );

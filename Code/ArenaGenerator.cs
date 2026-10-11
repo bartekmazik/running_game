@@ -49,11 +49,15 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	const float LavaGlowRadius = 420f;
 
-	/// <summary>Where the floor plaques hang: centred on every wall, at this height above the tile top.</summary>
-	const float PlaqueHeight = 150f;
+	/// <summary>
+	/// Where the floor plaques hang: centred on every wall, at this height above the tile top — well
+	/// over the players' heads, so a crowd never hides it, and a good way under the cornice, where it
+	/// reads from across the room rather than as part of the ceiling.
+	/// </summary>
+	const float PlaqueHeight = 170f;
 
-	/// <summary>Height of the trophy sign's centre above floor 0's tiles, clear over the roof's ridge.</summary>
-	const float TrophyHeight = 560f;
+	/// <summary>Height of the trophy sign's centre above floor 0's tiles: about three hundred units over the roof's ridge.</summary>
+	const float TrophyHeight = FloorContext.ClearHeight + 352f;
 
 	/// <summary>
 	/// One identity colour per floor, top to bottom. The values live in <see cref="Palette"/>.
@@ -262,9 +266,10 @@ public sealed class ArenaGenerator : Component
 		var uploads = new List<Action<PaintedSurface>>();
 		void Job( Func<PaintedSurface> bake, Action<PaintedSurface> upload ) { bakes.Add( bake ); uploads.Add( upload ); }
 
-		// The big 1024² surfaces first, so no worker is left starting one at the end.
-		foreach ( var surface in new[] { ThemeSurface.Floor, ThemeSurface.Wall, ThemeSurface.Ceiling, ThemeSurface.Trim } )
-			foreach ( var theme in _themes )
+		// The biggest surfaces first — the walls, then the floors — so no worker is left starting one at
+		// the end; the walls from the bottom floor up, since the forge's and the dungeon's are the slowest.
+		foreach ( var surface in new[] { ThemeSurface.Wall, ThemeSurface.Floor, ThemeSurface.Ceiling, ThemeSurface.Trim } )
+			foreach ( var theme in surface == ThemeSurface.Wall ? _themes.Reverse() : _themes )
 				for ( var variant = 0; variant < (surface == ThemeSurface.Wall ? theme.WallCount : 1); variant++ )
 				{
 					var v = variant;

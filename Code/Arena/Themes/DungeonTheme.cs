@@ -86,6 +86,7 @@ public sealed class DungeonTheme : ArenaTheme
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
+		const float SootBand = 58f;
 		var joints = Mix( Mortar, Soot, 0.3f );
 		var painter = new Painter( WallSize, joints, 0.95f );
 		var random = new Random( Seed + 600 );
@@ -207,7 +208,7 @@ public sealed class DungeonTheme : ArenaTheme
 				salt[i] = edge < 4f ? (1f - edge / 4f) * 0.3f * damp[i] : 0f;
 				var low = v < 50f ? (50f - v) / 50f : 0f;
 				moss[i] = height[i] < 0.5f && mossNoise[i] > 0.55f ? MathF.Min( (mossNoise[i] - 0.55f) * 5f, 1f ) * low * 0.6f : 0f;
-				var high = v > 150f ? (v - 150f) / 58f : 0f;
+				var high = v > WallRepeat - SootBand ? (v - WallRepeat + SootBand) / SootBand : 0f;
 				smoke[i] = high * (0.25f + soot[i] * 0.35f);
 			}
 		}
@@ -269,12 +270,17 @@ public sealed class DungeonTheme : ArenaTheme
 		if ( size.x <= 0f || size.y <= 0f ) return;
 		var length = (to - from).Length;
 		var steps = (int)length;
+
+		// Plain floats rather than vector maths in the loop: it runs a few million steps per wall.
+		float dx = to.x - from.x, dy = to.y - from.y;
+		float minX = min.x, minY = min.y, maxX = min.x + size.x, maxY = min.y + size.y;
 		for ( var s = 0; s <= steps; s++ )
 		{
-			var p = from + (to - from) * (s / (float)steps);
-			if ( p.x < min.x || p.y < min.y || p.x > min.x + size.x || p.y > min.y + size.y ) continue;
-			var x = ((int)p.x % WallSize + WallSize) % WallSize;
-			var y = ((int)p.y % WallSize + WallSize) % WallSize;
+			var t = s / (float)steps;
+			var px = from.x + dx * t; var py = from.y + dy * t;
+			if ( px < minX || py < minY || px > maxX || py > maxY ) continue;
+			var x = ((int)px % WallSize + WallSize) % WallSize;
+			var y = ((int)py % WallSize + WallSize) % WallSize;
 			field[y * WallSize + x] = MathF.Max( field[y * WallSize + x], weight );
 		}
 	}

@@ -12,18 +12,22 @@ using System;
 /// </summary>
 public sealed class TowerBuilder
 {
-	/// <summary>World units per repeat of the facade stone: about a storey, so courses never line up with the floors.</summary>
+	/// <summary>World units per repeat of the facade stone: a little under a storey, so courses never line up with the floors.</summary>
 	const float FacadeRepeat = 256f;
 
 	const int FacadeSize = 512;
 	const int DetailSize = 512;
 	const int PaneSize = 256;
 
-	/// <summary>Windows per side per floor on the facade, their size and their sill above the tile top.</summary>
+	/// <summary>
+	/// Windows per side per floor on the facade, their size and their sill above the tile top. Height
+	/// and sill follow the room's, so each storey keeps its proportions: about half the storey glazed,
+	/// the band a little below its middle, as on a real facade.
+	/// </summary>
 	const int WindowsPerSide = 7;
-	const float WindowWidth = 60f;
-	const float WindowHeight = 96f;
-	const float WindowSill = 58f;
+	const float WindowWidth = 64f;
+	const float WindowHeight = FloorContext.ClearHeight * 0.48f;
+	const float WindowSill = FloorContext.ClearHeight * 0.28f;
 
 	/// <summary>How far the facade's frames, sills and courses stand proud of the stone.</summary>
 	const float Proud = 5f;

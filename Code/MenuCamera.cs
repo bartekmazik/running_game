@@ -8,14 +8,18 @@
 /// </summary>
 public sealed class MenuCamera : Component
 {
-	const float OrbitDistance = 3300f;
+	/// <summary>
+	/// How far out the orbit runs: in proportion to the tower's height, roof to lava, so a taller tower
+	/// sits in the frame as the first one did (3300 for floors 220 apart).
+	/// </summary>
+	const float OrbitDistance = 1.64f * (Arena.FloorCount * Arena.FloorGap + Arena.LavaOffset);
 	const float OrbitPitch = 24f;
 
 	/// <summary>Degrees per second. Slow enough to read as ambience rather than motion.</summary>
 	const float OrbitSpeed = 4f;
 
-	/// <summary>Sideways offset of the aim point, in world units.</summary>
-	const float FrameShift = 620f;
+	/// <summary>Sideways offset of the aim point, in world units: the same share of the orbit whatever the tower's height.</summary>
+	const float FrameShift = OrbitDistance * 0.188f;
 
 	float _yaw = 35f;
 

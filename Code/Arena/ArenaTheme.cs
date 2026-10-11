@@ -28,8 +28,13 @@ public abstract class ArenaTheme
 	/// <summary>Ceiling resolution: 2x2 cells of 256 px, one cell per tile underside, seen from 160+ units away.</summary>
 	protected const int CeilingSize = 512;
 
-	/// <summary>Wall resolution: one <see cref="WallRepeat"/> square, floor to ceiling, about five pixels per unit.</summary>
-	protected const int WallSize = 1024;
+	/// <summary>
+	/// Wall resolution: one <see cref="WallRepeat"/> square, floor to ceiling, a little over five pixels
+	/// per unit. 21 × 64, so a 32 px or 64 px period (corrugation, spangle grains) divides it and halves
+	/// cleanly through the first mips. It grew with the room when the floors were raised (it was 1024
+	/// px): the same detail per unit, more of it, never stretched.
+	/// </summary>
+	protected const int WallSize = 1344;
 
 	/// <summary>Trim atlas resolution: <see cref="TrimRepeat"/> units of moulding per 512 px, four pixels per unit.</summary>
 	protected const int TrimSize = 512;
@@ -116,6 +121,14 @@ public abstract class ArenaTheme
 	/// <see cref="WallRepeat"/> shows it once instead of repeating its first strip at its far end.
 	/// </summary>
 	const float MaxWallStretch = 1.1f;
+
+	/// <summary>
+	/// The widest bay <see cref="AddPosts"/> lets a non-modular wall have. It was the lower rooms' repeat
+	/// stretched by <see cref="MaxWallStretch"/> before the floors were raised; the repeat is now wider
+	/// than any bay, but the cap stays, so every wall keeps the post layout the user approved and no
+	/// bay grows past about the spacing of a real post-and-panel wall.
+	/// </summary>
+	const float MaxBay = 228.8f;
 
 	/// <summary>Mouldings, posts, skirting, slab edge and infill pictures, one atlas laid out by <see cref="TrimBand"/>.</summary>
 	public Material Trim { get; private set; }
@@ -799,7 +812,7 @@ public abstract class ArenaTheme
 
 		// A bay a pattern can't stretch over would repeat its first strip at its far end; a modular
 		// pattern repeats by design, so it takes any width.
-		var widest = WallModule > 0f ? float.MaxValue : WallRepeat * MaxWallStretch;
+		var widest = WallModule > 0f ? float.MaxValue : MaxBay;
 
 		for ( var side = 0; side < 4; side++ )
 		{

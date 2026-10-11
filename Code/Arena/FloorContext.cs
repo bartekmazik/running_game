@@ -26,7 +26,7 @@ public sealed class FloorContext
 	/// <summary>Local z of this floor's walkable surface.</summary>
 	public float TileTopZ { get; init; }
 
-	/// <summary>Local z of the underside above (TileTopZ + 208); the roof base for floor 0.</summary>
+	/// <summary>Local z of the underside above (TileTopZ + <see cref="ClearHeight"/>); the roof base for floor 0.</summary>
 	public float CeilingZ { get; init; }
 
 	/// <summary>Local z where this floor's wall segment starts: the tile underside, or the lava top for the last floor.</summary>
@@ -43,7 +43,7 @@ public sealed class FloorContext
 	public const float HalfSpan = Arena.GridSize * Arena.TileSize * 0.5f; // 840
 	public const float Span = HalfSpan * 2f;
 	public const float WallThickness = 64f;
-	public const float ClearHeight = Arena.FloorGap - Arena.TileThickness; // 208
+	public const float ClearHeight = Arena.FloorGap - Arena.TileThickness; // 268
 
 	/// <summary>
 	/// Depth of the wall face behind the front layer. Posts, mouldings and (later) alcove props live in
