@@ -57,12 +57,6 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	public static Color FloorColor( int floor ) => Palette.FloorHue( floor );
 
-	/// <summary>
-	/// Outermost ring of every floor — reads as "edge" before you reach it. Tints the candy-stripe
-	/// texture, so the ring comes out as cream-and-coral stripes.
-	/// </summary>
-	static readonly Color EdgeColor = new Color( 1.00f, 0.52f, 0.50f );
-
 	/// <summary>What a stepped-on tile heats towards during its <see cref="Arena.DecayDelay"/>.</summary>
 	public static Color WarnColor => Palette.Warn;
 
@@ -92,12 +86,28 @@ public sealed class ArenaGenerator : Component
 	/// <summary>Lilac haze for the drop, so the bottom of the shaft is soft rather than black.</summary>
 	static readonly Color FogColor = new Color( 0.80f, 0.66f, 0.86f );
 
+	/// <summary>Chamfer on every tile edge: catches the light, so neighbouring tiles read as separate blocks.</summary>
+	const float TileBevel = 2f;
+
+	/// <summary>Four atlas cells times four quarter-turns of the top face's UVs.</summary>
+	const int TileLooks = 16;
+
+	/// <summary>
+	/// Largest per-tile lean toward warm or cool, per channel. On the tiles' own colours that turns
+	/// the hue by about two degrees — enough that no two neighbours are quite the same, never enough
+	/// to read as a different material.
+	/// </summary>
+	const float TileHueJitter = 0.02f;
+
 	GameObject[,,] _tiles;
 	ModelRenderer[,,] _renderers;
 
-	/// <summary>One material per floor — each wears its own Kenney motif.</summary>
-	Material[] _floorMaterials;
-	Material _hazardMaterial;
+	/// <summary>One theme per floor, top to bottom; each holds the surfaces it painted for this build.</summary>
+	ArenaTheme[] _themes;
+
+	/// <summary>[floor, look]: every tile shares one of its floor's sixteen generated slabs.</summary>
+	Model[,] _tileModels;
+
 	Material _glowMaterial;
 
 	ModelRenderer _lavaRenderer;
@@ -154,14 +164,21 @@ public sealed class ArenaGenerator : Component
 		var span = Arena.GridSize * Arena.TileSize;
 
 		var boxModel = Model.Load( "models/dev/box.vmdl" );
-		var fallbackBlock = TileTextures.CreateBlock();
-		_floorMaterials = new Material[Arena.FloorCount];
-		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
-			_floorMaterials[floor] = TileTextures.CreateFromFile( $"tnt_floor{floor}", TileTextures.FloorTexturePath( floor ) ) ?? fallbackBlock;
-
-		_hazardMaterial = TileTextures.CreateFromFile( "tnt_edge", TileTextures.EdgeTexturePath ) ?? TileTextures.CreateHazard();
 		_glowMaterial = Material.Load( GlowMaterialPath );
-		var tileScale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness ) / BoxModelUnits;
+
+		PaintThemes();
+
+		_tileModels = new Model[Arena.FloorCount, TileLooks];
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+		{
+			// The underside of a floor is the ceiling of the room below it; the bottom floor's
+			// undersides face the lava shaft and wear the forge's own rock.
+			var below = _themes[Math.Min( floor + 1, Arena.FloorCount - 1 )];
+			for ( var look = 0; look < TileLooks; look++ )
+				_tileModels[floor, look] = BuildTileModel( _themes[floor], below, look / 4, look % 4 );
+		}
+
+		var tileSize = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness );
 
 		for ( int floor = 0; floor < Arena.FloorCount; floor++ )
 		{
@@ -171,16 +188,14 @@ public sealed class ArenaGenerator : Component
 				{
 					var tile = new GameObject( GameObject, true, $"Tile_{floor}_{x}_{y}" );
 					tile.LocalPosition = TileLocalPosition( floor, x, y );
-					tile.LocalScale = tileScale;
 					MakeLocalOnly( tile );
 
 					var renderer = tile.AddComponent<ModelRenderer>();
-					renderer.Model = boxModel;
-					renderer.MaterialOverride = TileMaterial( floor, x, y );
+					renderer.Model = _tileModels[floor, TileLook( floor, x, y )];
 					renderer.Tint = TileColor( floor, x, y );
 
 					var collider = tile.AddComponent<BoxCollider>();
-					collider.Scale = new Vector3( BoxModelUnits );
+					collider.Scale = tileSize;
 					collider.Static = true;
 
 					_tiles[floor, x, y] = tile;
@@ -199,42 +214,122 @@ public sealed class ArenaGenerator : Component
 		Log.Info( $"Arena: {Arena.FloorCount} floors x {Arena.GridSize}x{Arena.GridSize} = {Arena.FloorCount * Arena.GridSize * Arena.GridSize} tiles" );
 	}
 
-	static bool IsEdge( int x, int y )
+	/// <summary>
+	/// Paints every floor's surfaces — the one expensive step of the arena build, so it is timed
+	/// and logged once (budget: 4 s in the editor's unoptimised build, well under that published).
+	/// </summary>
+	void PaintThemes()
 	{
-		var last = Arena.GridSize - 1;
-		return x == 0 || y == 0 || x == last || y == last;
+		var clock = System.Diagnostics.Stopwatch.StartNew();
+		var surfaces = 0;
+
+		_themes = new ArenaTheme[Arena.FloorCount];
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+		{
+			_themes[floor] = ArenaTheme.Create( floor );
+			_themes[floor].Paint();
+			surfaces += _themes[floor].SurfaceCount;
+		}
+
+		Log.Info( $"Arena textures: {surfaces} surfaces in {clock.ElapsedMilliseconds} ms" );
 	}
 
-	/// <summary>Code-generated block texture inside, hazard stripes on the outermost ring.</summary>
-	Material TileMaterial( int floor, int x, int y ) => IsEdge( x, y ) ? _hazardMaterial : _floorMaterials[floor];
+	/// <summary>
+	/// One generated slab, 56 x 56 x 12, chamfered on its top edges only, in two materials:
+	///   * top: the floor surface, fitted to atlas <paramref name="cell"/> and turned by
+	///     <paramref name="turn"/> quarter-turns. The turn starts the anticlockwise corner walk at a
+	///     later corner, which rotates the UVs and the tangent together without touching the
+	///     geometry or its winding, so the normal map stays lit from the right side.
+	///   * chamfers and sides: the same surface, but only a band from the middle of the cell sized
+	///     like the side face, so they show the material at its true scale instead of a whole tile
+	///     squeezed into 10 units; they are mostly in shadow and seen around holes.
+	///   * underside: the ceiling of the room below, full size and unchamfered, so neighbouring
+	///     undersides meet edge to edge and read as one ceiling; the cell with the same index as the
+	///     top, unturned, so boards and stripes keep one direction across the room.
+	/// Built from quads rather than MeshKit.BevelBox: a bevel box chamfers the bottom edges too, and
+	/// those strips framed every ceiling panel in the floor's colour.
+	/// </summary>
+	static Model BuildTileModel( ArenaTheme self, ArenaTheme below, int cell, int turn )
+	{
+		var kit = new MeshKit();
+		var half = Arena.TileSize * 0.5f;
+		var inner = half - TileBevel;
+		var top = Arena.TileThickness * 0.5f;
+		var shoulder = top - TileBevel;
+		var region = ArenaTheme.Cell( cell % 2, cell / 2, 2 );
+
+		var corners = new[]
+		{
+			new Vector3( -inner, -inner, top ), new Vector3( inner, -inner, top ),
+			new Vector3( inner, inner, top ), new Vector3( -inner, inner, top ),
+		};
+		kit.Quad( new Skin( self.FloorSurface, region ), corners[turn], corners[(turn + 1) % 4], corners[(turn + 2) % 4], corners[(turn + 3) % 4] );
+
+		var faceFraction = inner * 2f / Arena.TileSize;
+		var bandFraction = (shoulder + top) / Arena.TileSize;
+		var band = new Skin( self.FloorSurface, new Rect(
+			region.Left + region.Width * (1f - faceFraction) * 0.5f,
+			region.Top + region.Height * (0.5f - bandFraction * 0.5f),
+			region.Width * faceFraction,
+			region.Height * bandFraction ) );
+
+		// The +X side, then the same quarter-turned three times; each pair is anticlockwise seen from outside.
+		for ( var side = 0; side < 4; side++ )
+		{
+			var rotation = Rotation.FromYaw( side * 90f );
+			Vector3 P( float x, float y, float z ) => rotation * new Vector3( x, y, z );
+
+			kit.Quad( band, P( half, -half, shoulder ), P( half, half, shoulder ), P( inner, inner, top ), P( inner, -inner, top ) );
+			kit.Quad( band, P( half, -half, -top ), P( half, half, -top ), P( half, half, shoulder ), P( half, -half, shoulder ) );
+		}
+
+		// Anticlockwise seen from below.
+		kit.Quad( new Skin( below.Ceiling, region ),
+			new Vector3( -half, half, -top ), new Vector3( half, half, -top ),
+			new Vector3( half, -half, -top ), new Vector3( -half, -half, -top ) );
+
+		return kit.Build( $"arena_tile_{self.Floor}_{cell}_{turn}" );
+	}
 
 	/// <summary>
-	/// The resting colour of a tile. Three layers, all from the index alone so a reset can
-	/// restore any tile without storing its colour:
-	///   * the floor's identity colour,
-	///   * concentric square bands every three tiles out from the centre, so a player can judge
-	///     how near the edge they are without looking for it,
-	///   * a faint checker inside each band, so individual tiles still read when running,
-	/// and a dark outermost ring as the edge warning.
+	/// Per-tile hash. The spatial hash alone repeats every four tiles in its low bits (x times an
+	/// odd number keeps x's low bits), which is exactly where the look is read from — a visible
+	/// lattice. One avalanche round (murmur's finaliser) spreads every input bit over the output.
+	/// </summary>
+	static uint TileHash( int floor, int x, int y )
+	{
+		var h = (uint)(x * 73856093) ^ (uint)(y * 19349663) ^ (uint)(floor * 83492791);
+		h ^= h >> 16; h *= 0x7feb352du;
+		h ^= h >> 15; h *= 0x846ca68bu;
+		h ^= h >> 16;
+		return h;
+	}
+
+	/// <summary>Which of the floor's sixteen slabs a tile wears: atlas cell from bits 0–1, UV turn from bits 2–3.</summary>
+	static int TileLook( int floor, int x, int y )
+	{
+		var h = TileHash( floor, x, y );
+		return (int)(h & 3) * 4 + (int)((h >> 2) & 3);
+	}
+
+	/// <summary>
+	/// The resting tint of a tile, from its index alone so a reset can restore any tile without
+	/// storing it: value within ±3 % of 0.97 and a slight warm/cool and green/magenta lean, so no
+	/// two neighbours match exactly. The colour itself lives in the floor's textures; every channel
+	/// stays at or below 1 because ModelRenderer.Tint wraps above it.
 	/// </summary>
 	public static Color TileColor( int floor, int x, int y )
 	{
-		if ( IsEdge( x, y ) )
-			return EdgeColor.Darken( floor * 0.03f );
+		var h = TileHash( floor, x, y ) >> 4;
+		var value = 0.94f + (h & 0xFF) / 255f * 0.06f;
+		var warmth = ((h >> 8) & 0xFF) / 255f * 2f - 1f;
+		var lean = ((h >> 16) & 0xFF) / 255f * 2f - 1f;
 
-		// Chebyshev distance from the centre, in tiles. GridSize is even, so the centre is a
-		// four-tile junction and the innermost band is the 2x2 around it.
-		var half = Arena.GridSize / 2;
-		var dx = x < half ? half - 1 - x : x - half;
-		var dy = y < half ? half - 1 - y : y - half;
-		var ring = dx > dy ? dx : dy;
-
-		var band = (ring / 3) % 2 == 0;
-		var check = (x + y) % 2 == 0;
-
-		// Pastel needs a lighter hand than the old palette: deep darkening turned butter into mud.
-		var shade = (band ? 0f : 0.10f) + (check ? 0f : 0.04f);
-		return FloorColor( floor ).Darken( shade );
+		var r = 1f + warmth * TileHueJitter;
+		var g = 1f + lean * TileHueJitter * 0.5f;
+		var b = 1f - warmth * TileHueJitter;
+		var scale = value / MathF.Max( r, MathF.Max( g, b ) );
+		return new Color( r * scale, g * scale, b * scale );
 	}
 
 	/// <summary>
@@ -257,13 +352,13 @@ public sealed class ArenaGenerator : Component
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y ) + Vector3.Down * (6f * eased);
 	}
 
-	/// <summary>Undo <see cref="SetTileWarning"/>: resting material, colour and height.</summary>
+	/// <summary>Undo <see cref="SetTileWarning"/>: the slab's own materials, resting colour and height.</summary>
 	public void RestoreTile( int floor, int x, int y )
 	{
 		var renderer = _renderers?[floor, x, y];
 		if ( renderer is null ) return;
 
-		renderer.MaterialOverride = TileMaterial( floor, x, y );
+		renderer.MaterialOverride = null;
 		renderer.Tint = TileColor( floor, x, y );
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y );
 	}

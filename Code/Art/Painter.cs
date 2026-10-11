@@ -354,6 +354,42 @@ public sealed class Painter
 		return ((h ^ (h >> 16)) & 0xFFFF) / 65535f;
 	}
 
+	/// <summary>
+	/// The tileable fractal noise field itself (0..1, one value per pixel, row-major), for masks a
+	/// surface builds on its own — moss in the low spots, ice under thin snow, warped sand ripples —
+	/// and then applies with <see cref="Blend"/> or <see cref="AddHeight"/>.
+	/// </summary>
+	public float[] Noise( int period, int seed, int octaves = 4 ) => Fbm( period, seed, octaves );
+
+	/// <summary>
+	/// Moves every pixel toward <paramref name="color"/> (and optionally a height and a roughness) by
+	/// its own weight in 0..1 — the per-pixel counterpart of a shape's alpha, for patches that have no
+	/// outline: fire-flashing on clay, damp sand, worn carpet, stains.
+	/// </summary>
+	public void Blend( float[] weight, Color color, float height = float.NaN, float roughness = float.NaN )
+	{
+		var hasHeight = !float.IsNaN( height );
+		var hasRoughness = !float.IsNaN( roughness );
+		for ( var i = 0; i < weight.Length; i++ )
+		{
+			var w = weight[i];
+			if ( w <= 0f ) continue;
+			if ( w > 1f ) w = 1f;
+			_red[i] += (color.r - _red[i]) * w;
+			_green[i] += (color.g - _green[i]) * w;
+			_blue[i] += (color.b - _blue[i]) * w;
+			if ( hasHeight ) _height[i] += (height - _height[i]) * w;
+			if ( hasRoughness ) _roughness[i] += (roughness - _roughness[i]) * w;
+		}
+	}
+
+	/// <summary>Adds <paramref name="amount"/> × <paramref name="delta"/> to the height channel, pixel for pixel — for relief computed outside the canvas (ripples, weave).</summary>
+	public void AddHeight( float[] delta, float amount )
+	{
+		for ( var i = 0; i < delta.Length; i++ )
+			_height[i] += delta[i] * amount;
+	}
+
 	/// <summary>Soft blotchy brightness variation so large surfaces do not read as one flat fill.</summary>
 	public void Mottle( float amount, int period, int seed, int octaves = 4 )
 	{
