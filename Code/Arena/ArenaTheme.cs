@@ -673,18 +673,21 @@ public abstract class ArenaTheme
 	}
 
 	/// <summary>
-	/// The room's own lamps: <paramref name="count"/> unshadowed point lights (<see cref="FloorContext.AddLight"/>)
+	/// The room's own lamps: <paramref name="count"/> unshadowed lights (<see cref="FloorContext.AddLight"/>)
 	/// spread round the room's perimeter in corner order from a seeded start, each slid along its wall
 	/// by up to <paramref name="jitter"/> of the spacing and kept clear of the corners, at height
 	/// <paramref name="v"/> and <paramref name="depth"/> (negative: out in the room, in front of the
 	/// wall plane). Every lamp is a few percent brighter or dimmer than <paramref name="color"/> — real
 	/// lamps never match.
 	///
-	/// The radius is kept short of the floor below: the lights cast no shadows, so a lamp that reached
-	/// through the tiles would light the next room down in this room's colour.
+	/// Each is a cone thrown straight down (<see cref="FloorContext.LampCone"/>), as a fitting under a
+	/// cornice throws its light, reaching no further than <see cref="FloorContext.LampReach"/>: the
+	/// lights cast no shadows, so a lamp shining level or upward lit the room above through the slab,
+	/// and one reaching too far down lit the room below.
 	/// </summary>
-	protected static void AddLamps( FloorContext room, int count, float v, float depth, float radius, Color color, int seed, float jitter = 0.25f )
+	protected static void AddLamps( FloorContext room, int count, float v, float depth, Color color, int seed, float jitter = 0.25f )
 	{
+		var radius = FloorContext.LampReach( v );
 		const float Span = FloorContext.Span;
 		const float Margin = 160f;
 		var order = new[] { 0, 3, 2, 1 };
@@ -698,7 +701,7 @@ public abstract class ArenaTheme
 			along = (along % (4f * Span) + 4f * Span) % (4f * Span);
 			var side = order[(int)(along / Span)];
 			var u = Math.Clamp( along % Span, Margin, Span - Margin );
-			room.AddLight( room.OnWall( side, u, v, depth ), color * (0.94f + (float)random.NextDouble() * 0.12f), radius );
+			room.AddLight( room.OnWall( side, u, v, depth ), color * (0.94f + (float)random.NextDouble() * 0.12f), radius, Vector3.Down, FloorContext.LampCone );
 		}
 	}
 
@@ -711,9 +714,7 @@ public abstract class ArenaTheme
 	/// </summary>
 	protected static PaintedSurface BakeMetal( Painter painter, string name, float normalStrength, float lift )
 	{
-		var weight = new float[painter.Size * painter.Size];
-		Array.Fill( weight, lift );
-		painter.Blend( weight, Color.White );
+		painter.Wash( Color.White, lift );
 		return painter.Bake( name, Painter.Metal, normalStrength );
 	}
 

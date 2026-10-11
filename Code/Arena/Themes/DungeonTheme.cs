@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 /// <summary>
 /// Floor 7 (index 6): a dungeon. Underfoot, granite flagstones — two or three to a block, cut
@@ -26,12 +27,22 @@ public sealed class DungeonTheme : ArenaTheme
 	static Color Mica => Palette.Hex( 0x45414B );
 
 	/// <summary>
-	/// Lime mortar in the joints: warm and sandy against the cool granite, about as light — a filled
-	/// joint reads as a band of another material, not as a dark crack.
+	/// Lime mortar in the walls' joints and the trim's: warm and sandy against the cool granite, about
+	/// as light — a filled joint reads as a band of another material, not as a dark crack.
 	/// </summary>
 	static Color Mortar => Palette.Hex( 0x8A847E );
 
+	/// <summary>
+	/// The joints between the floor's flags: dark, neutral grime packed into the lime. The torches face
+	/// the chamfers that carry the tile joints, and a light joint lit warm drew every tile edge as a
+	/// salmon line; a dark one stays a dark line under any light (6b review).
+	/// </summary>
+	static Color FloorJoint => Palette.Hex( 0x4A464C );
+
 	static Color Moss => Palette.Hex( 0x7FA06A );
+
+	/// <summary>Salts left at the tide line of rising damp: chalky off-white.</summary>
+	static Color Salt => Palette.Hex( 0xCFCBC4 );
 
 	/// <summary>Damp patches on the stone.</summary>
 	static Color Damp => Palette.Hex( 0x6D6874 );
@@ -61,7 +72,7 @@ public sealed class DungeonTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 34f, Pier = 80f, Corner = 36f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 6f } );
-		AddLamps( room, 6, 125f, -12f, 460f, LightColor * 3f, Seed + 900 );
+		AddLamps( room, 6, 125f, -12f, LightColor * 4f, Seed + 900 );
 	}
 
 	/// <summary>
@@ -86,7 +97,7 @@ public sealed class DungeonTheme : ArenaTheme
 		for ( var i = 0; i < bed.Length; i++ ) bed[i] = 0.18f + (bed[i] - 0.5f) * 0.25f;
 		painter.AddHeight( bed, 1f );
 
-		var stones = new System.Collections.Generic.List<(Vector2 Min, Vector2 Size)>();
+		var stones = new List<(Vector2 Min, Vector2 Size)>();
 		var y = 0f;
 		while ( y < WallSize - 1f )
 		{
@@ -113,7 +124,6 @@ public sealed class DungeonTheme : ArenaTheme
 		}
 
 		var tooling = new float[WallSize * WallSize];
-		var stain = new float[WallSize * WallSize];
 		foreach ( var (min, size) in stones )
 		{
 			var joint = 8f + Next() * 6f;
@@ -202,7 +212,7 @@ public sealed class DungeonTheme : ArenaTheme
 			}
 		}
 		painter.Blend( wet, Damp, roughness: 0.6f );
-		painter.Blend( salt, Palette.Hex( 0xCFCBC4 ), roughness: 0.95f );
+		painter.Blend( salt, Salt, roughness: 0.95f );
 		painter.Blend( moss, Mix( Moss, Granite, 0.35f ), roughness: 0.95f );
 		painter.Blend( smoke, Soot );
 
@@ -231,7 +241,7 @@ public sealed class DungeonTheme : ArenaTheme
 		var cut = new float[4];
 		for ( var k = 0; k < 4; k++ ) cut[k] = 3f + Next() * 7f;
 
-		var points = new System.Collections.Generic.List<Vector2>();
+		var points = new List<Vector2>();
 		for ( var k = 0; k < 4; k++ )
 		{
 			// Each side runs from just past its corner's cut to just before the next one's, bowed a
@@ -335,6 +345,22 @@ public sealed class DungeonTheme : ArenaTheme
 		painter.Cavity( 0.5f, 5 );
 		painter.EdgeWear( 0.2f, 4, Seed + 34 );
 		painter.Grain( 0.015f, Seed + 35 );
+
+		// The chamfers flat, dull and a shade darker. The forge's lava light shines up at the ceiling
+		// under this floor from below the slab, and nothing casts shadows: a chamfer tilted further
+		// still by a painted worn arris faced that light and drew every tile edge as a salmon line
+		// (6b review). On the chamfer's own 45° the light's cone cannot reach it (ForgeTheme.BounceCone).
+		const int Cell = FloorSize / 2;
+		var rim = new float[FloorSize * FloorSize];
+		for ( var y = 0; y < FloorSize; y++ )
+		for ( var x = 0; x < FloorSize; x++ )
+		{
+			var toEdge = MathF.Min( MathF.Min( x % Cell, Cell - 1 - x % Cell ), MathF.Min( y % Cell, Cell - 1 - y % Cell ) ) + 0.5f;
+			rim[y * FloorSize + x] = Step( Rim + 3f, Rim - 1f, toEdge );
+		}
+		painter.Level( rim, 1f );
+		painter.Roughen( rim, 0.95f );
+		painter.Blend( Scaled( rim, 0.2f ), Soot );
 		return painter.Bake( "arena_6_floor", Painter.Matte, 7f );
 	}
 
@@ -448,7 +474,7 @@ public sealed class DungeonTheme : ArenaTheme
 					{
 						joint[i] = 0.9f;
 						relief[i] = 0.3f;
-						if ( crystal > 0.6f ) pale[i] = MathF.Min( (crystal - 0.6f) * 4f, 1f ) * 0.3f;
+						if ( crystal > 0.6f ) pale[i] = MathF.Min( (crystal - 0.6f) * 4f, 1f ) * 0.12f;
 						var m = (mossy - 0.55f) * 4f;
 						moss[i] = m > 0f ? MathF.Min( m, 1f ) * 0.4f : 0f;
 						continue;
@@ -479,10 +505,8 @@ public sealed class DungeonTheme : ArenaTheme
 		painter.Blend( owners, palette );
 		painter.Blend( pale, Feldspar );
 		painter.Blend( dark, Mica );
-		// The joint a shade darker than the lime on the walls, and dull: the chamfers that carry it
-		// face the torches, and in the light lime they drew every seam as a bright salmon line.
-		painter.Blend( joint, Mix( Mortar, GraniteShade, 0.4f ), roughness: 0.85f );
-		painter.Blend( moss, Mix( Mix( Moss, Granite, 0.45f ), Mortar, 0.25f ), roughness: 0.9f );
+		painter.Blend( joint, FloorJoint, roughness: 0.85f );
+		painter.Blend( moss, Mix( Mix( Moss, Granite, 0.45f ), FloorJoint, 0.25f ), roughness: 0.9f );
 	}
 
 	/// <summary>

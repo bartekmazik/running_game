@@ -46,7 +46,7 @@ public sealed class BeachTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 70f, Corner = 28f, Cornice = TopPlate, Skirting = Skirting, SkirtingDepth = 4f } );
-		AddLamps( room, 5, FloorContext.ClearHeight - 30f, -24f, 480f, LightColor * 2.6f, Seed + 900 );
+		AddLamps( room, 5, FloorContext.ClearHeight - 30f, -24f, LightColor * 3.6f, Seed + 900 );
 	}
 
 	/// <summary>Height of the top plate under the ceiling and of the skirting: between them is the wall a hut shows.</summary>

@@ -61,7 +61,7 @@ public sealed class WorkshopTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 24f, Pier = 64f, Corner = 28f, Cornice = 24f, Skirting = 10f, SkirtingDepth = 4f } );
-		AddLamps( room, 5, FloorContext.ClearHeight - 28f, -24f, 480f, LightColor * 3f, Seed + 900 );
+		AddLamps( room, 6, FloorContext.ClearHeight - 28f, -24f, LightColor * 4.2f, Seed + 900 );
 	}
 
 	/// <summary>
@@ -71,23 +71,30 @@ public sealed class WorkshopTheme : ArenaTheme
 	/// along three girts, some haloed with rust and a few bleeding a thin streak down the sheet. Grime
 	/// runs down the troughs and gathers in a splash band along the floor. The zinc is warm grey, and
 	/// the spangle is a faint patchwork of crystal grains.
+	///
+	/// The corrugation lives in the relief and the reflection alone, never in the colour, and its
+	/// period is a power-of-two number of pixels: at 25.6 px the crests fell between texels in every
+	/// mip below the first few, which baked beating bands into the mips themselves, and crest shading
+	/// in the colour plus a strong normal and a tight highlight beat against the screen as moiré
+	/// (6b review). At 32 px each mip halves the period exactly until the crests average out flat.
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		const int Crests = 40;
+		const int Crests = 32;
 		const float Pitch = WallSize / (float)Crests;
+		const int GrainSize = 16;
 		float Row( float v ) => (WallRepeat - v) * Ppu;
-		var painter = new Painter( WallSize, Zinc, 0.45f );
+		var painter = new Painter( WallSize, Zinc, 0.58f );
 		var random = new Random( Seed + 600 );
 		float Next() => (float)random.NextDouble();
 
-		// Sheet widths in crests, 7 to 9, adding up to the repeat; each sheet's end lap at its own height.
-		var widths = new[] { 8, 8, 8, 8, 8 };
+		// Sheet widths in crests, 5 to 8, adding up to the repeat; each sheet's end lap at its own height.
+		var widths = new[] { 7, 7, 6, 6, 6 };
 		for ( var k = 0; k < 6; k++ )
 		{
 			var a = random.Next( 5 ); var b = random.Next( 5 );
-			if ( a != b && widths[a] < 9 && widths[b] > 7 ) { widths[a]++; widths[b]--; }
+			if ( a != b && widths[a] < 8 && widths[b] > 5 ) { widths[a]++; widths[b]--; }
 		}
 		var starts = new int[6];
 		starts[0] = random.Next( Crests );
@@ -111,6 +118,7 @@ public sealed class WorkshopTheme : ArenaTheme
 		var runs = painter.Noise( 48, Seed + 603, 2 );
 		var owner = new byte[WallSize * WallSize];
 		var relief = new float[WallSize * WallSize];
+		var corrugation = new float[WallSize * WallSize];
 		var spangle = new float[WallSize * WallSize];
 		var bloom = new float[WallSize * WallSize];
 		var grime = new float[WallSize * WallSize];
@@ -138,13 +146,16 @@ public sealed class WorkshopTheme : ArenaTheme
 				var intoColumn = crest - (starts[column] - starts[0]);
 				var side = intoColumn < 0.5f ? 0.07f : 0f;
 				var end = upper && laps[column] - y < 5f ? 0.08f : 0f;
-				relief[i] = wave[x] * 0.8f + side + end;
+				corrugation[i] = wave[x] * 0.8f;
+				relief[i] = side + end;
 				if ( !upper && y - laps[column] < 7f ) edge[i] = (1f - (y - laps[column]) / 7f) * 0.55f;
 				if ( intoColumn > 0.48f && intoColumn < 0.56f ) edge[i] = MathF.Max( edge[i], 0.4f );
 
-				// Spangle: crystal grains as a warped patchwork, each a little brighter or duller.
-				var gx = (int)((x + (warp[i] - 0.5f) * 30f) / 14f);
-				var gy = (int)((y + (warp[(i + 512 * WallSize + 512) % (WallSize * WallSize)] - 0.5f) * 30f) / 14f);
+				// Spangle: crystal grains as a warped patchwork, each a little brighter or duller; grains
+				// a whole number of times across the texture, so the patchwork runs on over its wrap.
+				const int Grains = WallSize / GrainSize;
+				var gx = ((int)MathF.Floor( (x + (warp[i] - 0.5f) * 30f) / GrainSize ) + Grains) % Grains;
+				var gy = ((int)MathF.Floor( (y + (warp[(i + 512 * WallSize + 512) % (WallSize * WallSize)] - 0.5f) * 30f) / GrainSize ) + Grains) % Grains;
 				spangle[i] = (Bits( Hash( gx, gy, Seed ), 0 ) - 0.5f) * (1f - weather[sheet]) * 0.5f;
 
 				var r = rustNoise[i];
@@ -157,6 +168,7 @@ public sealed class WorkshopTheme : ArenaTheme
 		}
 
 		painter.AddHeight( relief, 1f );
+		painter.AddHeight( corrugation, 1f );
 		painter.Blend( owner, palette );
 		var lighter = new float[WallSize * WallSize];
 		for ( var i = 0; i < spangle.Length; i++ ) { lighter[i] = spangle[i] > 0f ? spangle[i] : 0f; spangle[i] = spangle[i] < 0f ? -spangle[i] : 0f; }
@@ -190,12 +202,16 @@ public sealed class WorkshopTheme : ArenaTheme
 		}
 
 		painter.HeightNoise( 0.15f, 3, Seed + 604, 2 );
-		painter.ShadeFromHeight( 0.08f, 0.14f );
 		painter.Mottle( 0.04f, 8, Seed + 605, 3 );
 		painter.RoughnessNoise( 0.08f, 6, Seed + 606, 3 );
+
+		// The cavity bake sees the laps, girts and screws but not the corrugation, which would put the
+		// crests back into the colour.
+		painter.AddHeight( corrugation, -1f );
 		painter.Cavity( 0.3f, 5 );
+		painter.AddHeight( corrugation, 1f );
 		painter.Grain( 0.01f, Seed + 607 );
-		return BakeMetal( painter, "arena_5_wall", 4f, 0.5f );
+		return BakeMetal( painter, "arena_5_wall", 2.5f, 0.65f );
 	}
 
 	/// <summary>
@@ -230,7 +246,8 @@ public sealed class WorkshopTheme : ArenaTheme
 				for ( var y = top; y < top + height; y++ )
 				for ( var x = 0; x < TrimSize; x++ )
 				{
-					var stripe = ((x + y) / 24) % 2 == 0;
+					// A 64 px period, which divides the band's 512 px run, so the stripes carry on across the wrap.
+					var stripe = ((x + y) / 32) % 2 == 0;
 					painter.Fill( x, y, 1, 1, stripe ? Mix( Palette.Ink, Grime, 0.2f ) : Mix( Palette.PaperShade, Khaki, 0.25f ) );
 				}
 				var scuffs = Ramp( painter.Noise( 32, Seed + 710, 3 ), 0.6f, 0.8f, 0.6f );

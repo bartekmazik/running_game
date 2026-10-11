@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 
 /// <summary>
 /// Builds the whole arena at runtime: <see cref="Arena.FloorCount"/> stacked grids of tiles, the
@@ -232,13 +233,22 @@ public sealed class ArenaGenerator : Component
 	}
 
 	/// <summary>
+	/// How many surfaces paint at once. One parallel loop over all of them let the thread pool run
+	/// some thirty-five side by side, each holding its canvases (tens of megabytes), and the build
+	/// swung between 2.5 and 4.7 s from one start to the next; twelve workers taking jobs in turn ran
+	/// it in 2.3 s every time on the twelve-thread machine it is tuned on (fix round 1 of Task 6b).
+	/// </summary>
+	const int BakeWorkers = 12;
+
+	/// <summary>
 	/// Paints every surface of the arena — the one expensive step of the build, so it is timed and
 	/// logged once (budget: 4 s in the editor's unoptimised build, well under that published).
 	///
 	/// Each surface is an independent job (its own canvas, its own seeded streams), so they paint side
 	/// by side on worker threads and come out identical whatever order they finish in; the main thread
 	/// waits — the arena must be whole before anyone can stand on it — and then uploads them, since
-	/// textures and materials are engine resources made on the main thread only.
+	/// textures and materials are engine resources made on the main thread only. A fixed set of
+	/// <see cref="BakeWorkers"/> workers takes the jobs in turn, biggest first.
 	/// </summary>
 	void PaintThemes()
 	{
@@ -266,7 +276,12 @@ public sealed class ArenaGenerator : Component
 		Job( TowerBuilder.PaintPanes, baked => _roofPanes = baked.Upload() );
 
 		var painted = new PaintedSurface[bakes.Count];
-		Sandbox.Utility.Parallel.For( 0, bakes.Count, i => painted[i] = bakes[i]() );
+		var next = -1;
+		Sandbox.Utility.Parallel.For( 0, Math.Min( bakes.Count, BakeWorkers ), _ =>
+		{
+			for ( var i = Interlocked.Increment( ref next ); i < bakes.Count; i = Interlocked.Increment( ref next ) )
+				painted[i] = bakes[i]();
+		} );
 
 		var surfaces = 0;
 		for ( var i = 0; i < painted.Length; i++ )

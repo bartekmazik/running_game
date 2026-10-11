@@ -58,8 +58,8 @@ public sealed class WinterTheme : ArenaTheme
 	{
 		var bays = BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 74f, Corner = 34f, Cornice = 28f, Skirting = 12f, SkirtingDepth = 5f } );
 		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 64f, 84f, 70f, 0.45f, true, Seed + 800 );
-		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, 480f, new Color( 1.25f, 0.95f, 0.66f ) * 2.4f, Seed + 900 );
-		AddLamps( room, 2, 110f, -30f, 480f, LightColor * 2.2f, Seed + 901 );
+		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, new Color( 1.25f, 0.95f, 0.66f ) * 3.6f, Seed + 900 );
+		AddLamps( room, 2, 110f, -30f, LightColor * 3f, Seed + 901 );
 	}
 
 	/// <summary>

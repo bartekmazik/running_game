@@ -71,6 +71,31 @@ public sealed class FloorContext
 	/// </summary>
 	const float LampFalloff = 0.8f;
 
+	/// <summary>
+	/// Outer half-angle, in degrees, of a lamp's cone aimed straight down: wide enough to wash the
+	/// walls beside and below the lamp, and short of the horizontal, so nothing level with the lamp
+	/// or above it is lit. The lights cast no shadows, so a slab stops nothing: a lamp under the
+	/// cornice is about fifty units from the wall feet of the room upstairs, and as a point light it
+	/// lit them brighter than anything in its own room (6b review).
+	/// </summary>
+	public const float LampCone = 80f;
+
+	/// <summary>
+	/// Degrees over which a cone fades from full strength to nothing at its edge: wide, because a
+	/// lamp 64 units from the wall face draws the edge of its cone on the wall as an arc, and a short
+	/// fade drew it as the hard rim of a stage spot.
+	/// </summary>
+	const float ConeFade = 55f;
+
+	/// <summary>How far short of the next floor's tile tops a lamp's reach stops.</summary>
+	const float LeakMargin = 12f;
+
+	/// <summary>
+	/// The furthest a lamp <paramref name="v"/> above this floor may reach: short of the tile tops one
+	/// <see cref="Arena.FloorGap"/> below, which the unshadowed light would otherwise light through the slab.
+	/// </summary>
+	public static float LampReach( float v ) => v + Arena.FloorGap - LeakMargin;
+
 	int _lights;
 
 	/// <summary>Into the wall (+depth), exact per side so faces on the grid edge land on exactly ±840.</summary>
@@ -93,10 +118,18 @@ public sealed class FloorContext
 	public Rotation WallFacing( int side ) => Rotation.LookAt( -Out( side ), Vector3.Up );
 
 	/// <summary>
-	/// An unshadowed point light (shadow-casting lights are the expensive kind, and a room has four to
-	/// six). Warns past <see cref="MaxLights"/> so a theme that overspends shows up in the console.
+	/// An unshadowed lamp (shadow-casting lights are the expensive kind, and a room has four to six).
+	/// With a <paramref name="cone"/> — the outer half-angle in degrees — it is a spot light aimed along
+	/// <paramref name="direction"/>, fading in over its last <see cref="ConeFade"/> degrees; without
+	/// one, a point light.
+	///
+	/// Nothing here casts shadows, so the slabs between floors stop no light: a lamp lights whatever
+	/// lies inside its radius (and its cone) on every floor. Wall lamps are therefore cones aimed below
+	/// the horizontal (<see cref="LampCone"/>) with a radius short of the floor below
+	/// (<see cref="LampReach"/>), and a point light belongs only where its radius stays short of both
+	/// slabs. Warns past <see cref="MaxLights"/> so a theme that overspends shows up in the console.
 	/// </summary>
-	public void AddLight( Vector3 localPosition, Color color, float radius )
+	public void AddLight( Vector3 localPosition, Color color, float radius, Vector3 direction = default, float cone = 0f )
 	{
 		if ( ++_lights > MaxLights )
 			Log.Warning( $"Floor {Floor}: {_lights} lights, over the budget of {MaxLights}" );
@@ -104,6 +137,21 @@ public sealed class FloorContext
 		var holder = new GameObject( Root, true, "Light" );
 		holder.LocalPosition = localPosition;
 		ArenaGenerator.MakeLocalOnly( holder );
+
+		if ( cone > 0f )
+		{
+			// A spot shines along its forward axis. LookAt's default up is world up, which leaves the
+			// rotation undefined for a lamp aimed straight down or up, so those take +X as up instead.
+			holder.LocalRotation = Rotation.LookAt( direction, MathF.Abs( direction.z ) > 0.9f ? Vector3.Forward : Vector3.Up );
+			var spot = holder.AddComponent<SpotLight>();
+			spot.LightColor = color;
+			spot.Radius = radius;
+			spot.Attenuation = LampFalloff;
+			spot.ConeOuter = cone;
+			spot.ConeInner = MathF.Max( cone - ConeFade, 0f );
+			spot.Shadows = false;
+			return;
+		}
 
 		var light = holder.AddComponent<PointLight>();
 		light.LightColor = color;

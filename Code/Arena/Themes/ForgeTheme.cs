@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 /// <summary>
 /// Floor 8 (index 7): a forge over the lava. Underfoot, the tops of basalt columns — five-, six-
@@ -39,108 +40,220 @@ public sealed class ForgeTheme : ArenaTheme
 	static Color Iron => Palette.Hex( 0x57524F );
 	static Color IronLight => Palette.Hex( 0x6E6863 );
 
+	/// <summary>How strongly the ceiling glows on average with the light of the lava below (0..1 of its own colour).</summary>
+	const float CeilingGlow = 0.3f;
+
 	/// <summary>Column spacing in pixels: about 17 units, a 40 cm column.</summary>
 	const float ColumnSpacing = 150f;
 
+	/// <summary>Warm red of the light thrown up off the lava through the floor.</summary>
+	static Color LavaBounce => new( 1.4f, 0.55f, 0.4f );
+
 	/// <summary>
-	/// The structural front layer, and the forge's light: four low ember-orange lamps by the walls where
-	/// the forge mouths will stand (Task 10), and two dim red fills out in the room for the glow off the
-	/// lava below — the room has no floor under it to leak into, so they may reach further than the rest.
+	/// Where the lava bounce lights stand: down the shaft just over the lava, a little way in from the
+	/// middle of two opposite walls, mirrored.
+	/// </summary>
+	static readonly Vector2 BounceAt = new( 400f, 150f );
+	const float BounceDepth = 220f;
+
+	/// <summary>
+	/// The bounce lights' cone and reach, which keep them out of the dungeon upstairs. Its walls start
+	/// 440 units above them and at least 440 across: out of reach at 560. Its floor is only a slab's
+	/// thickness above the ceiling they light, so the cone does it: a 45° chamfer facing a light below
+	/// it is lit only from more than 45° off the vertical, and the cone stops well short of that (the
+	/// dungeon keeps its chamfers free of painted relief that would tilt them further). The old fills
+	/// lit those chamfers from below and drew every dungeon tile edge as a salmon line — the 6b
+	/// review's "salmon seams". The forge's own walls lie outside the cone too, which leaves the
+	/// ceiling as the one thing they light, and the undersides of the floor seen through holes.
+	/// </summary>
+	const float BounceCone = 35f;
+	const float BounceReach = 560f;
+
+	/// <summary>
+	/// The structural front layer, and the forge's light: four ember-orange lamps over the forge mouths
+	/// (Task 10), thrown down onto the floor and the foot of the walls; and the glow of the lava below,
+	/// two warm lights aimed up the shaft at the rock overhead (R32).
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 36f, Pier = 80f, Corner = 38f, Cornice = 30f, Skirting = 12f, SkirtingDepth = 6f } );
-		AddLamps( room, 4, 40f, -12f, 640f, LightColor * 3.6f, Seed + 900 );
-		AddLamps( room, 2, 110f, -360f, 900f, new Color( 1.4f, 0.55f, 0.4f ) * 2.6f, Seed + 901, 0.1f );
+		AddLamps( room, 4, 150f, -40f, LightColor * 7f, Seed + 900 );
+		foreach ( var sign in new[] { 1f, -1f } )
+			room.AddLight( new Vector3( BounceAt.x * sign, BounceAt.y * sign, room.TileTopZ - BounceDepth ), LavaBounce * 70f, BounceReach, Vector3.Up, BounceCone );
 	}
 
 	/// <summary>
+	/// Three faces of rock, worn by the lengths of wall in turn (<see cref="ArenaTheme.Walls"/>), each
+	/// with its own seams: a quiet face with a short crack or two low down, a face split by one seam the
+	/// full height of the wall that branches on its way up to the cornice, and a face with two or three
+	/// seams of middling height. One face for every length put the same few red lines in the same band
+	/// of every bay (6b review).
+	/// </summary>
+	public override int WallCount => 3;
+
+	/// <summary>The wall's rock: a step lighter than the ceiling's, so its facets read in the forge's low light.</summary>
+	static Color RockFace => Mix( Rock, RockLight, 0.5f );
+
+	/// <summary>The white-hot middle of a seam, toward which its core is mixed.</summary>
+	static Color HotCore => Palette.Hex( 0xFFC27A );
+
+	/// <summary>Heat tarnish on the iron: a faint bronze and a faint blue.</summary>
+	static Color TarnishBronze => Palette.Hex( 0x6B5638 );
+	static Color TarnishBlue => Palette.Hex( 0x464C5E );
+
+	/// <summary>
 	/// Dark rock with lava seams, the forge's walls and the shaft below them: broken basalt faces (a
-	/// jittered Voronoi of tilted facets that meet in soft creases), faint strata, browner and paler
-	/// patches, soot thickening toward the ceiling. Seams of lava — the one place the forge may use the
-	/// danger colour — rise from the floor and branch, hot and wide at the foot, thinning to a thread
-	/// higher up, each in a scorched halo with a dull glow around its core.
+	/// jittered Voronoi of tilted facets that meet in soft creases, deep enough to catch the low lamps
+	/// along their edges), faint strata, browner and paler patches, soot thickening toward the ceiling.
+	/// Seams of lava — the one place the forge may use the danger colour — rise from the floor and
+	/// branch, hot and wide at the foot, cooling and thinning higher up. They glow: the wall is painted
+	/// onto the self-lit base with a glow mask over every seam (a faint wide ember halo, a brighter glow
+	/// round the core, the core itself brightest), so the seams light themselves however dark the room
+	/// is, where paint alone read as thin red lines drawn on black (6b review).
 	/// </summary>
 	protected override PaintedSurface PaintWall( int variant )
 	{
 		const float Ppu = WallSize / WallRepeat;
-		var painter = new Painter( WallSize, Rock, 0.9f );
-		var random = new Random( Seed + 610 );
+		var stream = Seed + 610 + variant * 31;
+		var painter = new Painter( WallSize, RockFace, 0.9f );
+		var random = new Random( stream );
 		float Next() => (float)random.NextDouble();
 
-		PaintFacets( painter, 128, Seed + 611, 0.35f, 0.4f );
+		PaintFacets( painter, 128, stream + 1, 1.1f, 0.7f );
 
-		painter.Blend( Ramp( painter.Noise( 4, Seed + 600, 4 ), 0.5f, 0.8f, 0.3f ), RockLight );
-		painter.Blend( Ramp( painter.Noise( 6, Seed + 601, 4 ), 0.55f, 0.85f, 0.35f ), RockDark );
-		painter.Blend( Ramp( painter.Noise( 3, Seed + 602, 3 ), 0.6f, 0.9f, 0.3f ), BasaltBrown );
+		painter.Blend( Ramp( painter.Noise( 4, stream + 2, 4 ), 0.5f, 0.8f, 0.3f ), RockLight );
+		painter.Blend( Ramp( painter.Noise( 6, stream + 3, 4 ), 0.55f, 0.85f, 0.3f ), RockDark );
+		painter.Blend( Ramp( painter.Noise( 3, stream + 4, 3 ), 0.6f, 0.9f, 0.3f ), BasaltBrown );
 
-		var strata = painter.Noise( 4, Seed + 603, 2 );
+		var strata = painter.Noise( 4, stream + 5, 2 );
 		var bands = new float[WallSize * WallSize];
 		for ( var y = 0; y < WallSize; y++ )
 		for ( var x = 0; x < WallSize; x++ )
 			bands[y * WallSize + x] = StreakX( strata, WallSize, x, y, 3 ) - 0.5f;
 		painter.AddHeight( bands, 0.3f );
-		painter.HeightNoise( 0.7f, 4, Seed + 604, 4 );
-		painter.HeightNoise( 0.2f, 96, Seed + 605, 2 );
+		painter.HeightNoise( 0.7f, 4, stream + 6, 4 );
+		painter.HeightNoise( 0.2f, 96, stream + 7, 2 );
 
 		// Soot from the forge hangs under the ceiling.
-		var smoke = painter.Noise( 5, Seed + 606, 3 );
+		var smoke = painter.Noise( 5, stream + 8, 3 );
 		for ( var y = 0; y < WallSize; y++ )
 		{
 			var v = WallRepeat - y / Ppu;
 			var high = v > 120f ? (v - 120f) / 88f : 0f;
-			for ( var x = 0; x < WallSize; x++ ) smoke[y * WallSize + x] = high * (0.3f + smoke[y * WallSize + x] * 0.4f);
+			for ( var x = 0; x < WallSize; x++ ) smoke[y * WallSize + x] = high * (0.25f + smoke[y * WallSize + x] * 0.35f);
 		}
 		painter.Blend( smoke, Soot );
 
-		// Seams: from the floor up, branching. The danger colour is only in their cores.
-		var seams = 4 + random.Next( 2 );
-		for ( var s = 0; s < seams; s++ )
+		// This face's seams: how high each climbs (units), its core width at the foot (px), its branches.
+		var layout = variant switch
 		{
-			var start = new Vector2( (s + Next() * 0.7f) * WallSize / seams, WallSize - Next() * 30f );
-			var path = Crack( start, -MathF.PI * 0.5f + (Next() - 0.5f) * 0.6f, 9f, 24 + random.Next( 30 ), random );
-			PaintSeam( painter, path, 3.4f + Next() * 1.4f, random );
-			for ( var b = random.Next( 3 ); b > 0 && path.Length > 10; b-- )
+			0 => Next() < 0.6f
+				? new[] { (25f + Next() * 30f, 2.4f + Next(), random.Next( 2 )), (15f + Next() * 20f, 2f + Next() * 0.8f, 0) }
+				: new[] { (25f + Next() * 30f, 2.4f + Next(), random.Next( 2 )) },
+			1 => new[] { (WallRepeat - 22f, 6f + Next(), 3 + random.Next( 2 )), (20f + Next() * 25f, 2.2f + Next(), 0) },
+			_ => new[] { (70f + Next() * 70f, 4f + Next(), 1 + random.Next( 2 )), (60f + Next() * 60f, 3.4f + Next(), random.Next( 2 )), (30f + Next() * 40f, 2.6f + Next(), random.Next( 2 )) },
+		};
+
+		var seams = new List<Seam>();
+		for ( var s = 0; s < layout.Length; s++ )
+		{
+			var (reach, width, branches) = layout[s];
+			var foot = new Vector2( (s + 0.15f + Next() * 0.7f) * WallSize / layout.Length, WallSize - Next() * 20f );
+			var path = Rise( foot, WallSize - reach * Ppu, 9f, random );
+			seams.Add( new Seam( path, width, 1f, random ) );
+			for ( var b = 0; b < branches && path.Length > 10; b++ )
 			{
-				var from = path[3 + random.Next( path.Length * 2 / 3 )];
-				var branch = Crack( from, -MathF.PI * 0.5f + (Next() < 0.5f ? -1f : 1f) * (0.5f + Next() * 0.6f), 7f, 5 + random.Next( 10 ), random );
-				PaintSeam( painter, branch, 1.3f + Next() * 0.9f, random );
+				var at = 3 + random.Next( path.Length * 3 / 4 );
+				var heading = -MathF.PI * 0.5f + (Next() < 0.5f ? -1f : 1f) * (0.5f + Next() * 0.6f);
+				var branch = Crack( path[at], heading, 7f, 6 + random.Next( 14 ), random );
+				var t = at / (float)path.Length;
+				seams.Add( new Seam( branch, width * (0.35f + Next() * 0.15f) * (1f - t * 0.5f), 0.8f - t * 0.3f, random ) );
 			}
 		}
+		foreach ( var seam in seams ) seam.Cut( painter );
 
-		painter.ShadeFromHeight( 0.25f, 0.3f );
-		painter.Mottle( 0.1f, 32, Seed + 608, 3 );
+		painter.ShadeFromHeight( 0.45f, 0.5f );
+		painter.Mottle( 0.1f, 32, stream + 9, 3 );
 		painter.Cavity( 0.55f, 4 );
-		painter.Grain( 0.015f, Seed + 609 );
-		return painter.Bake( "arena_7_wall", Painter.Matte, 7f );
+		painter.Grain( 0.015f, stream + 10 );
+
+		// The cores once more over the cavity bake, which had darkened them as the lowest thing on the wall.
+		foreach ( var seam in seams ) seam.Core( painter );
+		return painter.Bake( $"arena_7_wall_{variant}", ArenaGenerator.GlowMaterialPath, 7f );
 	}
 
 	/// <summary>
-	/// One lava seam along a polyline, its core <paramref name="width"/> px at the start (the foot of
-	/// the wall) thinning to a third at its end: a broad scorched halo, a dull ember glow, then the
-	/// thin hot core cut into the rock.
+	/// One lava seam along a polyline: its core is the given width at the start (the foot of the wall,
+	/// or where a branch leaves its seam) and thins to a third at its end, pinching nearly shut here and
+	/// there; its heat falls off along it the same way, so a seam cools as it climbs.
 	/// </summary>
-	static void PaintSeam( Painter painter, Vector2[] path, float width, Random random )
+	sealed class Seam
 	{
-		// Every segment its own width, pinching nearly shut here and there, so the seam is a broken
-		// crack rather than a drawn line.
-		var widths = new float[path.Length];
-		for ( var k = 1; k < path.Length; k++ )
+		readonly Vector2[] _path;
+		readonly float[] _widths;
+		readonly float[] _heats;
+
+		public Seam( Vector2[] path, float width, float heat, Random random )
 		{
-			var t = (k - 0.5f) / (path.Length - 1);
-			var pinch = random.NextDouble() < 0.15 ? 0.25f : 0.7f + (float)random.NextDouble() * 0.6f;
-			widths[k] = width * (1f - t * 0.7f) * pinch;
+			_path = path;
+			_widths = new float[path.Length];
+			_heats = new float[path.Length];
+			for ( var k = 1; k < path.Length; k++ )
+			{
+				var t = (k - 0.5f) / (path.Length - 1);
+				var pinch = random.NextDouble() < 0.15 ? 0.25f : 0.7f + (float)random.NextDouble() * 0.6f;
+				_widths[k] = width * (1f - t * 0.7f) * pinch;
+				_heats[k] = heat * (1f - t * 0.55f) * (0.6f + pinch * 0.4f);
+			}
 		}
-		for ( var k = 1; k < path.Length; k++ )
+
+		/// <summary>
+		/// Cuts the seam into the rock: a broad scorched halo with a faint ember glow, a brighter glow
+		/// round the core, then the core, sunk into the rock and glowing hottest.
+		/// </summary>
+		public void Cut( Painter painter )
 		{
-			painter.Line( path[k - 1], path[k], widths[k] * 2f + 18f, Scorch, 0.1f );
-			painter.Line( path[k - 1], path[k], widths[k] + 7f, Mix( Scorch, Palette.Lava, 0.4f ), 0.22f );
+			for ( var k = 1; k < _path.Length; k++ )
+			{
+				var w = _widths[k]; var h = _heats[k];
+				painter.Line( _path[k - 1], _path[k], w * 2.5f + 40f, Mix( Scorch, Palette.Lava, 0.2f ), 0.4f, glow: 0.6f * h );
+				painter.Line( _path[k - 1], _path[k], w + 14f, Mix( Scorch, Palette.Lava, 0.6f ), 0.6f, glow: 0.9f * h );
+			}
+			for ( var k = 1; k < _path.Length; k++ )
+			{
+				painter.Line( _path[k - 1], _path[k], _widths[k] + 2f, Mix( Palette.Lava, Scorch, 0.3f ), 0.85f, height: 0.25f, roughness: 0.9f );
+				painter.Line( _path[k - 1], _path[k], _widths[k] * 0.55f, Mix( Palette.Lava, HotCore, 0.35f ), 0.95f, height: 0.15f, roughness: 0.9f );
+			}
+			Core( painter );
 		}
-		for ( var k = 1; k < path.Length; k++ )
+
+		/// <summary>The core's colour and glow alone, leaving the height as it is.</summary>
+		public void Core( Painter painter )
 		{
-			painter.Line( path[k - 1], path[k], widths[k] + 2f, Mix( Palette.Lava, Scorch, 0.35f ), 0.8f, height: 0.25f, roughness: 0.9f );
-			painter.Line( path[k - 1], path[k], widths[k] * 0.55f, Mix( Palette.Lava, Palette.Hex( 0xFFC27A ), 0.35f ), 0.95f, height: 0.15f, roughness: 0.9f );
+			for ( var k = 1; k < _path.Length; k++ )
+			{
+				var h = _heats[k];
+				painter.Line( _path[k - 1], _path[k], _widths[k] + 2f, Mix( Palette.Lava, Scorch, 0.3f ), 0.85f, glow: 0.75f * h );
+				painter.Line( _path[k - 1], _path[k], _widths[k] * 0.55f, Mix( Palette.Lava, HotCore, 0.35f ), 0.95f, glow: 0.9f * h );
+			}
 		}
+	}
+
+	/// <summary>
+	/// A crack climbing from <paramref name="foot"/> until it passes pixel row <paramref name="top"/>:
+	/// short straight runs that kink sharply, drifting about straight up.
+	/// </summary>
+	static Vector2[] Rise( Vector2 foot, float top, float step, Random random )
+	{
+		var points = new List<Vector2> { foot };
+		const float Heading = -MathF.PI * 0.5f;
+		var angle = Heading;
+		while ( points[^1].y > top )
+		{
+			angle = Heading + (angle - Heading) * 0.6f + ((float)random.NextDouble() - 0.5f) * 1.6f;
+			points.Add( points[^1] + new Vector2( MathF.Cos( angle ), MathF.Sin( angle ) ) * step * (0.5f + (float)random.NextDouble()) );
+		}
+		return points.ToArray();
 	}
 
 	/// <summary>A jagged crack: short straight runs that kink sharply, drifting about a heading.</summary>
@@ -191,8 +304,8 @@ public sealed class ForgeTheme : ArenaTheme
 		}
 
 		// Heat tarnish and soot in broad, faint patches.
-		painter.Blend( Ramp( painter.Noise( 6, Seed + 710, 3 ), 0.6f, 0.85f, 0.25f ), Palette.Hex( 0x6B5638 ) );
-		painter.Blend( Ramp( painter.Noise( 5, Seed + 711, 3 ), 0.65f, 0.9f, 0.2f ), Palette.Hex( 0x464C5E ) );
+		painter.Blend( Ramp( painter.Noise( 6, Seed + 710, 3 ), 0.6f, 0.85f, 0.25f ), TarnishBronze );
+		painter.Blend( Ramp( painter.Noise( 5, Seed + 711, 3 ), 0.65f, 0.9f, 0.2f ), TarnishBlue );
 		painter.Blend( Ramp( painter.Noise( 4, Seed + 712, 3 ), 0.5f, 0.85f, 0.4f ), Soot, roughness: 0.8f );
 
 		painter.HeightNoise( 0.1f, 32, Seed + 713, 3 );
@@ -405,7 +518,7 @@ public sealed class ForgeTheme : ArenaTheme
 				{
 					var at = crack[crack.Length / 4 + random.Next( crack.Length / 2 )];
 					painter.Circle( at.x, at.y, 2.6f + Next() * 1.5f, Scorch, 0.25f );
-					painter.Circle( at.x, at.y, 0.7f + Next() * 0.6f, Palette.Lava, 0.6f, roughness: 0.9f );
+					painter.Circle( at.x, at.y, 0.7f + Next() * 0.6f, Palette.Lava, 0.6f, roughness: 0.9f, glow: 1f );
 				}
 			}
 		}
@@ -417,7 +530,14 @@ public sealed class ForgeTheme : ArenaTheme
 		painter.Mottle( 0.08f, 6, Seed + 513, 3 );
 		painter.Cavity( 0.5f, 4 );
 		painter.Grain( 0.015f, Seed + 514 );
-		return painter.Bake( "arena_7_ceiling", Painter.Matte, 5f );
+
+		// The glow of the lava far below, caught faintly and unevenly by the rock: a broad, low
+		// self-illumination in the rock's own colour. The bounce lights warm two pools of it; a light
+		// shining up through the slab to warm the rest would light the dungeon's floor as well.
+		var bounce = painter.Noise( 3, Seed + 515, 3 );
+		for ( var i = 0; i < bounce.Length; i++ ) bounce[i] = CeilingGlow * (0.5f + bounce[i]);
+		painter.AddGlow( bounce );
+		return painter.Bake( "arena_7_ceiling", ArenaGenerator.GlowMaterialPath, 5f );
 	}
 
 	/// <summary>

@@ -50,6 +50,25 @@ public sealed class LibraryTheme : ArenaTheme
 	/// <summary>One bookcase per module, so every length of wall starts on a case's upright and no bay ends in a sliver of a case.</summary>
 	protected override float WallModule => WallRepeat / 4f;
 
+	/// <summary>
+	/// Three walls of four bookcases each, worn by the lengths of wall in turn (never the same as either
+	/// of the two before): with one, every bay — three and a half to four and a half cases wide — showed
+	/// the same four cases in the same order, and a distinctive shelf came round about thirty times (6b review).
+	/// </summary>
+	public override int WallCount => 3;
+
+	/// <summary>The deep shadow a shelf throws over the books under it, and the dark of a leather band.</summary>
+	static Color ShelfShadow => Palette.Hex( 0x1E1512 );
+
+	/// <summary>The faded colour a spine's head turns where the light has reached it for years.</summary>
+	static Color Faded => Palette.Hex( 0xCFC3AE );
+
+	/// <summary>Paper labels on cloth spines.</summary>
+	static Color Label => Palette.Hex( 0xDCD0B6 );
+
+	/// <summary>The dusty brown every binding drifts toward with age.</summary>
+	static Color AgedBinding => Palette.Hex( 0x8A7A6A );
+
 	/// <summary>Plank width in pixels (about 7 units, an 18 cm plank) and its length in widths.</summary>
 	const int PlankWidth = 64;
 	const int PlankRatio = 4;
@@ -61,7 +80,7 @@ public sealed class LibraryTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 30f, Pier = 78f, Corner = 32f, Cornice = 30f, Skirting = 14f, SkirtingDepth = 6f } );
-		AddLamps( room, 5, FloorContext.ClearHeight - 28f, -24f, 480f, LightColor * 3f, Seed + 900 );
+		AddLamps( room, 5, FloorContext.ClearHeight - 28f, -24f, LightColor * 4.2f, Seed + 900 );
 	}
 
 	/// <summary>
@@ -70,8 +89,9 @@ public sealed class LibraryTheme : ArenaTheme
 	/// fit what is on them), a dark boarded back. Books are generated per shelf: each its own width,
 	/// height, colour from a muted set of bindings (oxblood, bottle green, navy, ochre, vellum, plum and
 	/// the floor's own dusty rose), cloth or leather — leather with raised bands and gilt, cloth with a
-	/// paper label or a pair of gilt rules — and a rounded spine. Now and then a run of matching
-	/// volumes, a few books lying flat, a gap, and the last book of a row leaning on its neighbour.
+	/// paper label or a pair of gilt rules — and a rounded spine. Now and then a short run of matching
+	/// volumes, a few books lying flat, a gap, and in about half the rows the last book leaning on its
+	/// neighbour. Each of the <see cref="WallCount"/> walls draws its cases from its own stream.
 	/// Spines fade toward the head, where the light reaches; each shelf throws a shadow over the
 	/// tops of the books under it.
 	/// </summary>
@@ -83,7 +103,7 @@ public sealed class LibraryTheme : ArenaTheme
 		const float Shelf = 2.2f * Ppu;
 		float Row( float v ) => (WallRepeat - v) * Ppu;
 		var painter = new Painter( WallSize, CaseBack, 0.85f );
-		var random = new Random( Seed + 600 );
+		var random = new Random( Seed + 600 + variant * 31 );
 		float Next() => (float)random.NextDouble();
 
 		// The case back: vertical boards, each its own shade, in deep shadow behind the books.
@@ -138,10 +158,10 @@ public sealed class LibraryTheme : ArenaTheme
 			painter.Rect( left - 1f, 0f, right - left + 2f, Row( WallRepeat - 28f ), WalnutDeep, height: 1.1f, bevel: 3f, roughness: 0.6f );
 		}
 
-		painter.Blend( shade, Palette.Hex( 0x1E1512 ) );
+		painter.Blend( shade, ShelfShadow );
 
 		// The uprights, shared by neighbouring cases, their grain running down them.
-		var grain = painter.Noise( 8, Seed + 601, 2 );
+		var grain = painter.Noise( 8, Seed + 601 + variant, 2 );
 		var lines = new float[WallSize * WallSize];
 		for ( var c = 0; c < 4; c++ )
 		{
@@ -161,12 +181,12 @@ public sealed class LibraryTheme : ArenaTheme
 		}
 		painter.Blend( lines, WalnutGrain );
 
-		painter.Mottle( 0.05f, 6, Seed + 602, 4 );
-		painter.RoughnessNoise( 0.05f, 16, Seed + 603, 2 );
+		painter.Mottle( 0.05f, 6, Seed + 602 + variant, 4 );
+		painter.RoughnessNoise( 0.05f, 16, Seed + 603 + variant, 2 );
 		painter.Cavity( 0.5f, 4 );
-		painter.EdgeWear( 0.15f, 2, Seed + 604 );
-		painter.Grain( 0.012f, Seed + 605 );
-		return painter.Bake( "arena_4_wall", Painter.Matte, 5f );
+		painter.EdgeWear( 0.15f, 2, Seed + 604 + variant );
+		painter.Grain( 0.012f, Seed + 605 + variant );
+		return painter.Bake( $"arena_4_wall_{variant}", Painter.Matte, 5f );
 	}
 
 	/// <summary>
@@ -182,6 +202,10 @@ public sealed class LibraryTheme : ArenaTheme
 		var runColor = Bindings[0];
 		float runHeight = 0f, runWidth = 0f;
 		var runLeather = false;
+
+		// About half the rows end in a book leaning on its neighbour where there is room for it to fall;
+		// the rest stand straight to the end.
+		var leanAtEnd = Next() < 0.5f;
 
 		while ( x < right - 4f )
 		{
@@ -205,10 +229,11 @@ public sealed class LibraryTheme : ArenaTheme
 				continue;
 			}
 
-			// A run of matching volumes, or a single book.
+			// A short run of matching volumes now and then, otherwise a single book: long runs made
+			// landmarks that recurred in every bay.
 			if ( run == 0 )
 			{
-				run = Next() < 0.2f ? 3 + random.Next( 5 ) : 1;
+				run = Next() < 0.12f ? 3 + random.Next( 3 ) : 1;
 				runColor = Binding( random );
 				runHeight = MathF.Min( clear * (0.62f + Next() * 0.3f), clear - 6f );
 				runWidth = (3.2f + Next() * Next() * 4.5f) * Ppu;
@@ -223,7 +248,7 @@ public sealed class LibraryTheme : ArenaTheme
 			// The last book of a row, with room to fall, leans on its neighbour.
 			var lean = 0f;
 			var room = right - (x + width);
-			if ( room < width * 1.6f && room > 4f ) lean = 8f + Next() * 12f;
+			if ( leanAtEnd && room < width * 1.6f && room > 4f ) lean = 8f + Next() * 12f;
 			else if ( Next() < 0.03f ) lean = (Next() - 0.5f) * 10f;
 
 			var tone = Mix( runColor, Next() < 0.5f ? Color.Black : Color.White, Next() * 0.1f );
@@ -251,7 +276,7 @@ public sealed class LibraryTheme : ArenaTheme
 		painter.Rect( cx - width * 0.5f, cy - height * 0.5f, width - 1f, height, color, radius: 1.2f, height: 1f, bevel: MathF.Min( width * 0.45f, 7f ), roughness: rough, angle: lean );
 
 		// The sun-faded head of the spine.
-		painter.Rect( cx - width * 0.5f, cy - height * 0.5f, width - 1f, height * 0.3f, Mix( color, Palette.Hex( 0xCFC3AE ), 0.35f ), alpha: 0.25f + Next() * 0.15f, angle: lean );
+		painter.Rect( cx - width * 0.5f, cy - height * 0.5f, width - 1f, height * 0.3f, Mix( color, Faded, 0.35f ), alpha: 0.25f + Next() * 0.15f, angle: lean );
 
 		if ( lean != 0f ) return;
 		var top = cy - height * 0.5f;
@@ -261,13 +286,13 @@ public sealed class LibraryTheme : ArenaTheme
 			for ( var b = 0; b < bands; b++ )
 			{
 				var y = top + height * (0.14f + 0.72f * b / (bands - 1));
-				painter.Rect( x + 1f, y, width - 3f, 2.4f, Mix( color, Palette.Hex( 0x1E1512 ), 0.35f ), height: 1.15f, bevel: 1f, roughness: 0.5f );
+				painter.Rect( x + 1f, y, width - 3f, 2.4f, Mix( color, ShelfShadow, 0.35f ), height: 1.15f, bevel: 1f, roughness: 0.5f );
 			}
 			painter.Rect( x + 2f, top + height * 0.22f, width - 5f, height * 0.13f, Gilt, alpha: 0.35f + Next() * 0.2f, roughness: 0.35f );
 		}
 		else if ( Next() < 0.45f )
 		{
-			painter.Rect( x + 2f, top + height * (0.12f + Next() * 0.1f), width - 5f, height * 0.12f, Palette.Hex( 0xDCD0B6 ), alpha: 0.55f + Next() * 0.2f, roughness: 0.85f );
+			painter.Rect( x + 2f, top + height * (0.12f + Next() * 0.1f), width - 5f, height * 0.12f, Label, alpha: 0.55f + Next() * 0.2f, roughness: 0.85f );
 		}
 		else
 		{
@@ -277,7 +302,7 @@ public sealed class LibraryTheme : ArenaTheme
 	}
 
 	/// <summary>A binding from the muted set, a few percent off its neighbours.</summary>
-	static Color Binding( Random random ) => Mix( Bindings[random.Next( Bindings.Length )], Palette.Hex( 0x8A7A6A ), (float)random.NextDouble() * 0.15f );
+	static Color Binding( Random random ) => Mix( Bindings[random.Next( Bindings.Length )], AgedBinding, (float)random.NextDouble() * 0.15f );
 
 	/// <summary>Muted bindings: oxblood, bottle green, navy, ochre, tan, plum, the floor's dusty rose, vellum, brown calf, teal, maroon, sage.</summary>
 	static readonly Color[] Bindings =
@@ -304,7 +329,9 @@ public sealed class LibraryTheme : ArenaTheme
 				painter.Rect( x - 3f, y0, 6f, y1 - y0, WalnutDeep, alpha: 0.55f, height: 0.62f );
 			}
 
-			// Flutes down the posts: five narrow grooves between flat fillets, shaded in their hollows.
+			// Flutes down the posts: five narrow grooves between wider flat fillets, each a round-bottomed
+			// cut with crisp shoulders and a dark hollow. Wide sine grooves with no flat between them read
+			// as the folds of a curtain (6b review).
 			var (ptop, pheight) = TrimRows( TrimBand.Pilaster );
 			var relief = new float[TrimSize * TrimSize];
 			var hollow = new float[TrimSize * TrimSize];
@@ -314,13 +341,13 @@ public sealed class LibraryTheme : ArenaTheme
 				var groove = 0f;
 				for ( var f = 0; f < 5; f++ )
 				{
-					var u = (t - (0.22f + f * 0.115f)) / 0.08f;
-					if ( u > 0f && u < 1f ) groove = MathF.Sin( u * MathF.PI );
+					var u = (t - (0.24f + f * 0.115f)) / 0.06f;
+					if ( u > 0f && u < 1f ) groove = MathF.Sqrt( MathF.Sin( u * MathF.PI ) );
 				}
 				for ( var x = 0; x < TrimSize; x++ )
 				{
-					relief[(ptop + y) * TrimSize + x] = -groove * 0.2f;
-					hollow[(ptop + y) * TrimSize + x] = groove * 0.22f;
+					relief[(ptop + y) * TrimSize + x] = -groove * 0.3f;
+					hollow[(ptop + y) * TrimSize + x] = groove * 0.4f;
 				}
 			}
 			painter.AddHeight( relief, 1f );

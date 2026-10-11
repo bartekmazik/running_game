@@ -52,7 +52,7 @@ public sealed class GreenhouseTheme : ArenaTheme
 	public override void Dress( FloorContext room )
 	{
 		BuildFrontLayer( room, new FrontStyle { Post = 20f, Pier = 64f, Corner = 26f, Cornice = 22f, Skirting = 12f, SkirtingDepth = 4f } );
-		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, 480f, LightColor * 1.2f, Seed + 900 );
+		AddLamps( room, 4, FloorContext.ClearHeight - 30f, -24f, LightColor * 1.2f, Seed + 900 );
 	}
 
 	/// <summary>

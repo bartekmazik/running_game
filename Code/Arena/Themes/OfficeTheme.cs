@@ -55,7 +55,7 @@ public sealed class OfficeTheme : ArenaTheme
 	{
 		var bays = BuildFrontLayer( room, new FrontStyle { Post = 28f, Pier = 72f, Corner = 30f, Cornice = 26f, Skirting = 10f, SkirtingDepth = 3f } );
 		AddWindows( room, bays, InfillCell( 0 ), InfillCell( 1 ), 48f, 104f, 124f, 0.5f, false, Seed + 800 );
-		AddLamps( room, 6, FloorContext.ClearHeight - 28f, -160f, 480f, LightColor * 2.6f, Seed + 900 );
+		AddLamps( room, 6, FloorContext.ClearHeight - 28f, -160f, LightColor * 3.6f, Seed + 900 );
 	}
 
 	/// <summary>

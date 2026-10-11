@@ -47,6 +47,13 @@ public sealed class Painter
 	readonly float[] _roughness;
 
 	/// <summary>
+	/// Self-illumination, 0..1 per pixel: how strongly the surface glows in its own colour. Made on
+	/// first use, and baked into a mask only for surfaces that paint some, which go on the self-lit
+	/// base (<see cref="ArenaGenerator.GlowMaterialPath"/>); everything else stays unlit by itself.
+	/// </summary>
+	float[] _glow;
+
+	/// <summary>
 	/// Scratch fields for the whole-surface passes (noise for Mottle and friends, the two blur passes),
 	/// made once per canvas and reused: every arena surface is painted in one go at load, and a fresh
 	/// 4 MB array per pass piled up enough large-object garbage to stall the build for a collection.
@@ -75,12 +82,15 @@ public sealed class Painter
 	/// <summary>
 	/// The one primitive: fills wherever the signed distance is negative, with a 1-px soft edge,
 	/// wrapping across the texture edges. A height raises the shape toward it (the bevel rounds the
-	/// rim from whatever height was already there), a roughness overrides the surface finish.
+	/// rim from whatever height was already there), a roughness overrides the surface finish, a glow
+	/// sets how strongly it lights itself (<see cref="_glow"/>).
 	/// </summary>
-	public void Shape( Func<float, float, float> sdf, float minX, float minY, float maxX, float maxY, Color color, float alpha = 1f, float height = float.NaN, float bevel = 0f, float roughness = float.NaN )
+	public void Shape( Func<float, float, float> sdf, float minX, float minY, float maxX, float maxY, Color color, float alpha = 1f, float height = float.NaN, float bevel = 0f, float roughness = float.NaN, float glow = float.NaN )
 	{
 		var hasHeight = !float.IsNaN( height );
 		var hasRoughness = !float.IsNaN( roughness );
+		var hasGlow = !float.IsNaN( glow );
+		if ( hasGlow ) _glow ??= new float[Size * Size];
 		var inverseBevel = bevel > 0f ? 1f / bevel : 0f;
 		var size = Size;
 
@@ -102,6 +112,9 @@ public sealed class Painter
 
 				if ( hasRoughness )
 					_roughness[i] += (roughness - _roughness[i]) * blend;
+
+				if ( hasGlow )
+					_glow[i] += (glow - _glow[i]) * blend;
 
 				if ( !hasHeight ) continue;
 				var shoulder = 1f;
@@ -344,17 +357,17 @@ public sealed class Painter
 	}
 
 	/// <summary>Disc; rivets, dots and blobs.</summary>
-	public void Circle( float cx, float cy, float r, Color color, float alpha = 1f, float height = float.NaN, float bevel = 0f, float roughness = float.NaN )
+	public void Circle( float cx, float cy, float r, Color color, float alpha = 1f, float height = float.NaN, float bevel = 0f, float roughness = float.NaN, float glow = float.NaN )
 	{
 		Shape( ( px, py ) =>
 		{
 			var dx = px - cx; var dy = py - cy;
 			return MathF.Sqrt( dx * dx + dy * dy ) - r;
-		}, cx - r, cy - r, cx + r, cy + r, color, alpha, height, bevel, roughness );
+		}, cx - r, cy - r, cx + r, cy + r, color, alpha, height, bevel, roughness, glow );
 	}
 
 	/// <summary>Round-capped line segment; mortar, cracks and stripes.</summary>
-	public void Line( Vector2 a, Vector2 b, float width, Color color, float alpha = 1f, float height = float.NaN, float roughness = float.NaN )
+	public void Line( Vector2 a, Vector2 b, float width, Color color, float alpha = 1f, float height = float.NaN, float roughness = float.NaN, float glow = float.NaN )
 	{
 		var ax = a.x; var ay = a.y;
 		var abx = b.x - a.x; var aby = b.y - a.y;
@@ -367,7 +380,7 @@ public sealed class Painter
 			t = t < 0f ? 0f : t > 1f ? 1f : t;
 			x -= abx * t; y -= aby * t;
 			return MathF.Sqrt( x * x + y * y ) - halfWidth;
-		}, MathF.Min( a.x, b.x ) - width, MathF.Min( a.y, b.y ) - width, MathF.Max( a.x, b.x ) + width, MathF.Max( a.y, b.y ) + width, color, alpha, height, roughness: roughness );
+		}, MathF.Min( a.x, b.x ) - width, MathF.Min( a.y, b.y ) - width, MathF.Max( a.x, b.x ) + width, MathF.Max( a.y, b.y ) + width, color, alpha, height, roughness: roughness, glow: glow );
 	}
 
 	/// <summary>
@@ -510,6 +523,50 @@ public sealed class Painter
 			_red[i] += (color.r - _red[i]) * w;
 			_green[i] += (color.g - _green[i]) * w;
 			_blue[i] += (color.b - _blue[i]) * w;
+		}
+	}
+
+	/// <summary>
+	/// Moves every pixel the same <paramref name="amount"/> toward <paramref name="color"/>: a wash over
+	/// the whole surface, where <see cref="Blend(float[], Color, float, float)"/> would need a weight array of one value.
+	/// </summary>
+	public void Wash( Color color, float amount )
+	{
+		for ( var i = 0; i < _red.Length; i++ )
+		{
+			_red[i] += (color.r - _red[i]) * amount;
+			_green[i] += (color.g - _green[i]) * amount;
+			_blue[i] += (color.b - _blue[i]) * amount;
+		}
+	}
+
+	/// <summary>Adds <paramref name="amount"/> to the self-illumination, pixel for pixel — a broad glow with no outline.</summary>
+	public void AddGlow( float[] amount )
+	{
+		_glow ??= new float[Size * Size];
+		for ( var i = 0; i < amount.Length; i++ )
+			_glow[i] += amount[i];
+	}
+
+	/// <summary>Moves the height toward <paramref name="level"/> by each pixel's weight, leaving the colour as it is.</summary>
+	public void Level( float[] weight, float level )
+	{
+		for ( var i = 0; i < weight.Length; i++ )
+		{
+			var w = weight[i];
+			if ( w <= 0f ) continue;
+			_height[i] += (level - _height[i]) * (w > 1f ? 1f : w);
+		}
+	}
+
+	/// <summary>Moves the finish toward <paramref name="roughness"/> by each pixel's weight, leaving the colour as it is.</summary>
+	public void Roughen( float[] weight, float roughness )
+	{
+		for ( var i = 0; i < weight.Length; i++ )
+		{
+			var w = weight[i];
+			if ( w <= 0f ) continue;
+			_roughness[i] += (roughness - _roughness[i]) * (w > 1f ? 1f : w);
 		}
 	}
 
@@ -712,6 +769,7 @@ public sealed class Painter
 		var size = Size;
 		var color = new byte[size * size * 4];
 		var normal = new byte[size * size * 4];
+		var glow = _glow is null ? null : new byte[size * size * 4];
 
 		for ( var y = 0; y < size; y++ )
 		{
@@ -744,10 +802,15 @@ public sealed class Painter
 				var rough = _roughness[i] * 255f;
 				normal[o + 2] = (byte)(rough <= 0f ? 0f : rough >= 255f ? 255f : rough);
 				normal[o + 3] = 255;
+
+				if ( glow is null ) continue;
+				var lit = _glow[i] * 255f;
+				glow[o] = glow[o + 1] = glow[o + 2] = (byte)(lit <= 0f ? 0f : lit >= 255f ? 255f : lit);
+				glow[o + 3] = 255;
 			}
 		}
 
-		return new PaintedSurface( name, baseMaterial, size, color, normal );
+		return new PaintedSurface( name, baseMaterial, size, color, normal, glow );
 	}
 }
 
@@ -764,17 +827,23 @@ public sealed class PaintedSurface
 	readonly byte[] _color;
 	readonly byte[] _normal;
 
-	public PaintedSurface( string name, string baseMaterial, int size, byte[] color, byte[] normal )
+	/// <summary>The self-illumination mask, or null for a surface that does not glow.</summary>
+	readonly byte[] _glow;
+
+	public PaintedSurface( string name, string baseMaterial, int size, byte[] color, byte[] normal, byte[] glow = null )
 	{
 		Name = name;
 		BaseMaterial = baseMaterial;
 		Size = size;
 		_color = color;
 		_normal = normal;
+		_glow = glow;
 	}
 
 	/// <summary>
-	/// The surface's two textures on a copy of its base material; tint amount is 1 so
+	/// The surface's textures on a copy of its base material — colour, normal and, for a surface that
+	/// glows, the self-illumination mask (the self-lit base glows in its colour where the mask is
+	/// white and is lit like any other surface where it is black); tint amount is 1 so
 	/// ModelRenderer.Tint carries each renderer's tint in full. Main thread only.
 	/// </summary>
 	public Material Upload()
@@ -786,6 +855,8 @@ public sealed class PaintedSurface
 		material.Set( "Color", colorTexture );
 		material.Set( "Normal", normalTexture );
 		material.Set( "g_flModelTintAmount", 1f );
+		if ( _glow is not null )
+			material.Set( "SelfIllumMask", Texture.Create( Size, Size, ImageFormat.RGBA8888 ).WithName( Name + "_glow" ).WithData( _glow ).WithMips().Finish() );
 		return material;
 	}
 }
