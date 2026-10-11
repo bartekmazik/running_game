@@ -22,6 +22,7 @@
 - Walls: inner face on the grid edge (±840), 64 thick, collision = one static `BoxCollider` per side per floor. Nothing visible protrudes into the play volume below 140 units above the tile top; above 140, overhang ≤ 24 units.
 - Light budget: ≤ 6 `PointLight` per floor, `Shadows = false`.
 - One step per user turn; stop after each numbered checkpoint for the user's test.
+- **Irregularity (spec, Textures section):** no exact repetition — elements vary in size, outline, rotation, colour and wear; repeated wall elements use jittered spacing; loose props vary scale ±15% / rotation ±8°; no two neighbouring props identical; all seeded.
 
 ## Review Focus
 
@@ -893,9 +894,9 @@ public abstract class ArenaTheme
 
 Tile model per floor and variant: `MeshKit.BevelBox` 56×56×12, bevel 2, but faces split by material: top + sides → `new Skin( theme.FloorSurface, ArenaTheme.Cell( v % 2, v / 2, 2 ) )`; underside → `new Skin( below.Ceiling, Arena.TileSize )` where `below = themes[floor + 1]` (floor 7 uses its own Ceiling). Implement as a dedicated `BuildTileModel( ArenaTheme self, ArenaTheme below, int variant )` in `ArenaGenerator` using `MeshKit.Quad` for the bottom face and `BevelBox` with the bottom face left out — add `bool skipBottom` parameter to `BevelBox` (default false) in this task.
 
-Variant choice: `variant = Hash( floor, x, y ) & 3` with `Hash = (x * 73856093) ^ (y * 19349663) ^ (floor * 83492791)`, unsigned.
+Variant choice: `h = Hash( floor, x, y )` with `Hash = (x * 73856093) ^ (y * 19349663) ^ (floor * 83492791)`, unsigned; atlas cell = `h & 3`, UV rotation = `(h >> 2) & 3` (0/90/180/270° of the top face's UVs inside its cell) → `_tileModels[8, 16]`. Tint gets a per-tile jitter from `h >> 4`: value ±3%, hue shift ±2° (keep every channel ≤ 1). Each atlas cell is drawn with Painter's `Polygon`/`Blob` so chips, cracks, joint widths and wear differ per cell — no two cells may look like rotations of each other.
 
-Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness )`, `ModelRenderer.Model = _tileModels[floor, variant]`, no `MaterialOverride` at rest, `Tint = TileColor(floor,x,y)` = `Color.White.Darken( (x + y) % 2 == 0 ? 0f : 0.04f )`.
+Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness )`, `ModelRenderer.Model = _tileModels[floor, variant]`, no `MaterialOverride` at rest, `Tint = TileColor(floor,x,y)` = the per-tile jitter above (no checker — irregularity replaces it).
 
 `SetTileWarning` keeps `MaterialOverride = _glowMaterial` (it now lights the underside too — intended, see spec). `RestoreTile` sets `MaterialOverride = null`, tint and position.
 
@@ -994,7 +995,7 @@ TowerBuilder per floor:
 
 Each task has the same shape. **Files:** the two theme files; nothing else unless a `MeshKit` primitive is missing (then add it to `MeshKit.cs` with the same `QuadFacing`/`TriFacing` approach and say so in the commit).
 
-Placement rules for every prop (from the spec): inside the wall's 64-unit thickness below v=140; ceiling props above v=140 overhang ≤ 24; props are batched into the floor's `Kit` (no per-prop GameObjects, except `PointLight`s and emissive props that need their own renderer for a different material — those also go through `Kit`, which batches by material automatically); four walls are dressed by looping `side` 0..3 with a per-side seed so they differ.
+Irregularity (spec + Global Constraints) overrides every fixed spacing written below — "every 210 / 280 / 420 units" means *on average*, jittered ±30% and never mirrored wall-to-wall; every repeated prop varies scale, rotation, colour and wear. Placement rules for every prop (from the spec): inside the wall's 64-unit thickness below v=140; ceiling props above v=140 overhang ≤ 24; props are batched into the floor's `Kit` (no per-prop GameObjects, except `PointLight`s and emissive props that need their own renderer for a different material — those also go through `Kit`, which batches by material automatically); four walls are dressed by looping `side` 0..3 with a per-side seed so they differ.
 
 **Task 7 — Floors 1 Greenhouse, 2 Winter**
 - Greenhouse: wall = glazing (sage bars over pale sky-tinted glass panels, not translucent); planting beds along the skirting (BevelBox planters 40 deep, soil top, 6–9 lathe pots per wall with leaf clusters of flattened spheres in two greens); hanging ferns from roof bars (cone + sphere clusters); potting shelves with watering can (lathe body + box spout), seed trays; roof as built in Task 6, refined bar profile.

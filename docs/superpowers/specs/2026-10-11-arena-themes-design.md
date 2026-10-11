@@ -146,6 +146,20 @@ geometric detail, in natural colours that stay inside the palette's bands. Think
 dropped: colours stay gentle and coherent, nothing garish, nothing photographic-grey either.
 The ceiling is honest: everything is generated in code, so materials are procedural, not scans.
 
+**Irregularity is a requirement, not polish (user, 2026-10-11: "trochę mniej regularnie, ma być
+realistycznie, więc nieregularność elementów jest kluczowa").** Nothing hand-made or natural repeats
+exactly:
+- *Textures:* stones, planks, bricks, tiles, books and shells differ in size, outline, rotation,
+  colour and wear; joints vary in width; nothing sits on a perfect grid unless the real material
+  does (carpet tiles, checker plate) — and even those get wear, stains and colour drift.
+- *Tiles:* each floor has 4 atlas variants × 4 UV rotations = 16 looks, chosen by hash, plus a
+  per-tile value/hue jitter of a few percent; bevel and chip pattern differ per variant.
+- *Geometry:* repeated wall elements (pilasters, windows, torches, lamps, shelves) are spaced with
+  jitter, not a fixed period; loose props vary scale (±15%), rotation (±8°, more where natural) and
+  colour; no two neighbouring props are identical; organic shapes (leaves, icicles, stalactites,
+  rocks) get per-vertex jitter.
+- All of it seeded, so every machine still builds the same arena.
+
 What this asks of `Painter` beyond colour + height: a **roughness channel** (written into the
 normal texture's B, which the shader's `HemiOctIsoRoughness_RG_B` format reads — to be verified
 in-engine), a **cavity/AO bake** from the height field, multi-octave detail noise, and edge wear.
