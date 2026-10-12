@@ -908,6 +908,16 @@ public abstract class ArenaTheme
 	}
 
 	/// <summary>
+	/// Which of the <see cref="Walls"/> each bay's length of wall face wears, by side and the bay's start,
+	/// as <see cref="BuildWallFace"/> picked it: for a theme that dresses a bay to match its wall (a beach
+	/// hut's awning in the hut's own colour).
+	/// </summary>
+	readonly Dictionary<(int Side, float From), int> _bayWalls = new();
+
+	/// <summary>Which of the <see cref="Walls"/> the length of wall face behind <paramref name="bay"/> wears.</summary>
+	protected int WallOf( Bay bay ) => _bayWalls[(bay.Side, bay.From)];
+
+	/// <summary>
 	/// The wall face behind the posts, from the segment's bottom to the ceiling, in lengths that meet
 	/// at the middle of a post — hidden inside it, since a post's front and ends run from the collider
 	/// plane to behind the face. Every length starts the wall's pattern somewhere else, so a wall that
@@ -936,6 +946,7 @@ public abstract class ArenaTheme
 			var wall = look / 2;
 			var mirror = look % 2 == 1 ? -1f : 1f;
 			var lift = WallLift( wall, random );
+			_bayWalls[(side, posts[k - 1].To)] = wall;
 
 			// A mirrored length runs its pattern the other way; a module edge stays a module edge.
 			room.WallFace( side, Walls[wall], start, end, bottom, FloorContext.ClearHeight, Recess, false,
