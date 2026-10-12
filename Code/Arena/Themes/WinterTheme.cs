@@ -89,9 +89,9 @@ public sealed class WinterTheme : ArenaTheme
 			// wall has them, then this wall's own order of the four other sets dealt round, so neighbours in
 			// the deal never match and a wall with four plain bays shows all four. A narrow bay gets a drift.
 			var plain = wall.FindAll( b => b.Width > 70f && !windows.Exists( w => w.Bay.From == b.From && w.Bay.Side == side ) );
-			Shuffle( plain, props );
+			props.Shuffle( plain );
 			var deck = new List<Props.Look> { Props.Look.Woodpile, Props.Look.Mudroom, Props.Look.Shelves, Props.Look.Sledge };
-			Shuffle( deck, props );
+			props.Shuffle( deck );
 
 			var dealt = 0;
 			for ( var k = 0; k < plain.Count; k++ )
@@ -122,16 +122,6 @@ public sealed class WinterTheme : ArenaTheme
 			else AddLamp( room, lamp.Side, lamp.U, Props.StringV - 8f, -6f, warm * lamp.Brightness );
 		}
 		AddLamps( room, 2, WindowSill + WindowHeight * 0.5f, -30f, LightColor * 3f, Seed + 901 );
-	}
-
-	/// <summary>Shuffles <paramref name="list"/> in place from the props' stream (Fisher–Yates).</summary>
-	static void Shuffle<T>( List<T> list, Props props )
-	{
-		for ( var k = list.Count - 1; k > 0; k-- )
-		{
-			var j = (int)(props.Next() * (k + 1));
-			(list[k], list[j]) = (list[j], list[k]);
-		}
 	}
 
 	/// <summary>The middle of the post nearest <paramref name="u"/> on wall <paramref name="side"/>, never the pier mid-wall.</summary>

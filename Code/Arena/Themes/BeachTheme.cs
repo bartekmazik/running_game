@@ -44,12 +44,12 @@ public sealed class BeachTheme : ArenaTheme
 	/// top plate a rope swagged from hook to hook, fans of palm fronds tied to some of the posts, and five
 	/// hurricane lanterns hung from the plate, each holding one of the room's warm lamps. Over most huts a
 	/// striped awning in the hut's own colour. Every bay is dressed as a set, low and high: one bay a wall
-	/// holds a life ring over a coil of rope or a bucket, with oars leaning beside it; the rest are dealt
-	/// from three sets — surfboards leaning on the boards, folded deck chairs under a hung towel, a
-	/// driftwood bench under a peg rail — with beach balls and sand blown up against the skirting, and
-	/// over every set one high piece dealt the same way: a kite, boards on a rack, a shelf of finds, glass
-	/// floats or crossed oars. A narrow bay gets a board (or a towel) and sand. Each wall draws from its
-	/// own stream, so none match.
+	/// holds a life ring over a coil of rope or a bucket, with oars leaning beside it; the rest are dealt,
+	/// in wall order and never the same as next door's, from three sets — surfboards leaning on the boards,
+	/// folded deck chairs under a hung towel, a driftwood bench under a peg rail — with beach balls and sand
+	/// blown up against the skirting, and over every bay one high piece dealt the same way: a kite, boards
+	/// on a rack, a shelf of finds, glass floats or crossed oars. A narrow bay gets a board (or a towel) and
+	/// sand. Each wall draws from its own stream, so none match.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
@@ -77,19 +77,25 @@ public sealed class BeachTheme : ArenaTheme
 				if ( props.Next() < 0.5f ) props.Fronds( post );
 			}
 
-			// The plain bays in a shuffled order: the life ring's set in the first, then this wall's own
-			// order of the other sets dealt round, surfboards twice in the deck.
+			// The plain bays in wall order: the life ring's set in one of them, the rest dealt the three other
+			// sets, and over every set a high piece dealt the same way — neither ever the same as next door's.
+			// No oars over the life ring, which has its own leaning beside it, nor next door to it, nor anything
+			// wide or trailing over it (a rack, a kite's tail): a shelf or floats, to the side away from the ring.
+			// Never boards on a rack over a set of leaning boards.
 			var plain = wall.FindAll( b => b.Width > 70f );
-			Shuffle( plain, props );
-			var deck = new List<Props.Look> { Props.Look.Surf, Props.Look.DeckChairs, Props.Look.Bench, Props.Look.Surf };
-			Shuffle( deck, props );
-			var upper = new List<Props.High> { Props.High.Kite, Props.High.Rack, Props.High.Shelf, Props.High.Floats, Props.High.Oars };
-			Shuffle( upper, props );
+			var ring = (int)(props.Next() * plain.Count);
+			var sets = props.Deal( new List<Props.Look> { Props.Look.Surf, Props.Look.DeckChairs, Props.Look.Bench }, plain.Count );
+			var high = props.Deal( new List<Props.High> { Props.High.Kite, Props.High.Rack, Props.High.Shelf, Props.High.Floats, Props.High.Oars }, plain.Count,
+				( k, piece ) => k == ring ? piece is Props.High.Shelf or Props.High.Floats
+					: !(piece == Props.High.Rack && sets[k] == Props.Look.Surf) && !(piece == Props.High.Oars && Math.Abs( k - ring ) == 1) );
 			for ( var k = 0; k < plain.Count; k++ )
 			{
-				if ( k == 0 ) props.Lifeguard( plain[k] );
-				else props.Furnish( deck[(k - 1) % deck.Count], plain[k] );
-				props.Upper( upper[k % upper.Count], plain[k] );
+				if ( k == ring ) props.Upper( high[k], plain[k], props.Lifeguard( plain[k] ) );
+				else
+				{
+					props.Furnish( sets[k], plain[k] );
+					props.Upper( high[k], plain[k] );
+				}
 			}
 			foreach ( var bay in wall.FindAll( b => b.Width <= 70f && b.Width > 24f ) )
 				props.Narrow( bay );
@@ -100,16 +106,6 @@ public sealed class BeachTheme : ArenaTheme
 		{
 			props.Lantern( lamp.Side, lamp.U );
 			AddLamp( room, lamp.Side, lamp.U, Props.LanternLight, Props.LanternDepth, LightColor * 3.6f * lamp.Brightness );
-		}
-	}
-
-	/// <summary>Shuffles <paramref name="list"/> in place from the props' stream (Fisher–Yates).</summary>
-	static void Shuffle<T>( List<T> list, Props props )
-	{
-		for ( var k = list.Count - 1; k > 0; k-- )
-		{
-			var j = (int)(props.Next() * (k + 1));
-			(list[k], list[j]) = (list[j], list[k]);
 		}
 	}
 
@@ -962,7 +958,7 @@ public sealed class BeachTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// A hurricane lantern hung from a hook in the top plate at <paramref name="u"/> of wall
+		/// A life-size hurricane lantern hung from a hook in the top plate at <paramref name="u"/> of wall
 		/// <paramref name="side"/> by a short cord: a wire bail, a vented cap, the glass chimney lit from
 		/// inside (its lamp burns there: <see cref="LanternLight"/>), a wire guard and the fuel fount, in one
 		/// of three chipped paints.
@@ -971,11 +967,12 @@ public sealed class BeachTheme : ArenaTheme
 		{
 			OnSide( side );
 			const float D = LanternDepth;
-			const float S = 1.5f;
+			// Life size (a hurricane lantern is about a foot tall with its bail up), hung so its lamp burns in the glass.
+			const float S = 0.7f;
 			var metal = TrimSkin( LanternSwatch( Pick( 3 ) ) );
 			var iron = TrimSkin( IronSwatch );
 			var turn = Turn( Rotation.FromYaw( Next() * 360f ) );
-			const float Foot = 204f;
+			const float Foot = LanternLight - 6f;
 			Vector2[] Scaled( params Vector2[] profile ) => Array.ConvertAll( profile, p => p * S );
 
 			Kit.Tube( iron, At( new[] { new Vector3( u, -0.5f, Plate + 1f ), new Vector3( u, D * 0.6f, Plate - 0.6f ), new Vector3( u, D, Plate - 2.2f ) } ), 0.35f, 4 );
@@ -1005,11 +1002,18 @@ public sealed class BeachTheme : ArenaTheme
 
 		// ---- Bays ------------------------------------------------------------------------------
 
-		/// <summary>The life ring's bay: the ring on a peg, a coil of rope or a bucket under it, an oar or two leaning beside it.</summary>
-		public void Lifeguard( Bay bay ) => Apart( () =>
+		/// <summary>The life ring's bay: the ring on a peg, a coil of rope or a bucket under it, an oar or two leaning beside it. Returns where the ring hangs.</summary>
+		public float Lifeguard( Bay bay )
+		{
+			var ring = 0f;
+			Apart( () => LifeguardSet( bay, out ring ) );
+			return ring;
+		}
+
+		void LifeguardSet( Bay bay, out float ring )
 		{
 			var side = Next() < 0.5f ? -1f : 1f;
-			var ring = bay.Middle + side * bay.Width * Range( 0.1f, 0.2f );
+			ring = bay.Middle + side * bay.Width * Range( 0.1f, 0.2f );
 			LifeRing( ring, Range( 98f, 112f ) );
 			if ( Next() < 0.55f ) Coil( new Vector3( ring + Range( -6f, 6f ), Skirt - 9f, Ledge ) );
 			else Bucket( new Vector3( ring + Range( -8f, 8f ), Skirt - 7f, Ledge ), Range( 0.9f, 1.1f ), true );
@@ -1018,7 +1022,7 @@ public sealed class BeachTheme : ArenaTheme
 			Oar( oar, Range( 9f, 15f ) * side * 0.6f );
 			if ( Next() < 0.5f ) Oar( oar + side * Range( 9f, 13f ), Range( -6f, 6f ) );
 			if ( Next() < 0.6f ) Sand( bay.From + 4f, bay.To - 4f );
-		} );
+		}
 
 		/// <summary>One of the three set-ups in <paramref name="bay"/>, most with sand blown against the skirting.</summary>
 		public void Furnish( Look look, Bay bay ) => Apart( () =>
@@ -1083,11 +1087,14 @@ public sealed class BeachTheme : ArenaTheme
 
 		/// <summary>
 		/// What hangs high in <paramref name="bay"/>, over the set below it and under its awning: one of the
-		/// <see cref="High"/> pieces, somewhere off the bay's middle.
+		/// <see cref="High"/> pieces, somewhere off the bay's middle — on the side away from <paramref name="away"/>
+		/// when something hangs there already (the life ring).
 		/// </summary>
-		public void Upper( High kind, Bay bay ) => Apart( () =>
+		public void Upper( High kind, Bay bay, float? away = null ) => Apart( () =>
 		{
-			var u = bay.Middle + Range( -0.22f, 0.22f ) * bay.Width;
+			var u = away is float taken
+				? bay.Middle + MathF.Sign( bay.Middle - taken ) * Range( 0.12f, 0.24f ) * bay.Width
+				: bay.Middle + Range( -0.22f, 0.22f ) * bay.Width;
 			switch ( kind )
 			{
 				case High.Kite: Kite( u, Range( 148f, 160f ) ); break;

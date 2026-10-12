@@ -830,10 +830,11 @@ public abstract class ArenaTheme
 		public float SkirtingDepth { get; init; }
 	}
 
-	/// <summary>A recess between two posts on one wall: u from <see cref="From"/> to <see cref="To"/>.</summary>
+	/// <summary>A recess between two posts on one wall: u from <see cref="From"/> to <see cref="To"/>, the <see cref="Index"/>th from the wall's start.</summary>
 	public readonly struct Bay
 	{
 		public int Side { get; init; }
+		public int Index { get; init; }
 		public float From { get; init; }
 		public float To { get; init; }
 		public float Width => To - From;
@@ -887,7 +888,7 @@ public abstract class ArenaTheme
 
 			for ( var k = 0; k + 1 < posts.Count; k++ )
 			{
-				var bay = new Bay { Side = side, From = posts[k].To, To = posts[k + 1].From };
+				var bay = new Bay { Side = side, Index = k, From = posts[k].To, To = posts[k + 1].From };
 				bays.Add( bay );
 				room.WallBox( side, Trim, skirting, stock, false, bay.From, bay.To, FloorContext.LedgeTop, FloorContext.LedgeTop + style.Skirting,
 					Recess - style.SkirtingDepth, Deep, BoxFaces.Front | BoxFaces.Top );
@@ -908,14 +909,14 @@ public abstract class ArenaTheme
 	}
 
 	/// <summary>
-	/// Which of the <see cref="Walls"/> each bay's length of wall face wears, by side and the bay's start,
-	/// as <see cref="BuildWallFace"/> picked it: for a theme that dresses a bay to match its wall (a beach
-	/// hut's awning in the hut's own colour).
+	/// Which of the <see cref="Walls"/> each bay's length of wall face wears, by side and the bay's place on
+	/// it, as <see cref="BuildWallFace"/> picked it: for a theme that dresses a bay to match its wall (a beach
+	/// hut's awning in the hut's own colour). Rebuilding the room overwrites every entry.
 	/// </summary>
-	readonly Dictionary<(int Side, float From), int> _bayWalls = new();
+	readonly Dictionary<(int Side, int Index), int> _bayWalls = new();
 
 	/// <summary>Which of the <see cref="Walls"/> the length of wall face behind <paramref name="bay"/> wears.</summary>
-	protected int WallOf( Bay bay ) => _bayWalls[(bay.Side, bay.From)];
+	protected int WallOf( Bay bay ) => _bayWalls[(bay.Side, bay.Index)];
 
 	/// <summary>
 	/// The wall face behind the posts, from the segment's bottom to the ceiling, in lengths that meet
@@ -946,7 +947,7 @@ public abstract class ArenaTheme
 			var wall = look / 2;
 			var mirror = look % 2 == 1 ? -1f : 1f;
 			var lift = WallLift( wall, random );
-			_bayWalls[(side, posts[k - 1].To)] = wall;
+			_bayWalls[(side, k - 1)] = wall;
 
 			// A mirrored length runs its pattern the other way; a module edge stays a module edge.
 			room.WallFace( side, Walls[wall], start, end, bottom, FloorContext.ClearHeight, Recess, false,

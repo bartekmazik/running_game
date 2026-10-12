@@ -84,13 +84,16 @@ public sealed class OfficeTheme : ArenaTheme
 	/// The structural front layer — plastered columns, a bulkhead beam, a vinyl cove skirting — and
 	/// windows in about half the bays, each with a venetian blind let down to its own height; then the
 	/// dressing. Under the bulkhead all round, a strip of suspended ceiling grid with cool-white light
-	/// panels in it, six of them holding the room's lamps. Under each window a radiator, a low cupboard
-	/// or a two-drawer cabinet, and now and then something on the sill. Every plain bay is dressed low and
-	/// high: one bay a wall holds its potted plant, two walls a water cooler, the rest are dealt from five
-	/// sets — a whiteboard over a low cupboard, a pinboard by a filing cabinet, a row of filing cabinets, a
-	/// desk against the wall with its chair tucked in, open shelving full of files — with prints, shelves of
-	/// binders and wall clocks over them, and an air-conditioner high on the plaster here and there. Each
-	/// wall draws from its own stream.
+	/// panels in it, six of them holding the room's lamps, and a smoke detector here and there. Under each
+	/// window a radiator, a credenza, a desk or a row of low cabinets, often a tall plant beside it. Every
+	/// plain bay is dressed low, at head height and up on the fabric over it: one bay a wall holds its
+	/// meeting corner (a screen on the wall, the projector screen pulled part-way down over the
+	/// clerestory), two walls a water cooler, and the rest are dealt from nine sets — a big floor plant, a
+	/// whiteboard, a pinboard by a tall filing cabinet, a row of filing cabinets under a year planner, a desk
+	/// with its chair, bookcases, tall stationery cupboards, lockers, a photocopier — never the same set next
+	/// door, and whatever a set leaves bare filled.
+	/// Over the partitions, cable trays, an exit sign, air-conditioners and speakers, never two bare bays
+	/// running; one clock a wall, on a column. Each wall draws from its own stream.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
@@ -111,27 +114,31 @@ public sealed class OfficeTheme : ArenaTheme
 			props.Begin( side, Seed + 1000 + side * 137 );
 			props.Grid( lamps.FindAll( l => l.Side == side ).ConvertAll( l => l.U ) );
 
-			foreach ( var (bay, width) in windows.FindAll( w => w.Bay.Side == side ) )
+			var wall = bays.FindAll( b => b.Side == side );
+			var windowed = windows.FindAll( w => w.Bay.Side == side );
+			foreach ( var (bay, width) in windowed )
 				props.WindowBay( bay, width );
 
-			// The plain bays in a shuffled order: the wall's plant in the first, a cooler in the next on two
-			// walls, then this wall's own order of the five sets dealt round.
-			var wall = bays.FindAll( b => b.Side == side );
-			var plain = wall.FindAll( b => b.Width > 60f && !windows.Exists( w => w.Bay.Side == side && w.Bay.From == b.From ) );
-			Shuffle( plain, props );
-			var deck = new List<Props.Look> { Props.Look.Whiteboard, Props.Look.Pinboard, Props.Look.Cabinets, Props.Look.Desk, Props.Look.Shelving };
-			Shuffle( deck, props );
-			var dealt = 0;
-			for ( var k = 0; k < plain.Count; k++ )
+			// The plain bays in wall order, dealt from the nine sets so that no two neighbours match; then
+			// bays picked from the wall's stream are given over to its meeting corner and, on two walls, the
+			// water cooler (one of a kind each, so they match nothing either).
+			var plain = wall.FindAll( b => b.Width > 60f && !windowed.Exists( w => w.Bay.Index == b.Index ) );
+			var looks = props.Deal( new List<Props.Look>
 			{
-				if ( k == 0 ) props.PlantBay( plain[k] );
-				else if ( k == 1 && (side == cooler || side == otherCooler) ) props.CoolerBay( plain[k] );
-				else props.Furnish( deck[dealt++ % deck.Count], plain[k] );
-			}
-
-			// A split air-conditioner high on the plaster over one or two of the plain bays.
+				Props.Look.Plant, Props.Look.Whiteboard, Props.Look.Pinboard, Props.Look.Cabinets, Props.Look.Desk,
+				Props.Look.Shelving, Props.Look.Storage, Props.Look.Lockers, Props.Look.Copier,
+			}, plain.Count );
+			var places = new List<int>();
+			for ( var k = 0; k < plain.Count; k++ ) places.Add( k );
+			props.Shuffle( places );
+			var specials = new List<Props.Look> { Props.Look.Meeting };
+			if ( side == cooler || side == otherCooler ) specials.Add( Props.Look.Cooler );
+			for ( var k = 0; k < Math.Min( specials.Count, places.Count ); k++ )
+				looks[places[k]] = specials[k];
 			for ( var k = 0; k < plain.Count; k++ )
-				if ( k % 3 == 1 ) props.AirCon( plain[k] );
+				props.Furnish( looks[k], plain[k] );
+
+			props.Overhead( wall, places.Count > 0 ? plain[places[0]].Index : -1 );
 		}
 
 		foreach ( var lamp in lamps )
@@ -140,16 +147,6 @@ public sealed class OfficeTheme : ArenaTheme
 
 	/// <summary>Height of the bulkhead beam under the ceiling; the grid strip hangs under it.</summary>
 	const float Bulkhead = 26f;
-
-	/// <summary>Shuffles <paramref name="list"/> in place from the props' stream (Fisher–Yates).</summary>
-	static void Shuffle<T>( List<T> list, Props props )
-	{
-		for ( var k = list.Count - 1; k > 0; k-- )
-		{
-			var j = (int)(props.Next() * (k + 1));
-			(list[k], list[j]) = (list[j], list[k]);
-		}
-	}
 
 	/// <summary>
 	/// System partitions in <see cref="WallModule"/> modules: aluminium posts with a shadow groove, a
@@ -499,41 +496,124 @@ public sealed class OfficeTheme : ArenaTheme
 	}
 
 	/// <summary>
-	/// The lit parts of the light panels, on the self-lit base: a cool-white prismatic diffuser (a fine
-	/// grid of lenses, a little brighter in the middle), and a dimmer, greyer one for the odd panel whose
-	/// tubes are failing — every office has one.
+	/// The lit parts of the fittings, on the self-lit base. In the top left quarter, as it always was, the
+	/// light panels: a cool-white prismatic diffuser (a fine grid of lenses, a little brighter in the
+	/// middle) and a dimmer, greyer one for the odd panel whose tubes are failing — every office has one.
+	/// Beside them an exit sign, white on green; under them two wall screens mid-meeting, a bar chart and a
+	/// line graph with a pie, pastel on navy.
 	/// </summary>
 	protected override PaintedSurface PaintGlow()
 	{
-		const int Size = 64;
+		const int Size = 128;
 		var painter = new Painter( Size, Palette.Hex( 0xEEF3FA ), 0.3f );
 		painter.Fill( 32, 0, 32, 64, Palette.Hex( 0xCDD2D8 ), roughness: 0.35f );
 		var glow = new float[Size * Size];
-		for ( var y = 0; y < Size; y++ )
-		for ( var x = 0; x < Size; x++ )
+		for ( var y = 0; y < 64; y++ )
+		for ( var x = 0; x < 64; x++ )
 		{
 			var lens = (x % 4 == 0 || y % 4 == 0) ? 0.88f : 1f;
 			var middle = 1f - MathF.Abs( (x % 32) - 15.5f ) / 15.5f * 0.12f;
 			glow[y * Size + x] = x < 32 ? lens * middle : 0.22f * lens;
 		}
+
+		// The exit sign: a running figure through a doorway, an arrow, in white on safety green.
+		var white = Palette.Hex( 0xF4F8F4 );
+		painter.Fill( 64, 0, 64, 32, Palette.Hex( 0x2E9E5E ), roughness: 0.3f );
+		painter.Circle( 79f, 8f, 2.6f, white );
+		painter.Line( new Vector2( 78.5f, 11f ), new Vector2( 76f, 19f ), 2.4f, white );
+		painter.Line( new Vector2( 78f, 13f ), new Vector2( 83f, 15.5f ), 1.6f, white );
+		painter.Line( new Vector2( 78f, 13f ), new Vector2( 73.5f, 15f ), 1.6f, white );
+		painter.Line( new Vector2( 76f, 19f ), new Vector2( 81f, 22f ), 1.8f, white );
+		painter.Line( new Vector2( 81f, 22f ), new Vector2( 80f, 27f ), 1.8f, white );
+		painter.Line( new Vector2( 76f, 19f ), new Vector2( 72.5f, 26f ), 1.8f, white );
+		painter.Line( new Vector2( 88f, 5f ), new Vector2( 98f, 5f ), 1.6f, white );
+		painter.Line( new Vector2( 98f, 5f ), new Vector2( 98f, 27f ), 1.6f, white );
+		painter.Line( new Vector2( 88f, 5f ), new Vector2( 88f, 27f ), 1.6f, white );
+		painter.Line( new Vector2( 104f, 16f ), new Vector2( 122f, 16f ), 2.4f, white );
+		painter.Line( new Vector2( 122f, 16f ), new Vector2( 116f, 10.5f ), 2.4f, white );
+		painter.Line( new Vector2( 122f, 16f ), new Vector2( 116f, 21.5f ), 2.4f, white );
+		for ( var y = 0; y < 32; y++ )
+		for ( var x = 64; x < 128; x++ )
+			glow[y * Size + x] = 1f;
+
+		// Two screens, each 64 by 36: a title bar, then a bar chart, or a line graph with a pie beside it.
+		var navy = Palette.Hex( 0x1F2A44 );
+		var axis = Palette.Hex( 0x8C97B8 );
+		var random = new Random( Seed + 750 );
+		float Next() => (float)random.NextDouble();
+		const int Top = 64;
+		for ( var k = 0; k < 2; k++ )
+		{
+			var x0 = k * 64;
+			painter.Fill( x0, Top, 64, 36, navy, roughness: 0.15f );
+			painter.Fill( x0, Top, 64, 6, Palette.Hex( 0x2E3D60 ), roughness: 0.15f );
+			painter.Fill( x0 + 4, Top + 2, 18 + random.Next( 14 ), 2, Palette.Hex( 0xDDE3F0 ), roughness: 0.15f );
+			painter.Line( new Vector2( x0 + 6f, Top + 10f ), new Vector2( x0 + 6f, Top + 32f ), 0.8f, axis );
+			painter.Line( new Vector2( x0 + 6f, Top + 32f ), new Vector2( x0 + (k == 0 ? 60f : 40f), Top + 32f ), 0.8f, axis );
+			if ( k == 0 )
+			{
+				for ( var bar = 0; bar < 7; bar++ )
+				{
+					var h = 6f + Next() * 18f + bar * 0.8f;
+					painter.Rect( x0 + 9f + bar * 7f, Top + 32f - h, 4.5f, h, Palette.Hex( Art[bar % 5] ) );
+				}
+			}
+			else
+			{
+				foreach ( var (ink, rise) in new[] { (Palette.Hex( 0xE9A06A ), 0.6f), (Palette.Hex( 0xBFE3CF ), 0.25f) } )
+				{
+					var at = new Vector2( x0 + 7f, Top + 28f - Next() * 4f );
+					for ( var step = 1; step <= 6; step++ )
+					{
+						var to = new Vector2( x0 + 7f + step * 5.5f, Top + 29f - step * rise * 3.4f - Next() * 6f );
+						painter.Line( at, to, 1.2f, ink );
+						at = to;
+					}
+				}
+				var centre = new Vector2( x0 + 52f, Top + 21f );
+				painter.Circle( centre.x, centre.y, 8f, Palette.Hex( 0xA9B6D8 ) );
+				painter.Polygon( new[] { centre, centre + new Vector2( 0f, -8f ), centre + new Vector2( 6.4f, -4.8f ), centre + new Vector2( 8f, 0f ), centre + new Vector2( 5.7f, 5.7f ) }, Palette.Hex( 0xF2C6C2 ) );
+				painter.Polygon( new[] { centre, centre + new Vector2( 5.7f, 5.7f ), centre + new Vector2( 0f, 8f ), centre + new Vector2( -4f, 6.9f ) }, Palette.Hex( 0xF4E1A1 ) );
+			}
+			for ( var y = Top; y < Top + 36; y++ )
+			for ( var x = x0; x < x0 + 64; x++ )
+				glow[y * Size + x] = 0.8f;
+		}
+
 		painter.AddGlow( glow );
 		return painter.Bake( "arena_3_glow", ArenaGenerator.GlowMaterialPath, 1f );
 	}
 
-	static Rect PanelGlow => new( 0.04f, 0.04f, 0.42f, 0.92f );
-	static Rect DeadGlow => new( 0.54f, 0.04f, 0.42f, 0.92f );
+	static Rect PanelGlow => new( 0.02f, 0.02f, 0.21f, 0.46f );
+	static Rect DeadGlow => new( 0.27f, 0.02f, 0.21f, 0.46f );
+	static Rect ExitGlow => new( 66f / 128f, 2f / 128f, 60f / 128f, 28f / 128f );
+	static Rect ScreenGlow( int k ) => new( (k * 64 + 1f) / 128f, 65f / 128f, 62f / 128f, 34f / 128f );
 
-	/// <summary>The whiteboard sheet: a crop of it is each board's face.</summary>
-	const int SheetX = 256, SheetWidth = 192, SheetHeight = 96;
+	/// <summary>
+	/// The whiteboard sheet: eight motifs, a <see cref="MotifSize"/>-pixel cell each with a clear margin,
+	/// so a board shows two or three of them whole, side by side, each board its own pick.
+	/// </summary>
+	const int SheetX = 256, SheetWidth = 192, SheetHeight = 96, MotifSize = 48, Motifs = 8;
+	static Rect MotifSwatch( int k ) => Swatch( SheetX + (k % 4) * MotifSize, (k / 4) * MotifSize, MotifSize, MotifSize );
 
-	static Rect ClockSwatch => Swatch( 448, 0, 64, 64 );
+	/// <summary>The whiteboard's own white, blank: the sheet's ground, which the motifs are laid on without a seam.</summary>
+	static Color Board => Palette.Hex( 0xF3F4F2 );
+	static Rect BoardSwatch => Swatch( 480, 64, 32, 32 );
+
+	/// <summary>Two clock faces: ticks only, and ticks with the quarters in numerals.</summary>
+	static Rect ClockSwatch( int k ) => k == 0 ? Swatch( 448, 0, 64, 64 ) : Swatch( 128, 0, 64, 64 );
+
+	/// <summary>A year planner, a calendar's month and cardboard, in the frame cell's spare half.</summary>
+	static Rect PlannerSwatch => Swatch( 192, 64, 64, 48 );
+	static Rect MonthSwatch => Swatch( 224, 112, 32, 32 );
+	static Rect KraftSwatch => Swatch( 192, 112, 32, 32 );
 
 	/// <summary>Print colours: eight solid pastels and accents in the frame cell's spare corner.</summary>
 	static Rect ArtSwatch( int k ) => Swatch( 192 + (k % 4) * 16, (k / 4) * 32, 16, 32 );
 	static readonly uint[] Art = { 0xF4E1A1, 0xF2C6C2, 0xBFE3CF, 0xA9B6D8, 0x9FC6E0, 0xE9A06A, 0x9DB89A, 0xC7B8E0 };
 
 	/// <summary>The window frames' white powder coat: a solid part of the frame cell.</summary>
-	static Rect FrameSwatch => Swatch( 128, 64, 128, 96 );
+	static Rect FrameSwatch => Swatch( 128, 64, 64, 96 );
 	static Rect MarkerSwatch( int k ) => Swatch( 448 + k * 8, 64, 8, 32 );
 	static Rect CabinetSwatch( int k ) => Swatch( 256 + k * 32, 96, 32, 32 );
 	static Rect CorkSwatch => Swatch( 352, 96, 32, 32 );
@@ -541,6 +621,9 @@ public sealed class OfficeTheme : ArenaTheme
 	static Rect BottleSwatch => Swatch( 448, 96, 32, 32 );
 	static Rect WhiteSwatch => Swatch( 480, 96, 32, 32 );
 	static Rect LeafSwatch( int k ) => Swatch( 256 + k * 64, 128, 64, 32 );
+
+	/// <summary>A golden pothos leaf: fresh green streaked with butter, under its pale midrib.</summary>
+	static Rect PothosSwatch => Swatch( 192, 144, 64, 16 );
 	static Rect PotSwatch => Swatch( 384, 128, 16, 32 );
 	static Rect CharcoalSwatch => Swatch( 400, 128, 16, 32 );
 	static Rect SoilSwatch => Swatch( 416, 128, 32, 32 );
@@ -551,18 +634,19 @@ public sealed class OfficeTheme : ArenaTheme
 	/// <summary>A binder's spine: six colours side by side, each a column of the swatch.</summary>
 	static Rect BinderSwatch( int k ) => Swatch( 448 + (k % 6) * 10f + 1f, 128, 10f, 32 );
 
-	/// <summary>Filing cabinet paint: putty, cool grey and a periwinkle (the floor's hue).</summary>
-	static readonly uint[] CabinetPaints = { 0xC9C4B8, 0xB2B6BD, 0xA9B6D8 };
+	/// <summary>Filing cabinet paint: putty, a slate grey that holds against the pale fabric, and a periwinkle (the floor's hue).</summary>
+	static readonly uint[] CabinetPaints = { 0xC9C4B8, 0x7F889C, 0xA9B6D8 };
 
 	/// <summary>Marker inks: black, blue, a carrot red and green.</summary>
 	static readonly uint[] Inks = { 0x2F2A3B, 0x3F63A8, 0xD0704F, 0x3F8A5A };
 
 	/// <summary>
-	/// The props' materials, painted into the infill band's two free cells (the first two hold the view
-	/// out and the frame paint): the whiteboard sheet — the ghosts of wiped meetings under boxes and
-	/// arrows, a chart, lines of handwriting, sticky notes — a clock face, marker inks, three cabinet
-	/// paints, cork, ruled notes, aluminium, the cooler's blue bottle and white plastic, two leaves, a
-	/// white and a charcoal pot, soil and a row of binder spines; and eight pastels for the prints.
+	/// The props' materials, painted into the infill band's free cells (the first holds the view out, half
+	/// the second the frame paint): eight whiteboard motifs — the ghosts of wiped meetings under a flow
+	/// chart, a bar chart, a pie, a list, sticky notes, a line graph, a mind map, a table — and the board's
+	/// blank white, two clock faces, marker inks, three cabinet paints, cork, ruled notes, aluminium, the
+	/// cooler's blue bottle and white plastic, two leaves, a white and a charcoal pot, soil, a row of binder
+	/// spines, a year planner, a calendar month and cardboard; and eight pastels for the prints.
 	/// </summary>
 	static void PaintSwatches( Painter painter, Random random )
 	{
@@ -574,112 +658,237 @@ public sealed class OfficeTheme : ArenaTheme
 
 		{
 			var y0 = band;
-			painter.Fill( SheetX, y0, SheetWidth, SheetHeight, Palette.Hex( 0xF3F4F2 ), roughness: 0.12f );
-			// Ghosts of wiped writing: faint grey smears.
-			for ( var s = 0; s < 16; s++ )
-				painter.Polygon( Organic( new Vector2( SheetX + Next() * SheetWidth, y0 + Next() * SheetHeight ), new Vector2( 6f + Next() * 16f, 2f + Next() * 5f ), 0.7f, random.Next(), Next() * 0.5f ),
-					Palette.Hex( 0xC9CBCE ), alpha: 0.18f, roughness: 0.2f );
+			painter.Fill( SheetX, y0, SheetWidth, SheetHeight, Board, roughness: 0.12f );
+			painter.Fill( 480, y0 + 64, 32, 32, Board, roughness: 0.12f );
 
 			Color Ink() => Palette.Hex( Inks[Next() < 0.55f ? 0 : 1 + random.Next( 3 )] );
 			void Scrawl( Vector2 at, float width, Color ink )
 			{
 				var points = new List<Vector2>();
 				for ( var x = 0f; x < width; x += 1.2f + Next() * 0.8f )
-					points.Add( at + new Vector2( x, (Next() - 0.5f) * 2.6f ) );
+					points.Add( at + new Vector2( x, (Next() - 0.5f) * 2.2f ) );
 				for ( var k = 0; k + 1 < points.Count; k++ ) painter.Line( points[k], points[k + 1], 0.9f, ink, 0.85f );
 			}
-
-			// Boxes joined by arrows, chart, handwriting and notes scattered over the sheet, no two crops alike.
-			for ( var b = 0; b < 9; b++ )
+			void Stroke( Vector2 a, Vector2 b, Color ink ) => painter.Line( a, b, 1f, ink, 0.85f );
+			void Arrow( Vector2 from, Vector2 to, Color ink )
 			{
-				var at = new Vector2( SheetX + 6f + Next() * (SheetWidth - 40f), y0 + 6f + Next() * (SheetHeight - 30f) );
+				Stroke( from, to, ink );
+				var back = (from - to).Normal * 3f;
+				var across = new Vector2( -back.y, back.x ) * 0.6f;
+				Stroke( to, to + back + across, ink );
+				Stroke( to, to + back - across, ink );
+			}
+			void Outline( Vector2 at, float w, float h, Color ink )
+			{
+				Stroke( at, at + new Vector2( w, 0f ), ink );
+				Stroke( at + new Vector2( w, 0f ), at + new Vector2( w, h ), ink );
+				Stroke( at + new Vector2( w, h ), at + new Vector2( 0f, h ), ink );
+				Stroke( at + new Vector2( 0f, h ), at, ink );
+			}
+			void Ring( Vector2 centre, float r, Color ink )
+			{
+				for ( var k = 0; k < 20; k++ )
+				{
+					var a0 = k * MathF.Tau / 20f; var a1 = (k + 1) * MathF.Tau / 20f;
+					Stroke( centre + new Vector2( MathF.Cos( a0 ), MathF.Sin( a0 ) ) * r, centre + new Vector2( MathF.Cos( a1 ), MathF.Sin( a1 ) ) * r, ink );
+				}
+			}
+
+			// Every motif in its own cell, five pixels clear of the cell's edges, so a board can lay any of
+			// them on its blank white whole and seamless.
+			for ( var m = 0; m < Motifs; m++ )
+			{
+				var c = new Vector2( SheetX + (m % 4) * MotifSize, y0 + (m / 4) * MotifSize );
+				for ( var s = 0; s < 3; s++ )
+					painter.Polygon( Organic( c + new Vector2( 12f + Next() * 24f, 12f + Next() * 24f ), new Vector2( 4f + Next() * 6f, 1.5f + Next() * 2.5f ), 0.7f, random.Next(), Next() * 0.5f ),
+						Palette.Hex( 0xC9CBCE ), alpha: 0.18f, roughness: 0.2f );
+
 				var ink = Ink();
-				switch ( random.Next( 5 ) )
+				switch ( m )
 				{
 					case 0:
-					{
-						var w = 18f + Next() * 16f; var h = 9f + Next() * 7f;
-						painter.Line( at, at + new Vector2( w, 0f ), 1f, ink, 0.85f );
-						painter.Line( at + new Vector2( w, 0f ), at + new Vector2( w, h ), 1f, ink, 0.85f );
-						painter.Line( at + new Vector2( w, h ), at + new Vector2( 0f, h ), 1f, ink, 0.85f );
-						painter.Line( at + new Vector2( 0f, h ), at, 1f, ink, 0.85f );
-						Scrawl( at + new Vector2( 3f, h * 0.5f ), w - 6f, ink );
-						var to = at + new Vector2( w + 6f + Next() * 14f, (Next() - 0.5f) * 20f );
-						painter.Line( at + new Vector2( w, h * 0.5f ), to, 0.9f, ink, 0.8f );
-						painter.Line( to, to + new Vector2( -3f, -2f ), 0.9f, ink, 0.8f );
-						painter.Line( to, to + new Vector2( -3f, 2f ), 0.9f, ink, 0.8f );
-						break;
-					}
-					case 1:
-					{
-						// A bar chart on two axes.
-						painter.Line( at, at + new Vector2( 0f, 20f ), 1f, ink, 0.85f );
-						painter.Line( at + new Vector2( 0f, 20f ), at + new Vector2( 26f, 20f ), 1f, ink, 0.85f );
-						for ( var k = 0; k < 4; k++ )
+						// A flow chart: three boxes, arrows between.
+						foreach ( var box in new[] { new Vector2( 6f, 6f ), new Vector2( 25f, 19f ), new Vector2( 7f, 32f ) } )
 						{
-							var h = 5f + Next() * 13f;
-							painter.Rect( at.x + 3f + k * 6f, at.y + 20f - h, 3.5f, h, Palette.Hex( Inks[1 + (k + b) % 3] ), alpha: 0.75f );
+							Outline( c + box, 16f, 9f, ink );
+							Scrawl( c + box + new Vector2( 2.5f, 4.5f ), 11f, ink );
+						}
+						Arrow( c + new Vector2( 22f, 10.5f ), c + new Vector2( 32f, 18.5f ), ink );
+						Arrow( c + new Vector2( 30f, 28.5f ), c + new Vector2( 22f, 32f ), ink );
+						break;
+					case 1:
+						// A bar chart on two axes, a title over it.
+						Scrawl( c + new Vector2( 10f, 7f ), 22f, ink );
+						Stroke( c + new Vector2( 8f, 12f ), c + new Vector2( 8f, 41f ), ink );
+						Stroke( c + new Vector2( 8f, 41f ), c + new Vector2( 42f, 41f ), ink );
+						for ( var k = 0; k < 5; k++ )
+						{
+							var h = 7f + Next() * 20f;
+							painter.Rect( c.x + 11f + k * 6f, c.y + 41f - h, 4f, h, Palette.Hex( Inks[1 + (k + m) % 3] ), alpha: 0.75f );
 						}
 						break;
-					}
 					case 2:
 					{
-						// A pie with its slices.
-						var r = 7f + Next() * 4f;
-						var centre = at + new Vector2( r, r );
-						for ( var k = 0; k < 24; k++ )
-						{
-							var a0 = k * MathF.Tau / 24f; var a1 = (k + 1) * MathF.Tau / 24f;
-							painter.Line( centre + new Vector2( MathF.Cos( a0 ), MathF.Sin( a0 ) ) * r, centre + new Vector2( MathF.Cos( a1 ), MathF.Sin( a1 ) ) * r, 1f, ink, 0.85f );
-						}
+						// A pie and its slices, a legend under it.
+						var centre = c + new Vector2( 22f, 19f );
+						Ring( centre, 12f, ink );
 						for ( var k = 0; k < 3; k++ )
 						{
 							var a = Next() * MathF.Tau;
-							painter.Line( centre, centre + new Vector2( MathF.Cos( a ), MathF.Sin( a ) ) * r, 0.9f, ink, 0.8f );
+							Stroke( centre, centre + new Vector2( MathF.Cos( a ), MathF.Sin( a ) ) * 12f, ink );
+						}
+						for ( var k = 0; k < 2; k++ )
+						{
+							painter.Rect( c.x + 7f + k * 18f, c.y + 37f, 3f, 3f, Palette.Hex( Inks[1 + k] ), alpha: 0.8f );
+							Scrawl( c + new Vector2( 12f + k * 18f, 38.5f ), 9f, ink );
 						}
 						break;
 					}
 					case 3:
-					{
-						// Lines of handwriting, a bullet before each, one underlined.
-						var lines = 2 + random.Next( 4 );
-						var width = 24f + Next() * 30f;
-						for ( var k = 0; k < lines; k++ )
+						// A list: a heading underlined, bullets under it.
+						Scrawl( c + new Vector2( 7f, 8f ), 24f, ink );
+						Stroke( c + new Vector2( 7f, 11f ), c + new Vector2( 33f, 11.5f ), Palette.Hex( Inks[2] ) );
+						for ( var k = 0; k < 5; k++ )
 						{
-							var line = at + new Vector2( 0f, k * 5.5f );
+							var line = c + new Vector2( 8f, 17f + k * 5.5f );
 							painter.Circle( line.x, line.y, 0.8f, ink, 0.85f );
-							Scrawl( line + new Vector2( 3f, 0f ), width * (0.6f + Next() * 0.4f), ink );
+							Scrawl( line + new Vector2( 3f, 0f ), 14f + Next() * 18f, ink );
 						}
-						painter.Line( at + new Vector2( 3f, 2.8f ), at + new Vector2( 3f + width * 0.7f, 3.2f ), 0.8f, Palette.Hex( Inks[2] ), 0.8f );
+						break;
+					case 4:
+						// Sticky notes stuck about, a scrawl on each.
+						for ( var k = 0; k < 4; k++ )
+						{
+							var at = c + new Vector2( 7f + (k % 2) * 17f + Next() * 4f, 7f + (k / 2) * 17f + Next() * 4f );
+							painter.Rect( at.x, at.y, 12f, 12f, Palette.Hex( new uint[] { 0xF4E1A1, 0xF2C6C2, 0xBFE3CF }[(k + random.Next( 2 )) % 3] ), roughness: 0.8f, angle: (Next() - 0.5f) * 0.35f );
+							Scrawl( at + new Vector2( 2f, 4f ), 8f, Palette.Ink );
+							Scrawl( at + new Vector2( 2f, 7.5f ), 6f, Palette.Ink );
+						}
+						break;
+					case 5:
+					{
+						// A line graph, two runs and a ring round the peak.
+						Stroke( c + new Vector2( 7f, 8f ), c + new Vector2( 7f, 40f ), ink );
+						Stroke( c + new Vector2( 7f, 40f ), c + new Vector2( 42f, 40f ), ink );
+						for ( var run = 0; run < 2; run++ )
+						{
+							var colour = Palette.Hex( Inks[1 + run * 2] );
+							var at = c + new Vector2( 9f, 34f - run * 6f );
+							var peak = at;
+							for ( var k = 1; k <= 6; k++ )
+							{
+								var to = c + new Vector2( 9f + k * 5.5f, 36f - k * (2.5f + run) - Next() * 8f );
+								painter.Line( at, to, 1.1f, colour, 0.85f );
+								if ( to.y < peak.y ) peak = to;
+								at = to;
+							}
+							if ( run == 0 ) Ring( peak, 3f, Palette.Hex( Inks[2] ) );
+						}
+						break;
+					}
+					case 6:
+					{
+						// A mind map: a ringed word in the middle, spokes out to the rest.
+						var centre = c + new Vector2( 24f, 24f );
+						Ring( centre, 6f, ink );
+						Scrawl( centre + new Vector2( -4f, 0f ), 8f, ink );
+						var turn = Next() * MathF.Tau;
+						for ( var k = 0; k < 5; k++ )
+						{
+							var a = turn + k * MathF.Tau / 5f + (Next() - 0.5f) * 0.4f;
+							var dir = new Vector2( MathF.Cos( a ), MathF.Sin( a ) );
+							var end = centre + dir * 13f;
+							Stroke( centre + dir * 6f, end, ink );
+							var word = 7f + Next() * 3f;
+							Scrawl( end + new Vector2( dir.x < 0f ? -word - 1f : 1f, dir.y * 2f ), word, ink );
+						}
 						break;
 					}
 					default:
 					{
-						// A sticky note or two.
-						for ( var k = 1 + random.Next( 2 ); k > 0; k-- )
+						// A table: a ruled grid, ticks and crosses in it, a total ringed.
+						for ( var k = 0; k <= 4; k++ ) Stroke( c + new Vector2( 6f, 8f + k * 8f ), c + new Vector2( 42f, 8f + k * 8f ), ink );
+						foreach ( var x in new[] { 6f, 20f, 31f, 42f } ) Stroke( c + new Vector2( x, 8f ), c + new Vector2( x, 40f ), ink );
+						for ( var k = 0; k < 4; k++ )
 						{
-							var note = new[] { 0xF4E1A1, 0xF2C6C2, 0xBFE3CF }[random.Next( 3 )];
-							painter.Rect( at.x + Next() * 6f, at.y + Next() * 6f, 9f, 9f, Palette.Hex( (uint)note ), roughness: 0.8f, angle: (Next() - 0.5f) * 0.3f );
+							Scrawl( c + new Vector2( 8f, 12f + k * 8f ), 9f, ink );
+							var tick = c + new Vector2( 24f + (Next() < 0.5f ? 0f : 11f), 12f + k * 8f );
+							Stroke( tick + new Vector2( -1.5f, 0f ), tick + new Vector2( 0f, 1.5f ), Palette.Hex( Inks[3] ) );
+							Stroke( tick + new Vector2( 0f, 1.5f ), tick + new Vector2( 2.5f, -2f ), Palette.Hex( Inks[3] ) );
 						}
+						Ring( c + new Vector2( 36.5f, 36f ), 3.2f, Palette.Hex( Inks[2] ) );
 						break;
 					}
 				}
 			}
 
-			// The clock face: white, twelve ticks (the quarters heavier) round a ring, mapped inside the cap's circle.
-			painter.Fill( 448, y0, 64, 64, Palette.Hex( 0xF7F6F1 ), roughness: 0.2f );
-			var hub = new Vector2( 480f, y0 + 32f );
-			for ( var k = 0; k < 60; k++ )
+			// The clock faces, white, mapped inside the cap's circle: sixty ticks with the hours heavier, and
+			// the same with 12, 3, 6 and 9 in numerals of a few strokes each.
+			for ( var face = 0; face < 2; face++ )
 			{
-				var a = k * MathF.Tau / 60f;
-				var dir = new Vector2( MathF.Cos( a ), MathF.Sin( a ) );
-				var hour = k % 5 == 0;
-				var quarter = k % 15 == 0;
-				painter.Line( hub + dir * (hour ? (quarter ? 17f : 19.5f) : 22f), hub + dir * 24f, quarter ? 2.2f : hour ? 1.4f : 0.5f, Palette.Ink, 0.9f );
+				var x0 = face == 0 ? 448 : 128;
+				painter.Fill( x0, y0, 64, 64, Palette.Hex( 0xF7F6F1 ), roughness: 0.2f );
+				var hub = new Vector2( x0 + 32f, y0 + 32f );
+				for ( var k = 0; k < 60; k++ )
+				{
+					var a = k * MathF.Tau / 60f;
+					var dir = new Vector2( MathF.Cos( a ), MathF.Sin( a ) );
+					var hour = k % 5 == 0;
+					var quarter = k % 15 == 0;
+					if ( face == 1 && quarter ) continue;
+					painter.Line( hub + dir * (hour ? (quarter ? 17f : 19.5f) : 22f), hub + dir * 24f, quarter ? 2.2f : hour ? 1.4f : 0.5f, Palette.Ink, 0.9f );
+				}
+				if ( face == 1 )
+				{
+					Digits( painter, "12", hub + new Vector2( 0f, -17.5f ) );
+					Digits( painter, "3", hub + new Vector2( 18f, 0f ) );
+					Digits( painter, "6", hub + new Vector2( 0f, 17.5f ) );
+					Digits( painter, "9", hub + new Vector2( -18f, 0f ) );
+				}
 			}
 
 			for ( var k = 0; k < 4; k++ ) painter.Fill( 448 + k * 8, y0 + 64, 8, 32, Palette.Hex( Inks[k] ), roughness: 0.4f );
 
+			// A year planner: twelve month rows ruled under a blue header, weeks faint across, a project or a
+			// holiday blocked in here and there.
+			{
+				var (px, py) = (192, y0 + 64);
+				painter.Fill( px, py, 64, 48, Palette.Hex( 0xF6F5F0 ), roughness: 0.6f );
+				painter.Fill( px, py, 64, 5, Palette.Hex( Inks[1] ), roughness: 0.5f );
+				for ( var x = px + 11f; x < px + 62f; x += 4.3f ) painter.Rect( x, py + 6f, 0.6f, 40f, Palette.Hex( 0xD9D7D0 ) );
+				for ( var row = 0; row < 12; row++ )
+				{
+					var y = py + 6.5f + row * 3.4f;
+					painter.Rect( px + 3f, y + 3f, 59f, 0.5f, Palette.Hex( 0xB9B7B0 ) );
+					painter.Rect( px + 4f, y + 1f, 5f, 1.2f, Palette.Hex( 0x8C8A92 ) );
+					for ( var block = random.Next( 3 ); block > 0; block-- )
+						painter.Rect( px + 12f + Next() * 38f, y + 0.6f, 3f + Next() * 12f, 2.2f, Palette.Hex( block == 2 ? Inks[2] : Art[random.Next( Art.Length )] ), alpha: 0.9f );
+				}
+			}
+
+			// A calendar's month: a carrot header over seven days by five weeks, one day ringed.
+			{
+				var (mx, my) = (224, y0 + 112);
+				painter.Fill( mx, my, 32, 32, Palette.Hex( 0xF6F5F0 ), roughness: 0.7f );
+				painter.Fill( mx + 3, my + 3, 26, 4, Palette.Hex( 0xE9A06A ), roughness: 0.6f );
+				for ( var k = 0; k <= 5; k++ ) painter.Rect( mx + 3f, my + 9f + k * 4f, 26f, 0.5f, Palette.Hex( 0xB9B7B0 ) );
+				for ( var k = 0; k <= 7; k++ ) painter.Rect( mx + 3f + k * 3.7f, my + 9f, 0.5f, 20f, Palette.Hex( 0xB9B7B0 ) );
+				painter.Circle( mx + 3f + (1 + random.Next( 6 )) * 3.7f - 1.85f, my + 9f + (1 + random.Next( 4 )) * 4f - 2f, 1.8f, Palette.Hex( Inks[2] ), 0.6f );
+			}
+
+			// A golden pothos leaf, streaked.
+			painter.Fill( 192, y0 + 144, 64, 16, Palette.Hex( 0x6E9E58 ), roughness: 0.35f );
+			for ( var s = 0; s < 14; s++ )
+			{
+				var x = 194f + Next() * 60f;
+				painter.Line( new Vector2( x, y0 + 147f + Next() * 3f ), new Vector2( x + 3f + Next() * 6f, y0 + 150f + Next() * 7f ), 0.9f, Palette.Hex( 0xD8D58E ), 0.6f );
+			}
+			painter.Fill( 192, y0 + 151, 64, 1, Palette.Hex( 0xA9C58E ), roughness: 0.35f );
+
+			// Cardboard: kraft with its fibres.
+			painter.Fill( 192, y0 + 112, 32, 32, Palette.Hex( 0xC4A57A ), roughness: 0.9f );
+			for ( var s = 0; s < 50; s++ )
+				painter.Circle( 192f + Next() * 32f, y0 + 112f + Next() * 32f, 0.4f + Next() * 0.6f, Next() < 0.5f ? Palette.Hex( 0xA88B62 ) : Palette.Hex( 0xD4BA92 ), 0.6f );
 		}
 
 		{
@@ -744,6 +953,32 @@ public sealed class OfficeTheme : ArenaTheme
 	}
 
 	/// <summary>
+	/// Numerals of a few strokes each (seven-segment, as a station clock's), 3 by 5 pixels, centred on
+	/// <paramref name="centre"/>: enough for a clock face's 12, 3, 6 and 9.
+	/// </summary>
+	static void Digits( Painter painter, string text, Vector2 centre )
+	{
+		// Segments a–g as from/to corners on a 0..1 by 0..2 glyph: top, upper right, lower right, bottom, lower left, upper left, middle.
+		var segments = new (Vector2 From, Vector2 To)[]
+		{
+			(new( 0f, 0f ), new( 1f, 0f )), (new( 1f, 0f ), new( 1f, 1f )), (new( 1f, 1f ), new( 1f, 2f )), (new( 0f, 2f ), new( 1f, 2f )),
+			(new( 0f, 1f ), new( 0f, 2f )), (new( 0f, 0f ), new( 0f, 1f )), (new( 0f, 1f ), new( 1f, 1f )),
+		};
+		var lit = new Dictionary<char, string> { ['1'] = "bc", ['2'] = "abged", ['3'] = "abgcd", ['6'] = "afgedc", ['9'] = "abfgcd" };
+		const float Width = 3f, Height = 2.5f, Gap = 1.6f;
+		var left = centre.x - (text.Length * Width + (text.Length - 1) * Gap) * 0.5f;
+		for ( var k = 0; k < text.Length; k++ )
+		{
+			var origin = new Vector2( left + k * (Width + Gap), centre.y - Height );
+			foreach ( var segment in lit[text[k]] )
+			{
+				var (from, to) = segments[segment - 'a'];
+				painter.Line( origin + new Vector2( from.x * Width, from.y * Height ), origin + new Vector2( to.x * Width, to.y * Height ), 1.1f, Palette.Ink, 0.9f );
+			}
+		}
+	}
+
+	/// <summary>
 	/// Builds the office's props into the floor's kit, in wall space (see <see cref="WallProps"/>). What
 	/// a player would use — cabinets, the cooler, boards, the desk and its chair — is at a player's
 	/// size; each prop group draws from a stream of its own (<see cref="WallProps.Apart"/>).
@@ -763,6 +998,9 @@ public sealed class OfficeTheme : ArenaTheme
 		/// <summary>One cell of the grid strip along the wall: regular, as a real grid is.</summary>
 		const float CellLength = 48f;
 
+		/// <summary>How far the room's ceiling texture runs before it repeats: a tile's underside wears one of its four cells.</summary>
+		const float CeilingSpan = 2f * Arena.TileSize;
+
 		/// <summary>The face of the skirting, which things on the ledge stand against.</summary>
 		const float Skirt = FloorContext.Recess - 3.5f;
 
@@ -779,8 +1017,11 @@ public sealed class OfficeTheme : ArenaTheme
 			_ceiling = ceiling;
 		}
 
-		/// <summary>The set-ups a plain bay is dealt, after the plant's and the cooler's.</summary>
-		public enum Look { Whiteboard, Pinboard, Cabinets, Desk, Shelving }
+		/// <summary>
+		/// What a plain bay is furnished as: the wall's meeting corner, a cooler, or one of the nine sets the
+		/// rest are dealt from.
+		/// </summary>
+		public enum Look { Plant, Meeting, Cooler, Whiteboard, Pinboard, Cabinets, Desk, Shelving, Storage, Lockers, Copier }
 
 		Skin TrimSkin( Rect region ) => new( _trim, region );
 		Skin Metal => TrimSkin( AluminiumSwatch );
@@ -799,7 +1040,8 @@ public sealed class OfficeTheme : ArenaTheme
 		/// The strip of suspended ceiling under the bulkhead: a main tee along its front and a cross tee
 		/// every cell, acoustic tiles in the cells (the room's own ceiling tile) and, in some, a light panel
 		/// — always in the cells over the wall's lamps (<paramref name="lamps"/>), otherwise every few cells,
-		/// irregularly, with now and then a panel whose tubes are failing and a tile pushed askew.
+		/// irregularly, with now and then a panel whose tubes are failing and a tile pushed askew. Under
+		/// some of the plain tiles, a smoke detector; under one near a corner, a camera dome.
 		/// </summary>
 		public void Grid( List<float> lamps ) => Apart( () =>
 		{
@@ -810,6 +1052,7 @@ public sealed class OfficeTheme : ArenaTheme
 			Kit.Box( Metal, At( new Vector3( (first + last) * 0.5f, -Reach - 0.6f, Strip - 0.9f ) ), new Vector3( last - first, 1.2f, 1.8f ), Run );
 
 			var gap = 0;
+			var plain = new List<float>();
 			for ( var c = 0; c < count; c++ )
 			{
 				var u0 = first + c * length;
@@ -839,30 +1082,72 @@ public sealed class OfficeTheme : ArenaTheme
 
 				// An acoustic tile from the room's own ceiling, one in a while pushed up askew, its edge dark.
 				var askew = Next() < 0.06f;
+				if ( !askew ) plain.Add( middle );
 				var lift = askew ? new Vector3( 0f, 0f, 1.2f ) : Vector3.Zero;
-				var tile = new Skin( _ceiling, new Rect( Next() * 0.4f, Next() * 0.4f, length / 112f, Reach / 112f ) );
+				var tile = new Skin( _ceiling, new Rect( Next() * 0.4f, Next() * 0.4f, length / CeilingSpan, Reach / CeilingSpan ) );
 				Kit.Quad( tile, At( a + lift ), At( d + lift * (askew ? 0f : 1f) ), At( cc + lift * (askew ? 0f : 1f) ), At( b + lift ) );
 			}
 			Kit.Box( Metal, At( new Vector3( first + count * length, -Reach * 0.5f, Strip - 0.75f ) ), new Vector3( 1.2f, Reach, 1.5f ), Run );
+
+			// Smoke detectors every few plain tiles, irregularly; a camera dome in a tile near one end.
+			var white = TrimSkin( WhiteSwatch );
+			for ( var k = Pick( 4 ); k < plain.Count; k += 5 + Pick( 6 ) )
+			{
+				var at = new Vector3( plain[k] + Range( -8f, 8f ), -Reach * 0.5f + Range( -2f, 2f ), Strip - 0.4f );
+				Kit.SmoothLathe( white, At( at - new Vector3( 0f, 0f, 1.8f ) ), new[] { new Vector2( 3.4f, 0f ), new Vector2( 3.4f, 1.2f ), new Vector2( 2.6f, 1.8f ) }, 12, Run, true, false, 50f );
+				Kit.Ellipsoid( TrimSkin( MarkerSwatch( 2 ) ), At( at - new Vector3( -1.6f, 0f, 1.9f ) ), new Vector3( 0.35f, 0.35f, 0.2f ), Run, 2, 4 );
+			}
+			if ( plain.Count > 0 )
+			{
+				var dome = plain[Next() < 0.5f ? 0 : plain.Count - 1];
+				var at = new Vector3( dome, -Reach * 0.5f, Strip - 0.4f );
+				Kit.SmoothLathe( white, At( at - new Vector3( 0f, 0f, 1f ) ), new[] { new Vector2( 4.4f, 0f ), new Vector2( 4.4f, 1f ) }, 12, Run, true, false );
+				Kit.Dome( TrimSkin( CharcoalSwatch ), At( at - new Vector3( 0f, 0f, 1f ) ), new Vector3( 3.6f, 3.6f, 3.4f ), Turn( Rotation.FromRoll( 180f ) ), 3, 12 );
+			}
 		} );
 
 		// ---- Bays ------------------------------------------------------------------------------
 
 		/// <summary>
-		/// A window bay: a venetian blind in the window; under the sill a radiator, a low cupboard or a
-		/// two-drawer cabinet; now and then a plant, a mug or a stack of papers on the sill.
+		/// A window bay: a venetian blind in the window, now and then a pothos hung in front of it; under the
+		/// sill a radiator, a credenza with files and a pot plant on it, a desk with its chair, or a row of
+		/// two-drawer cabinets; often a tall plant by the window; now and then a plant, a mug or a stack of
+		/// papers on the sill; then whatever the bay leaves bare beside the window filled (<see cref="Fill"/>).
 		/// </summary>
 		public void WindowBay( Bay bay, float width ) => Apart( () =>
 		{
+			_floor.Clear();
+			_wall.Clear();
+			_low.Clear();
+			Hang( bay.Middle, width + 6f, WindowSill, UpperRail );
 			Blind( bay.Middle, width );
+			if ( Next() < 0.35f ) HangingPlant( bay.Middle + Range( -0.3f, 0.3f ) * width );
+
 			var under = Next();
-			if ( under < 0.45f ) Radiator( bay.Middle + Range( -4f, 4f ), MathF.Min( width - Range( 8f, 20f ), bay.Width - 20f ) );
-			else if ( under < 0.75f ) Cupboard( bay.Middle + Range( -6f, 6f ), MathF.Min( width + Range( -10f, 10f ), bay.Width - 16f ), Range( 26f, 30f ) );
+			if ( under < 0.22f ) Radiator( bay.Middle + Range( -4f, 4f ), MathF.Min( width - Range( 8f, 20f ), bay.Width - 20f ) );
+			else if ( under < 0.5f ) Cupboard( bay.Middle + Range( -6f, 6f ), MathF.Min( width + Range( -10f, 10f ), bay.Width - 16f ), Range( 26f, 30f ), Next() < 0.7f );
+			else if ( under < 0.85f ) Desk( bay.Middle + Range( -6f, 6f ), MathF.Min( width - 6f, Range( 62f, 78f ) ) );
 			else
 			{
-				var side = Next() < 0.5f ? -1f : 1f;
-				Cabinet( bay.Middle + side * Range( 10f, width * 0.3f ), 2 );
+				// Two or three two-drawer cabinets in a row, things on them.
+				var count = width > 100f ? 2 + Pick( 2 ) : 2;
+				var u = bay.Middle - (count - 1) * 10f + Range( -10f, 10f );
+				for ( var k = 0; k < count; k++, u += Range( 19.5f, 21f ) )
+					Cabinet( u, 2, Next() < 0.3f ? 1 : 0 );
 			}
+			// Now and then a tall plant by the window, where the floor under the sill leaves room for its pot
+			// (its leaves before the edge of the glass, as a plant by a window does); nothing else taller
+			// than the sill stands in front of the glass.
+			if ( Next() < 0.55f )
+			{
+				var room = Gaps( _floor, bay.From + 3f, bay.To - 3f ).FindAll( g => g.To - g.From >= 24f );
+				if ( room.Count > 0 )
+				{
+					var (from, to) = room[Pick( room.Count )];
+					TallPlant( Next() < 0.5f ? from + 12f : to - 12f );
+				}
+			}
+			Claim( _floor, bay.Middle, width );
 
 			var sill = Next();
 			var at = bay.Middle + Range( -0.35f, 0.35f ) * width;
@@ -873,119 +1158,324 @@ public sealed class OfficeTheme : ArenaTheme
 			}
 			else if ( sill < 0.5f ) Mug( new Vector3( at, Face - 6f, WindowSill ) );
 			else if ( sill < 0.7f ) Papers( new Vector3( at, Face - 6.5f, WindowSill ), 2 + Pick( 4 ) );
+			Fill( bay );
 		} );
 
-		/// <summary>The wall's plant bay: a big potted plant to one side with a print over it, a pinboard or a whiteboard beside it.</summary>
-		public void PlantBay( Bay bay ) => Apart( () =>
+		/// <summary>
+		/// The stretches along a bay taken, for <see cref="Fill"/>: by what stands on the floor, by what hangs
+		/// on the upper fabric (v 104–156), and by what hangs low enough that nothing tall may stand under it.
+		/// </summary>
+		readonly List<(float From, float To)> _floor = new();
+		readonly List<(float From, float To)> _wall = new();
+		readonly List<(float From, float To)> _low = new();
+
+		static void Claim( List<(float From, float To)> taken, float u, float width ) => taken.Add( (u - width * 0.5f, u + width * 0.5f) );
+
+		/// <summary>Claims the stretch a wall piece from <paramref name="bottom"/> to <paramref name="top"/> covers: on the upper fabric if it reaches it, over the floor if it hangs low.</summary>
+		void Hang( float u, float width, float bottom, float top )
 		{
-			var side = Next() < 0.5f ? -1f : 1f;
-			var u = bay.Middle + side * bay.Width * Range( 0.2f, 0.28f );
-			Plant( u );
-			if ( Next() < 0.7f ) Print( u + Range( -4f, 4f ), Range( 118f, 132f ), Range( 30f, 40f ), Range( 38f, 48f ) );
-			var board = bay.Middle - side * bay.Width * Range( 0.1f, 0.18f );
-			if ( Next() < 0.5f ) Pinboard( board, Range( 54f, 70f ), Range( 40f, 50f ), Range( 58f, 66f ) );
-			else Whiteboard( board, MathF.Min( bay.Width * 0.55f, Range( 70f, 90f ) ), Range( 44f, 52f ), Range( 50f, 56f ) );
-			if ( Next() < 0.35f ) Clock( board + Range( -8f, 8f ), Range( 132f, 146f ) );
-		} );
+			if ( top > 104f && bottom < 156f ) Claim( _wall, u, width );
+			if ( bottom < 100f ) Claim( _low, u, width );
+		}
 
-		/// <summary>A cooler bay: the water cooler with a notice over it; a cupboard or a cabinet beside it under a print or a shelf.</summary>
-		public void CoolerBay( Bay bay ) => Apart( () =>
+		/// <summary>The stretches of <paramref name="from"/>..<paramref name="to"/> that nothing in <paramref name="taken"/> covers, kept a hair clear of what is there.</summary>
+		static List<(float From, float To)> Gaps( List<(float From, float To)> taken, float from, float to )
 		{
-			var side = Next() < 0.5f ? -1f : 1f;
-			var u = bay.Middle + side * bay.Width * Range( 0.15f, 0.25f );
-			Cooler( u );
-			Pinboard( u + Range( -4f, 4f ), Range( 36f, 46f ), Range( 28f, 34f ), Range( 72f, 80f ) );
-			var other = bay.Middle - side * bay.Width * Range( 0.15f, 0.25f );
-			if ( Next() < 0.5f ) Cabinet( other, 4 );
-			else Cupboard( other, MathF.Min( bay.Width * 0.4f, Range( 44f, 60f ) ), Range( 26f, 30f ) );
-			if ( Next() < 0.6f ) Print( other + Range( -4f, 4f ), Range( 112f, 128f ), Range( 30f, 42f ), Range( 38f, 50f ) );
-			else WallShelf( other, Range( 46f, 60f ), Range( 96f, 106f ) );
-			if ( Next() < 0.4f ) Clock( u + Range( -6f, 6f ), Range( 134f, 148f ) );
-		} );
+			var sorted = new List<(float From, float To)>( taken );
+			sorted.Sort( ( a, b ) => a.From.CompareTo( b.From ) );
+			var gaps = new List<(float From, float To)>();
+			var at = from;
+			foreach ( var (start, end) in sorted )
+			{
+				if ( start - 2f > at ) gaps.Add( (at, MathF.Min( start - 2f, to )) );
+				at = MathF.Max( at, end + 2f );
+			}
+			if ( to > at ) gaps.Add( (at, to) );
+			return gaps.FindAll( g => g.To > g.From );
+		}
 
-		/// <summary>One of the five set-ups in <paramref name="bay"/>, about a third with a wall clock over it.</summary>
+		/// <summary>
+		/// Fills what a bay's set left bare, so no stretch of it reads empty from the room. Along the skirting,
+		/// where nothing hangs low over the floor: a bookcase or a stationery cupboard where there is room
+		/// for one, a tall plant or a filing cabinet with boxes on it where there is less — each against one
+		/// end of its gap, so a long gap takes two. Under a board or a screen hung low, only what stays under
+		/// it: a two-drawer cabinet, a bin or a box. Up on the fabric, a print or a calendar wherever the wall
+		/// is bare.
+		/// </summary>
+		void Fill( Bay bay )
+		{
+			for ( var pass = 0; pass < 2; pass++ )
+			{
+				var taken = new List<(float From, float To)>( _floor );
+				taken.AddRange( _low );
+				foreach ( var (from, to) in Gaps( taken, bay.From + 3f, bay.To - 3f ) )
+				{
+					var gap = to - from;
+					var end = Next() < 0.5f;
+					float Place( float width ) => end ? from + width * 0.5f + 1f : to - width * 0.5f - 1f;
+					var roll = Next();
+					if ( gap >= 52f && roll < 0.55f )
+					{
+						var width = MathF.Min( gap - 4f, Range( 36f, 46f ) );
+						if ( Next() < 0.6f ) Shelving( Place( width ), width );
+						else TallCupboard( Place( width ), width );
+					}
+					else if ( gap >= 28f && roll < 0.85f )
+					{
+						if ( Next() < 0.55f ) Cabinet( Place( 19f ), 3 + Pick( 2 ), 1 + Pick( 2 ) );
+						else TallPlant( Place( 26f ) );
+					}
+				}
+			}
+
+			foreach ( var (from, to) in Gaps( _floor, bay.From + 3f, bay.To - 3f ) )
+			{
+				var gap = to - from;
+				var end = Next() < 0.5f;
+				float Place( float width ) => end ? from + width * 0.5f + 1f : to - width * 0.5f - 1f;
+				var roll = Next();
+				if ( gap >= 22f && roll < 0.5f ) Cabinet( Place( 19f ), 2 );
+				else if ( gap >= 15f && roll < 0.75f )
+				{
+					if ( Next() < 0.5f ) Bin( Place( 12f ) );
+					else ArchiveBoxes( new Vector3( Place( 15f ), Skirt - 7f, Ledge ), 1 + Pick( 2 ), Range( 13f, 15f ), Range( 10f, 11f ) );
+				}
+			}
+
+			foreach ( var (from, to) in Gaps( _wall, bay.From + 4f, bay.To - 4f ) )
+			{
+				var gap = to - from;
+				var roll = Next();
+				if ( gap < 36f || roll < 0.15f ) continue;
+				var u = (from + to) * 0.5f + Range( -0.25f, 0.25f ) * (gap - 36f);
+				if ( gap > 52f && roll < 0.8f ) Print( u, Range( 128f, 138f ), MathF.Min( gap - 14f, Range( 36f, 60f ) ), Range( 30f, 38f ) );
+				else if ( roll < 0.6f ) Calendar( u, Range( 124f, 132f ) );
+			}
+		}
+
+		/// <summary>
+		/// Furnishes <paramref name="bay"/> as <paramref name="look"/>: low by the skirting, something at a
+		/// player's height or taller, and wall decor up on the upper fabric panel — nothing in a bay stops
+		/// short at the lower rail. Things a player would use are at a player's size; decor up high is up to
+		/// half as big again, to hold a 268-high wall.
+		/// </summary>
 		public void Furnish( Look look, Bay bay ) => Apart( () =>
 		{
+			_floor.Clear();
+			_wall.Clear();
+			_low.Clear();
 			var side = Next() < 0.5f ? -1f : 1f;
-			var clockU = bay.Middle + Range( -0.25f, 0.25f ) * bay.Width;
+			var near = bay.Middle + side * bay.Width * 0.5f;
 			switch ( look )
 			{
+				case Look.Plant:
+				{
+					// The wall's big plant to one side; a year planner on the other, or a pinboard under a print.
+					var u = bay.Middle + side * bay.Width * Range( 0.2f, 0.28f );
+					TallPlant( u );
+					if ( Next() < 0.6f ) Print( u + Range( -4f, 4f ), Range( 132f, 140f ), Range( 36f, 46f ), Range( 30f, 38f ) );
+					var other = bay.Middle - side * bay.Width * Range( 0.12f, 0.2f );
+					if ( Next() < 0.5f ) Planner( other, Range( 98f, 104f ), MathF.Min( bay.Width * 0.5f, Range( 64f, 84f ) ) );
+					else
+					{
+						Pinboard( other, Range( 52f, 66f ), Range( 38f, 46f ), Range( 56f, 62f ) );
+						Print( other + Range( -6f, 6f ), Range( 132f, 138f ), Range( 40f, 56f ), Range( 32f, 40f ) );
+					}
+					break;
+				}
+				case Look.Meeting:
+				{
+					// The meeting corner: a screen on the wall over a credenza, the projector screen pulled down
+					// over the clerestory, a tall plant at one end where there is room.
+					var screen = MathF.Min( bay.Width - 40f, Range( 52f, 62f ) );
+					var u = bay.Middle + Range( -0.12f, 0.12f ) * bay.Width;
+					Screen( u, Range( 116f, 124f ), screen );
+					Cupboard( u + Range( -6f, 6f ), MathF.Min( bay.Width - 30f, screen + Range( 6f, 24f ) ), Range( 26f, 30f ) );
+					Projector( bay );
+					if ( bay.Width - screen > 90f ) TallPlant( near - side * Range( 16f, 22f ) );
+					break;
+				}
+				case Look.Cooler:
+				{
+					// The water cooler with a notice board hung high over it; a tall cabinet with boxes on it, or a
+					// stationery cupboard, beside it under a print.
+					var u = bay.Middle + side * bay.Width * Range( 0.15f, 0.25f );
+					Cooler( u );
+					Pinboard( u + Range( -4f, 4f ), Range( 40f, 50f ), Range( 34f, 40f ), Range( 108f, 114f ) );
+					var other = bay.Middle - side * bay.Width * Range( 0.15f, 0.25f );
+					if ( Next() < 0.5f ) Cabinet( other, 4, 1 + Pick( 2 ) );
+					else TallCupboard( other, Range( 34f, 40f ) );
+					Print( other + Range( -4f, 4f ), Range( 132f, 140f ), Range( 36f, 46f ), Range( 30f, 38f ) );
+					break;
+				}
 				case Look.Whiteboard:
 				{
-					// A whiteboard over a low cupboard of binders.
+					// A whiteboard over a low cupboard of binders; a stationery cupboard beside it where the bay
+					// has room, otherwise a high shelf of binders over it.
 					var width = MathF.Min( bay.Width - 24f, Range( 84f, 110f ) );
-					var u = bay.Middle + Range( -1f, 1f ) * (bay.Width - 24f - width) * 0.5f;
+					var room = bay.Width - width - 24f;
+					var u = room > 46f ? near - side * (12f + width * 0.5f) : bay.Middle + Range( -0.5f, 0.5f ) * room;
 					Whiteboard( u, width, Range( 46f, 56f ), Range( 50f, 55f ) );
-					Cupboard( u + Range( -8f, 8f ), MathF.Min( bay.Width - 20f, width + Range( -20f, 0f ) ), Range( 24f, 28f ) );
-					clockU = u + side * Range( 0f, width * 0.3f );
+					Cupboard( u + Range( -4f, 4f ), width + Range( -24f, -10f ), Range( 24f, 28f ) );
+					if ( room > 46f ) TallCupboard( u - side * (width * 0.5f + 4f + 20f), MathF.Min( room - 6f, Range( 36f, 42f ) ) );
+					else WallShelf( u + Range( -8f, 8f ), width * Range( 0.6f, 0.8f ), Range( 128f, 136f ) );
 					break;
 				}
 				case Look.Pinboard:
 				{
-					// A pinboard of notices by a tall filing cabinet (a two-drawer one now and then beside it),
-					// a print or a shelf of binders over the cabinet.
-					var cabinet = bay.Middle + side * bay.Width * Range( 0.22f, 0.3f );
-					Cabinet( cabinet, 3 + Pick( 2 ) );
+					// A pinboard of notices by a tall filing cabinet with archive boxes on it, a big print over the
+					// cabinet and a calendar over the board.
+					var cabinet = bay.Middle + side * bay.Width * Range( 0.24f, 0.3f );
+					Cabinet( cabinet, 4, 1 + Pick( 3 ) );
 					if ( Next() < 0.4f ) Cabinet( cabinet - side * Range( 20f, 22f ), 2 );
-					if ( Next() < 0.6f ) Print( cabinet + Range( -4f, 4f ), Range( 112f, 128f ), Range( 28f, 38f ), Range( 36f, 48f ) );
-					else WallShelf( cabinet, Range( 40f, 54f ), Range( 92f, 104f ) );
 					var board = bay.Middle - side * bay.Width * Range( 0.08f, 0.16f );
-					Pinboard( board, Range( 56f, 74f ), Range( 40f, 50f ), Range( 58f, 66f ) );
-					clockU = board + Range( -10f, 10f );
+					Pinboard( board, Range( 56f, 74f ), Range( 40f, 48f ), Range( 56f, 60f ) );
+					var calendar = board - side * Range( 0f, 8f );
+					Calendar( calendar, Range( 132f, 136f ) );
+					Print( cabinet, Range( 130f, 140f ), MathF.Max( 26f, MathF.Min( Range( 40f, 54f ), (MathF.Abs( calendar - cabinet ) - 22f) * 2f ) ), Range( 32f, 40f ) );
 					break;
 				}
-				case Look.Desk:
+				case Look.Cabinets:
 				{
-					// A desk against the wall, its chair tucked in, a shelf or a print over it, a cabinet beside it.
-					var length = MathF.Min( bay.Width - 44f, Range( 62f, 80f ) );
-					var u = bay.Middle + side * Range( 0f, (bay.Width - 44f - length) * 0.5f );
-					Desk( u, length );
-					if ( Next() < 0.55f ) WallShelf( u + Range( -8f, 8f ), length * Range( 0.6f, 0.85f ), Range( 82f, 92f ) );
-					else Print( u + Range( -10f, 10f ), Range( 100f, 116f ), Range( 30f, 40f ), Range( 36f, 46f ) );
-					if ( bay.Width - length > 64f ) Cabinet( u - side * (length * 0.5f + 13f), 2 + Pick( 3 ) );
-					clockU = u + side * length * Range( 0.25f, 0.4f );
-					break;
-				}
-				case Look.Shelving:
-				{
-					// One or two open shelving units full of files, a floor plant or a two-drawer cabinet beside them.
-					var width = Range( 44f, 58f );
-					var u = bay.Middle + side * Range( 0f, MathF.Max( 0f, bay.Width * 0.5f - width - 14f ) );
-					Shelving( u, width );
-					var free = bay.Middle - side * bay.Width * Range( 0.28f, 0.34f );
-					var beside = Next();
-					if ( bay.Width > 150f && beside < 0.4f ) Shelving( u - side * (width + Range( 0.5f, 2f )), Range( 40f, 52f ) );
-					else if ( beside < 0.6f ) Cabinet( u - side * (width * 0.5f + 12f), 2 );
-					else if ( beside < 0.8f ) Plant( free );
-					else Print( free, Range( 96f, 112f ), Range( 26f, 34f ), Range( 34f, 44f ) );
-					clockU = u + Range( -8f, 8f );
-					break;
-				}
-				default:
-				{
-					// A row of filing cabinets, every one its own height, colour and state, a shelf of binders
-					// or a pair of prints over them.
+					// A row of filing cabinets, every one its own height, colour and state, archive boxes on some;
+					// a year planner over them, or a shelf of binders under a pair of prints.
 					var count = bay.Width > 150f ? 3 + Pick( 2 ) : 2 + Pick( 2 );
 					var u = bay.Middle - (count - 1) * 10f + Range( -8f, 8f );
 					var middle = u + (count - 1) * 10f;
 					for ( var k = 0; k < count; k++ )
 					{
-						Cabinet( u, 2 + Pick( 3 ) );
+						Cabinet( u, 2 + Pick( 3 ), Next() < 0.4f ? 1 + Pick( 2 ) : 0 );
 						u += Range( 19.5f, 21f );
 					}
-					if ( Next() < 0.55f ) WallShelf( middle + Range( -6f, 6f ), MathF.Min( bay.Width - 30f, count * 20f + Range( -4f, 12f ) ), Range( 90f, 102f ) );
+					if ( Next() < 0.6f ) Planner( middle + Range( -6f, 6f ), Range( 98f, 104f ), MathF.Min( bay.Width - 30f, Range( 64f, 88f ) ) );
 					else
 					{
-						var gap = Range( 18f, 26f );
-						Print( middle - gap, Range( 108f, 120f ), Range( 26f, 34f ), Range( 34f, 44f ) );
-						Print( middle + gap, Range( 108f, 120f ), Range( 26f, 34f ), Range( 34f, 44f ) );
+						WallShelf( middle + Range( -6f, 6f ), MathF.Min( bay.Width - 30f, count * 20f + Range( -4f, 12f ) ), Range( 92f, 98f ) );
+						var gap = Range( 20f, 28f );
+						Print( middle - gap, Range( 134f, 140f ), Range( 30f, 38f ), Range( 30f, 36f ) );
+						Print( middle + gap, Range( 134f, 140f ), Range( 30f, 38f ), Range( 30f, 36f ) );
 					}
-					clockU = Next() < 0.5f ? middle + Range( -10f, 10f ) : -1f;
+					break;
+				}
+				case Look.Desk:
+				{
+					// A desk against the wall, its chair tucked in, a high shelf of binders over it; beside it a
+					// bookcase or a cupboard where there is room, a tall plant or a cabinet where there is less.
+					var length = MathF.Min( bay.Width - 44f, Range( 62f, 80f ) );
+					var u = bay.Middle + side * Range( 0f, (bay.Width - 44f - length) * 0.5f );
+					Desk( u, length );
+					WallShelf( u + Range( -8f, 8f ), length * Range( 0.6f, 0.85f ), Range( 126f, 136f ) );
+					var free = bay.Width * 0.5f - (u - bay.Middle) * -side - length * 0.5f;
+					var at = u - side * (length * 0.5f + 2f);
+					if ( free > 52f && Next() < 0.6f ) Shelving( at - side * 24f, Range( 42f, 48f ) );
+					else if ( free > 46f ) TallCupboard( at - side * 21f, Range( 36f, 40f ) );
+					else if ( free > 30f ) TallPlant( at - side * 14f );
+					else if ( free > 22f ) Cabinet( at - side * 11f, 2 + Pick( 3 ) );
+					Bin( u + side * length * Range( 0.3f, 0.45f ) );
+					break;
+				}
+				case Look.Shelving:
+				{
+					// Bookcases full of files, two side by side in a wide bay; a print over them, a plant or a
+					// cabinet beside them.
+					var width = Range( 44f, 56f );
+					var u = bay.Middle + side * Range( 0f, MathF.Max( 0f, bay.Width * 0.5f - width - 14f ) );
+					Shelving( u, width );
+					var pair = bay.Width > 130f && Next() < 0.7f;
+					var second = Range( 40f, 52f );
+					if ( pair ) Shelving( u - side * ((width + second) * 0.5f + Range( 0.5f, 2f )), second );
+					Print( u - (pair ? side * (width + second) * 0.25f : 0f) + Range( -6f, 6f ), Range( 128f, 138f ), Range( 50f, 66f ), Range( 34f, 42f ) );
+					var reach = pair ? width * 0.5f + second + 2f : width * 0.5f;
+					var free = bay.Middle - side * bay.Width * Range( 0.3f, 0.36f );
+					if ( MathF.Abs( free - u ) > reach + 14f )
+					{
+						if ( Next() < 0.6f ) TallPlant( free );
+						else Cabinet( free, 2 + Pick( 3 ), Pick( 3 ) );
+					}
+					break;
+				}
+				case Look.Storage:
+				{
+					// Tall stationery cupboards, one or two, boxes or a trailing plant on top; a calendar and a
+					// two-drawer cabinet beside them.
+					var width = Range( 36f, 42f );
+					var u = bay.Middle + side * bay.Width * Range( 0.1f, 0.2f );
+					TallCupboard( u, width );
+					var pair = bay.Width > 150f && Next() < 0.6f;
+					if ( pair ) TallCupboard( u - side * (width + Range( 1f, 3f )), Range( 34f, 42f ) );
+					var free = u - side * (width * (pair ? 1.5f : 0.5f) + Range( 16f, 24f ));
+					if ( MathF.Abs( free - bay.Middle ) < bay.Width * 0.5f - 14f )
+					{
+						Cabinet( free, 2, Pick( 2 ) );
+						Calendar( free + Range( -4f, 4f ), Range( 112f, 124f ) );
+					}
+					break;
+				}
+				case Look.Lockers:
+				{
+					// A bank of lockers, boxes on top here and there, a poster over it; a tall plant or a bin by it.
+					var columns = Math.Clamp( (int)((bay.Width - 50f) / 14f), 2, 5 );
+					var width = Range( 12.5f, 14f );
+					var u = bay.Middle + side * Range( 0f, MathF.Max( 0f, (bay.Width - 50f - columns * width) * 0.5f ) );
+					Lockers( u, columns, width );
+					Print( u + Range( -8f, 8f ), Range( 126f, 136f ), MathF.Min( columns * width, Range( 50f, 64f ) ), Range( 34f, 42f ) );
+					var free = u - side * (columns * width * 0.5f + Range( 14f, 18f ));
+					if ( MathF.Abs( free - bay.Middle ) < bay.Width * 0.5f - 12f )
+					{
+						if ( Next() < 0.6f ) TallPlant( free );
+						else Bin( free );
+					}
+					break;
+				}
+				default:
+				{
+					// A photocopier with boxes of paper beside it and a notice over it; a stationery cupboard at
+					// the bay's other end.
+					var u = bay.Middle + side * bay.Width * Range( 0.1f, 0.18f );
+					Copier( u, -side );
+					Pinboard( u + Range( -4f, 4f ), Range( 40f, 52f ), Range( 32f, 40f ), Range( 66f, 72f ) );
+					var boxes = u + side * Range( 26f, 30f );
+					if ( MathF.Abs( boxes - bay.Middle ) < bay.Width * 0.5f - 12f )
+						ArchiveBoxes( new Vector3( boxes, Skirt - 8f, Ledge ), 1 + Pick( 3 ), 17f, 11f );
+					var cupboard = bay.Middle - side * bay.Width * Range( 0.24f, 0.3f );
+					if ( MathF.Abs( cupboard - u ) > 50f )
+					{
+						TallCupboard( cupboard, Range( 34f, 40f ) );
+						Print( cupboard + Range( -4f, 4f ), Range( 128f, 136f ), Range( 36f, 46f ), Range( 30f, 38f ) );
+					}
 					break;
 				}
 			}
-			if ( clockU > 0f && Next() < 0.35f ) Clock( clockU, Range( 134f, 150f ) );
+			Fill( bay );
 		} );
+
+		/// <summary>
+		/// Up over the partitions on one wall, in wall order: a run or two of cable trunking along the plaster
+		/// with a drop down the clerestory, an exit sign over one bay, and over the others an air-conditioner
+		/// or a speaker — never two bare bays running (<paramref name="meeting"/>'s bay has its projector
+		/// screen). On the columns, one clock a wall and a speaker here and there.
+		/// </summary>
+		public void Overhead( List<Bay> wall, int meeting )
+		{
+			Apart( () => Trunking( wall ) );
+			var exit = Pick( wall.Count );
+			if ( wall[exit].Index == meeting ) exit = (exit + 1) % wall.Count;
+			var bare = 0;
+			for ( var k = 0; k < wall.Count; k++ )
+			{
+				var bay = wall[k];
+				if ( bay.Index == meeting || bay.Width < 60f ) bare = 0;
+				else if ( k == exit ) { ExitSign( bay ); bare = 0; }
+				else if ( bare > 0 || Next() < 0.65f )
+				{
+					if ( Next() < 0.6f ) AirCon( bay );
+					else Speaker( bay );
+					bare = 0;
+				}
+				else bare++;
+			}
+			Apart( () => Columns( wall ) );
+		}
 
 		/// <summary>
 		/// A split air-conditioner on the plaster between the partition head and the bulkhead, somewhere
@@ -997,7 +1487,7 @@ public sealed class OfficeTheme : ArenaTheme
 			var length = MathF.Min( bay.Width - 30f, Range( 40f, 52f ) );
 			var u = bay.Middle + Range( -0.5f, 0.5f ) * (bay.Width - 30f - length);
 			const float Depth = 11f;
-			var v = Range( 222f, 226f );
+			var v = Range( 223.5f, 226.5f );
 			var y = Face - Depth * 0.5f + 0.5f;
 			var white = TrimSkin( WhiteSwatch );
 			Kit.BevelBox( white, At( new Vector3( u, y, v + 6f ) ), new Vector3( length, Depth, 12f ), 1.6f, Run );
@@ -1006,6 +1496,116 @@ public sealed class OfficeTheme : ArenaTheme
 			var end = u + (Next() < 0.5f ? -1f : 1f) * (length * 0.5f - 3f);
 			Kit.BevelBox( white, At( new Vector3( end, Face - 1.8f, (PartitionTop + v) * 0.5f ) ), new Vector3( 4f, 3.6f, v - PartitionTop + 1f ), 0.4f, Run );
 		} );
+
+		/// <summary>
+		/// Runs of cable tray along the plaster just over the partition head, each two to four bays long
+		/// (passing behind the columns), one or two a wall: a wire tray with its front lip, two to four cables
+		/// laid in it in their own colours, and from somewhere along each a white trunking drop running down
+		/// the clerestory glass to the rail.
+		/// </summary>
+		void Trunking( List<Bay> wall )
+		{
+			const float V = PartitionTop + 1.2f;
+			const float Tray = 8f;
+			var start = Pick( wall.Count );
+			for ( var run = 1 + Pick( 2 ); run > 0 && start < wall.Count; run-- )
+			{
+				var end = Math.Min( wall.Count, start + 2 + Pick( 3 ) );
+				var drop = start + Pick( end - start );
+				var cables = new List<(Skin Skin, float Y, float Radius)>();
+				for ( var c = 2 + Pick( 3 ); c > 0; c-- )
+					cables.Add( (TrimSkin( Next() < 0.4f ? CharcoalSwatch : Next() < 0.5f ? MarkerSwatch( 1 ) : CabinetSwatch( 1 ) ), Face - Range( 1.5f, Tray - 1.5f ), Range( 0.45f, 0.8f )) );
+				for ( var k = start; k < end; k++ )
+				{
+					var bay = wall[k];
+					Kit.Box( Metal, At( new Vector3( bay.Middle, Face - Tray * 0.5f, V ) ), new Vector3( bay.Width + 2f, Tray, 0.5f ), Run );
+					Kit.Box( Metal, At( new Vector3( bay.Middle, Face - Tray - 0.2f, V + 1.1f ) ), new Vector3( bay.Width + 2f, 0.4f, 2.6f ), Run );
+					foreach ( var (skin, y, radius) in cables )
+						Kit.Tube( skin, At( new[] { new Vector3( bay.From - 1f, y, V + 0.25f + radius ), new Vector3( bay.To + 1f, y, V + 0.25f + radius ) } ), radius, 4 );
+					if ( k != drop || bay.Width < 40f ) continue;
+					var u = Next() < 0.5f ? bay.From + Range( 6f, 14f ) : bay.To - Range( 6f, 14f );
+					Kit.BevelBox( TrimSkin( WhiteSwatch ), At( new Vector3( u, Face - 1.4f, (UpperRail + RailHeight + V) * 0.5f ) ), new Vector3( 3.4f, 2.6f, V - UpperRail - RailHeight ), 0.4f, Run );
+				}
+				start = end + 1 + Pick( 3 );
+			}
+		}
+
+		/// <summary>
+		/// An exit sign on the plaster over <paramref name="bay"/>: a white box with its lit face, a running
+		/// figure and an arrow in white on green — half as big again as life, to read across the room.
+		/// </summary>
+		void ExitSign( Bay bay ) => Apart( () =>
+		{
+			var u = bay.Middle + Range( -0.3f, 0.3f ) * MathF.Max( 0f, bay.Width - 40f );
+			var v = Range( 228f, 231f );
+			const float Width = 21f, Height = 9.5f, Depth = 3f;
+			Kit.BevelBox( TrimSkin( WhiteSwatch ), At( new Vector3( u, Face - Depth * 0.5f + 0.5f, v ) ), new Vector3( Width + 2f, Depth, Height + 2f ), 0.5f, Run );
+			Room.WallPicture( Side, _glow, ExitGlow, u - Width * 0.5f, u + Width * 0.5f, v - Height * 0.5f, v + Height * 0.5f, Face - Depth + 0.45f, false );
+		} );
+
+		/// <summary>A wall speaker on the plaster over <paramref name="bay"/>, tipped down at the room.</summary>
+		void Speaker( Bay bay ) => Apart( () =>
+		{
+			var u = bay.Middle + Range( -0.35f, 0.35f ) * MathF.Max( 0f, bay.Width - 30f );
+			Speaker( u, Range( 224f, 228f ), Face );
+		} );
+
+		/// <summary>
+		/// A speaker box a third over life size hung on the surface at depth <paramref name="wall"/>, its foot at
+		/// <paramref name="v"/>: white, a charcoal grille, tipped down at the room on its bracket.
+		/// </summary>
+		void Speaker( float u, float v, float wall )
+		{
+			var tip = Turn( Rotation.FromRoll( -Range( 8f, 14f ) ) );
+			var centre = new Vector3( u, wall - 4.5f, v + 7f );
+			Kit.Box( Metal, At( new Vector3( u, wall - 1f, v + 7f ) ), new Vector3( 2f, 2f, 4f ), Run );
+			Kit.BevelBox( TrimSkin( WhiteSwatch ), At( centre ), new Vector3( 9.5f, 6f, 14f ), 1f, tip );
+			Kit.Box( TrimSkin( CharcoalSwatch ), At( centre ) + tip * new Vector3( 0f, -3.05f, 0f ), new Vector3( 8f, 0.2f, 12f ), tip );
+		}
+
+		/// <summary>
+		/// On the columns between the bays (never the pier, which carries the floor's plaque): the wall's one
+		/// clock, high, where it reads from anywhere in the room, and a speaker on one column in three.
+		/// </summary>
+		void Columns( List<Bay> wall )
+		{
+			var posts = new List<float>();
+			for ( var k = 0; k + 1 < wall.Count; k++ )
+			{
+				var post = (wall[k].To + wall[k + 1].From) * 0.5f;
+				if ( MathF.Abs( post - FloorContext.HalfSpan ) > 50f ) posts.Add( post );
+			}
+			if ( posts.Count == 0 ) return;
+			var clock = Pick( posts.Count );
+			for ( var k = 0; k < posts.Count; k++ )
+			{
+				if ( k == clock ) Clock( posts[k], Range( 158f, 168f ), 0f );
+				else if ( Next() < 0.33f ) Speaker( posts[k] + Range( -2f, 2f ), Range( 196f, 210f ), 0f );
+			}
+		}
+
+		/// <summary>
+		/// A projector screen over <paramref name="bay"/>: its case on the plaster under the bulkhead, the
+		/// screen pulled part-way down in front of the clerestory glass, black-bordered at the top, its weighted
+		/// bar at the foot with a pull ring.
+		/// </summary>
+		void Projector( Bay bay )
+		{
+			var length = MathF.Min( bay.Width - 30f, Range( 84f, 104f ) );
+			var u = bay.Middle + Range( -0.5f, 0.5f ) * (bay.Width - 30f - length);
+			var top = Strip - Range( 2f, 3f );
+			var foot = Range( 172f, 196f );
+			const float Y = Face - 3.2f;
+			Kit.BevelBox( TrimSkin( WhiteSwatch ), At( new Vector3( u, Face - 3f, top - 3f ) ), new Vector3( length + 6f, 6f, 6f ), 1.4f, Run );
+			foreach ( var s in new[] { -1f, 1f } )
+				Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( u + s * (length * 0.5f + 3.1f), Face - 3f, top - 3f ) ), new Vector3( 0.4f, 5f, 5f ), Run );
+			Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( u, Y, top - 8f ) ), new Vector3( length - 4f, 0.2f, 4f ), Run );
+			Kit.Box( TrimSkin( BoardSwatch ), At( new Vector3( u, Y + 0.05f, (top - 10f + foot) * 0.5f ) ), new Vector3( length - 4f, 0.2f, top - 10f - foot ), Run );
+			Kit.BevelBox( TrimSkin( CharcoalSwatch ), At( new Vector3( u, Y, foot - 0.6f ) ), new Vector3( length - 2f, 1.4f, 1.6f ), 0.4f, Run );
+			var ring = u + Range( -0.1f, 0.1f ) * length;
+			Kit.Tube( TrimSkin( CharcoalSwatch ), At( new[] { new Vector3( ring, Y - 0.4f, foot - 1.4f ), new Vector3( ring, Y - 0.6f, foot - 6f ) } ), 0.2f, 3 );
+			Kit.SmoothLathe( TrimSkin( CharcoalSwatch ), At( new Vector3( ring, Y - 0.6f, foot - 8f ) ), new[] { new Vector2( 1.2f, 0f ), new Vector2( 1.2f, 0.4f ) }, 8, Turn( Rotation.FromRoll( 90f ) ), true, true );
+		}
 
 		// ---- Things --------------------------------------------------------------------------
 
@@ -1062,6 +1662,7 @@ public sealed class OfficeTheme : ArenaTheme
 		/// </summary>
 		void Radiator( float u, float length )
 		{
+			Claim( _floor, u, length );
 			var height = Range( 22f, 27f );
 			var foot = Range( 6f, 9f );
 			var y = Face - 4f;
@@ -1070,7 +1671,7 @@ public sealed class OfficeTheme : ArenaTheme
 			var pitch = Range( 3.6f, 4.2f );
 			var channels = (int)((length - 3f) / pitch);
 			for ( var k = 0; k < channels; k++ )
-				Kit.BevelBox( white, At( new Vector3( u - (channels - 1) * pitch * 0.5f + k * pitch, y - 2.3f, foot + height * 0.5f ) ), new Vector3( pitch * 0.7f, 1f, height - 2.4f ), 0.3f, Run );
+				Kit.Box( white, At( new Vector3( u - (channels - 1) * pitch * 0.5f + k * pitch, y - 2.3f, foot + height * 0.5f ) ), new Vector3( pitch * 0.7f, 1f, height - 2.4f ), Run );
 			Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( u, y, foot + height + 0.05f ) ), new Vector3( length - 2f, 2.4f, 0.2f ), Run );
 			foreach ( var s in new[] { -1f, 1f } )
 				Kit.Box( TrimSkin( WhiteSwatch ), At( new Vector3( u + s * length * 0.35f, y + 2f, foot - 1f ) ), new Vector3( 2f, 3f, 4f ), Run );
@@ -1081,10 +1682,12 @@ public sealed class OfficeTheme : ArenaTheme
 
 		/// <summary>
 		/// A low cupboard <paramref name="length"/> long and <paramref name="height"/> high at <paramref name="u"/>:
-		/// a carcass in one of the cabinet paints, two or three doors with pulls, binders and a box on top.
+		/// a carcass in one of the cabinet paints, two or three doors with pulls, binders on top and a box, papers
+		/// or a small plant — or, with <paramref name="plant"/>, a pot plant big enough to read from the room.
 		/// </summary>
-		void Cupboard( float u, float length, float height )
+		void Cupboard( float u, float length, float height, bool plant = false )
 		{
+			Claim( _floor, u, length );
 			var depth = Range( 16f, 19f );
 			var y = Skirt - depth * 0.5f;
 			var paint = TrimSkin( CabinetSwatch( Pick( 3 ) ) );
@@ -1111,6 +1714,11 @@ public sealed class OfficeTheme : ArenaTheme
 				if ( Next() < 0.12f ) lean = Range( 12f, 25f );
 			}
 			var rest = (u + length * 0.5f - stop) * 0.5f + stop;
+			if ( plant )
+			{
+				MediumPlant( new Vector3( rest, y + Range( -1f, 1f ), Ledge + height ) );
+				return;
+			}
 			var item = Next();
 			if ( item < 0.35f ) SmallPlant( new Vector3( rest, y, Ledge + height ) );
 			else if ( item < 0.6f ) Kit.BevelBox( TrimSkin( WhiteSwatch ), At( new Vector3( rest, y, Ledge + height + 5f ) ), new Vector3( Range( 12f, 16f ), Range( 10f, 13f ), 10f ), 0.5f, Turn( Rotation.FromYaw( Range( -8f, 8f ) ) ) );
@@ -1118,13 +1726,14 @@ public sealed class OfficeTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// An open shelving unit <paramref name="width"/> wide at <paramref name="u"/>, about a man's height:
+		/// An open bookcase <paramref name="width"/> wide at <paramref name="u"/>, a head taller than a man:
 		/// two ends, a top, a plinth and three or four shelves, each holding its own mix — a run of binders
 		/// leaning where it ends, box files, a stack of papers, a small plant.
 		/// </summary>
 		void Shelving( float u, float width )
 		{
-			var height = Range( 66f, 78f );
+			Claim( _floor, u, width );
+			var height = Range( 80f, 90f );
 			const float Depth = 14f;
 			var y = Skirt - Depth * 0.5f;
 			var paint = TrimSkin( Next() < 0.5f ? WhiteSwatch : CabinetSwatch( Pick( 3 ) ) );
@@ -1181,10 +1790,11 @@ public sealed class OfficeTheme : ArenaTheme
 		/// <summary>
 		/// A steel filing cabinet of <paramref name="drawers"/> drawers at <paramref name="u"/>, against the wall:
 		/// a carcass in one of the cabinet paints, proud drawer fronts with a pull and a label holder each, now
-		/// and then a drawer left open; binders, papers or a small plant on top.
+		/// and then a drawer left open; on top, <paramref name="boxes"/> archive boxes, or binders, papers or a small plant.
 		/// </summary>
-		void Cabinet( float u, int drawers )
+		void Cabinet( float u, int drawers, int boxes = 0 )
 		{
+			Claim( _floor, u, 19f );
 			var width = Range( 17.5f, 19f );
 			var depth = Range( 22f, 25f );
 			var drawer = Range( 12.5f, 13.5f );
@@ -1206,6 +1816,11 @@ public sealed class OfficeTheme : ArenaTheme
 			}
 
 			var top = Ledge + height;
+			if ( boxes > 0 )
+			{
+				ArchiveBoxes( new Vector3( u + Range( -1f, 1f ), y + Range( -2f, 1f ), top ), boxes, Range( 15f, 17f ), Range( 10f, 11.5f ) );
+				return;
+			}
 			var item = Next();
 			if ( item < 0.3f ) SmallPlant( new Vector3( u + Range( -3f, 3f ), y, top ) );
 			else if ( item < 0.55f ) Papers( new Vector3( u + Range( -2f, 2f ), y, top ), 2 + Pick( 8 ) );
@@ -1224,6 +1839,7 @@ public sealed class OfficeTheme : ArenaTheme
 		/// </summary>
 		void Desk( float u, float length )
 		{
+			Claim( _floor, u, length );
 			const float Top = 29f;
 			const float Depth = 24f;
 			var y = Skirt - Depth * 0.5f;
@@ -1301,13 +1917,14 @@ public sealed class OfficeTheme : ArenaTheme
 		/// </summary>
 		void Print( float u, float v, float width, float height )
 		{
+			Hang( u, width + 4f, v - height * 0.5f, v + height * 0.5f );
 			var face = Face - 1.2f;
 			Kit.Box( TrimSkin( WhiteSwatch ), At( new Vector3( u, (face + Face + 1f) * 0.5f, v ) ), new Vector3( width, Face + 1f - face, height ), Run );
 			var frame = TrimSkin( Next() < 0.55f ? CharcoalSwatch : CabinetSwatch( Pick( 3 ) ) );
 			foreach ( var s in new[] { -1f, 1f } )
 			{
-				Kit.BevelBox( frame, At( new Vector3( u, face - 0.3f, v + s * (height * 0.5f + 0.8f) ) ), new Vector3( width + 3.2f, 2.2f, 1.6f ), 0.3f, Run );
-				Kit.BevelBox( frame, At( new Vector3( u + s * (width * 0.5f + 0.8f), face - 0.3f, v ) ), new Vector3( 1.6f, 2.2f, height ), 0.3f, Run );
+				Kit.Box( frame, At( new Vector3( u, face - 0.3f, v + s * (height * 0.5f + 0.8f) ) ), new Vector3( width + 3.2f, 2.2f, 1.6f ), Run );
+				Kit.Box( frame, At( new Vector3( u + s * (width * 0.5f + 0.8f), face - 0.3f, v ) ), new Vector3( 1.6f, 2.2f, height ), Run );
 			}
 
 			var w = width - Range( 7f, 10f );
@@ -1358,6 +1975,7 @@ public sealed class OfficeTheme : ArenaTheme
 		/// <summary>A white wall shelf <paramref name="length"/> long at <paramref name="u"/>, <paramref name="v"/>, on two brackets: binders along it, a box or a small plant.</summary>
 		void WallShelf( float u, float length, float v )
 		{
+			Hang( u, length, v - 8f, v + 14f );
 			const float Depth = 11f;
 			var y = Face - Depth * 0.5f + 0.5f;
 			Kit.BevelBox( TrimSkin( WhiteSwatch ), At( new Vector3( u, y, v - 0.9f ) ), new Vector3( length, Depth, 1.8f ), 0.3f, Run );
@@ -1381,20 +1999,26 @@ public sealed class OfficeTheme : ArenaTheme
 
 		/// <summary>
 		/// A whiteboard <paramref name="width"/> by <paramref name="height"/> at <paramref name="u"/>, its foot at
-		/// <paramref name="v"/>: its own crop of the scribbled sheet, an aluminium frame, a tray with markers and a duster.
+		/// <paramref name="v"/>: blank white, with two or three of the sheet's motifs on it — each whole, each
+		/// board its own pick, place and size, so no two boards carry the same marks — in an aluminium frame,
+		/// a tray with markers and a duster.
 		/// </summary>
 		void Whiteboard( float u, float width, float height, float v )
 		{
+			Hang( u, width + 3f, v, v + height );
 			var face = Face - 1.6f;
-			var rows = MathF.Min( SheetHeight, Range( 64f, SheetHeight ) );
-			var columns = MathF.Min( SheetWidth, rows * width / height );
-			rows = columns * height / width;
-			var x = SheetX + Next() * (SheetWidth - columns);
-			var y = Next() * (SheetHeight - rows);
-			var top = TrimRows( TrimBand.Infill ).Top;
-			var crop = new Rect( x / TrimSize, (top + y) / TrimSize, columns / TrimSize, rows / TrimSize );
-			Room.WallPicture( Side, _trim, crop, u - width * 0.5f, u + width * 0.5f, v, v + height, face, false );
-			Kit.Box( TrimSkin( WhiteSwatch ), At( new Vector3( u, (face + 0.2f + Face + 1f) * 0.5f, v + height * 0.5f ) ), new Vector3( width, Face + 0.8f - face, height ), Run );
+			Kit.Box( TrimSkin( BoardSwatch ), At( new Vector3( u, (face + 0.2f + Face + 1f) * 0.5f, v + height * 0.5f ) ), new Vector3( width, Face + 0.8f - face, height ), Run );
+			var count = width > 96f && Next() < 0.6f ? 3 : 2;
+			var slot = width / count;
+			var first = Pick( Motifs );
+			var step = 1 + 2 * Pick( Motifs / 2 );
+			for ( var k = 0; k < count; k++ )
+			{
+				var size = MathF.Min( slot - 3f, height * Range( 0.6f, 0.86f ) );
+				var mu = u - width * 0.5f + slot * (k + 0.5f) + Range( -0.5f, 0.5f ) * (slot - 3f - size);
+				var mv = v + height * 0.5f + Range( -0.5f, 0.5f ) * (height - 3f - size);
+				Room.WallPicture( Side, _trim, MotifSwatch( (first + k * step) % Motifs ), mu - size * 0.5f, mu + size * 0.5f, mv - size * 0.5f, mv + size * 0.5f, face, false );
+			}
 
 			foreach ( var s in new[] { -1f, 1f } )
 			{
@@ -1418,12 +2042,13 @@ public sealed class OfficeTheme : ArenaTheme
 		/// </summary>
 		void Pinboard( float u, float width, float height, float v )
 		{
+			Hang( u, width + 3f, v, v + height );
 			var face = Face - 1.4f;
 			Kit.Box( TrimSkin( CorkSwatch ), At( new Vector3( u, (face + Face + 1f) * 0.5f, v + height * 0.5f ) ), new Vector3( width, Face + 1f - face, height ), Run );
 			foreach ( var s in new[] { -1f, 1f } )
 			{
-				Kit.BevelBox( Metal, At( new Vector3( u, face - 0.2f, v + height * 0.5f + s * (height * 0.5f + 0.6f) ) ), new Vector3( width + 2.4f, 2f, 1.2f ), 0.3f, Run );
-				Kit.BevelBox( Metal, At( new Vector3( u + s * (width * 0.5f + 0.6f), face - 0.2f, v + height * 0.5f ) ), new Vector3( 1.2f, 2f, height ), 0.3f, Run );
+				Kit.Box( Metal, At( new Vector3( u, face - 0.2f, v + height * 0.5f + s * (height * 0.5f + 0.6f) ) ), new Vector3( width + 2.4f, 2f, 1.2f ), Run );
+				Kit.Box( Metal, At( new Vector3( u + s * (width * 0.5f + 0.6f), face - 0.2f, v + height * 0.5f ) ), new Vector3( 1.2f, 2f, height ), Run );
 			}
 
 			var notes = 3 + Pick( 5 );
@@ -1438,19 +2063,20 @@ public sealed class OfficeTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// A wall clock at <paramref name="u"/>, <paramref name="v"/>: a moulded rim in one of the cabinet paints
-		/// round the ticked face, its hands at whatever time it is in this room, a carrot second hand.
+		/// A wall clock at <paramref name="u"/>, <paramref name="v"/> on the surface at depth <paramref name="wall"/>:
+		/// a moulded rim in one of the cabinet paints round a ticked face or one with numerals, its hands at
+		/// whatever time it is in this room, a carrot second hand.
 		/// </summary>
-		void Clock( float u, float v )
+		void Clock( float u, float v, float wall )
 		{
-			var r = Range( 10f, 12.5f );
+			var r = Range( 9.5f, 11f );
 			var facing = Turn( Rotation.FromToRotation( Vector3.Up, ToRoom ) * Rotation.FromYaw( Next() * 360f ) );
-			var back = new Vector3( u, Face + 0.5f, v );
+			var back = new Vector3( u, wall + 0.5f, v );
 			Kit.SmoothLathe( TrimSkin( Next() < 0.5f ? CharcoalSwatch : CabinetSwatch( Pick( 3 ) ) ), At( back ), new[]
 			{
 				new Vector2( r, 0f ), new Vector2( r + 0.4f, 0.8f ), new Vector2( r + 0.4f, 2.4f ), new Vector2( r - 0.3f, 3.2f ), new Vector2( r - 1f, 3f ),
 			}, 20, facing, false, false, 40f );
-			Kit.SmoothLathe( TrimSkin( ClockSwatch ), At( back ), new[] { new Vector2( r - 0.9f, 1.6f ), new Vector2( r - 0.9f, 1.8f ) }, 20, facing, false, true );
+			Kit.SmoothLathe( TrimSkin( ClockSwatch( Pick( 2 ) ) ), At( back ), new[] { new Vector2( r - 0.9f, 1.6f ), new Vector2( r - 0.9f, 1.8f ) }, 20, facing, false, true );
 
 			// The hands, on the face at its own time; hour and minute agree with each other.
 			var minutes = Next() * 720f;
@@ -1458,13 +2084,13 @@ public sealed class OfficeTheme : ArenaTheme
 			{
 				var a = turns * MathF.Tau;
 				var dir = new Vector3( MathF.Sin( a ), 0f, MathF.Cos( a ) );
-				Kit.Box( TrimSkin( ink ), At( new Vector3( u, Face + 0.5f - lift, v ) + dir * (length * 0.35f) ), new Vector3( width, 0.3f, length * 1.1f ),
+				Kit.Box( TrimSkin( ink ), At( new Vector3( u, wall + 0.5f - lift, v ) + dir * (length * 0.35f) ), new Vector3( width, 0.3f, length * 1.1f ),
 					Turn( Rotation.LookAt( Vector3.Cross( ToRoom, dir ), dir ) ) );
 			}
 			Hand( minutes / 720f, r * 0.55f, 0.9f, MarkerSwatch( 0 ), 2.2f );
 			Hand( minutes % 60f / 60f, r * 0.82f, 0.6f, MarkerSwatch( 0 ), 2.5f );
 			Hand( Next(), r * 0.88f, 0.25f, MarkerSwatch( 2 ), 2.8f );
-			Kit.Ellipsoid( TrimSkin( MarkerSwatch( 0 ) ), At( new Vector3( u, Face + 0.5f - 2.9f, v ) ), new Vector3( 0.6f, 0.4f, 0.6f ), Run, 3, 6 );
+			Kit.Ellipsoid( TrimSkin( MarkerSwatch( 0 ) ), At( new Vector3( u, wall + 0.5f - 2.9f, v ) ), new Vector3( 0.6f, 0.4f, 0.6f ), Run, 3, 6 );
 		}
 
 		/// <summary>
@@ -1473,6 +2099,7 @@ public sealed class OfficeTheme : ArenaTheme
 		/// </summary>
 		void Cooler( float u )
 		{
+			Claim( _floor, u, 15f );
 			const float Body = 36f;
 			var y = Skirt - 7.5f;
 			var white = TrimSkin( WhiteSwatch );
@@ -1491,82 +2118,461 @@ public sealed class OfficeTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// The wall's big plant at <paramref name="u"/>, in a white or charcoal pot: a snake plant's upright
-		/// swords, a rubber plant's glossy leaves up a stem, or a parlour palm's arching fronds — every leaf
-		/// kept in front of the wall and behind the edge of the play space.
+		/// A big floor plant at <paramref name="u"/>, 80 to 100 tall in a tall white or charcoal pot: a snake
+		/// plant's swords, a rubber plant's glossy leaves up its stems, a fiddle-leaf fig, a dracaena's canes
+		/// with their arching tufts, or a yucca's trunks with stiff rosettes — every leaf kept in front of the
+		/// wall and behind the edge of the play space (<see cref="Fit"/>).
 		/// </summary>
-		void Plant( float u )
+		void TallPlant( float u )
 		{
-			var r = Range( 8f, 10f );
-			var pot = Range( 15f, 19f );
+			Claim( _floor, u, 34f );
+			var r = Range( 9f, 11f );
+			var pot = Range( 18f, 24f );
 			var foot = new Vector3( u, Skirt - r - 0.5f, Ledge );
 			Kit.SmoothLathe( TrimSkin( Next() < 0.6f ? PotSwatch : CharcoalSwatch ), At( foot ), new[]
 			{
-				new Vector2( r * 0.8f, 0f ), new Vector2( r, pot ), new Vector2( r * 0.92f, pot + 0.2f ), new Vector2( r * 0.9f, pot - 1.5f ),
+				new Vector2( r * 0.78f, 0f ), new Vector2( r, pot ), new Vector2( r * 0.92f, pot + 0.2f ), new Vector2( r * 0.9f, pot - 1.5f ),
 			}, 14, Run, true, false, 40f );
 			Kit.Dome( TrimSkin( SoilSwatch ), At( foot + new Vector3( 0f, 0f, pot - 1.6f ) ), new Vector3( r * 0.9f, r * 0.9f, 1.2f ), Run, 2, 12 );
 
 			var soil = foot + new Vector3( 0f, 0f, pot - 1f );
-			var kind = Pick( 3 );
-			if ( kind == 0 )
+			switch ( Pick( 5 ) )
 			{
-				// Snake plant: stiff swords, near upright, each a little twisted.
-				for ( var k = 12 + Pick( 7 ); k > 0; k-- )
+				case 0:
+					// Snake plant: stiff swords, near upright, each a little twisted.
+					for ( var k = 18 + Pick( 9 ); k > 0; k-- )
+					{
+						var root = soil + new Vector3( Range( -0.5f, 0.5f ) * r, Range( -0.5f, 0.5f ) * r, 0f );
+						var lean = new Vector3( Range( -0.25f, 0.25f ), Range( -0.12f, 0.2f ), 1f ).Normal;
+						Kit.Blade( TrimSkin( LeafSwatch( 0 ) ), At( root ), Turn( Aim( lean, Range( 0f, 180f ) ) ), Range( 50f, 72f ), Range( 4.4f, 5.8f ), Range( 0.05f, 0.3f ), 0.3f, 3, 0.05f, 0.55f );
+					}
+					break;
+				case 1:
+					// Rubber plant: two or three stems, broad leaves alternating up them, held out and up.
+					for ( var s = 2 + Pick( 2 ); s > 0; s-- )
+					{
+						var height = Range( 58f, 76f );
+						var stem = new[] { soil, soil + new Vector3( Range( -4f, 4f ), Range( -1f, 2f ), height * 0.5f ), soil + new Vector3( Range( -7f, 7f ), Range( 0f, 3f ), height ) };
+						Inside( stem, 0.7f );
+						Kit.Tube( TrimSkin( SoilSwatch ), At( stem ), 0.7f, 4, 0.35f );
+						var yaw = Next() * MathF.Tau;
+						for ( var h = 0.25f; h <= 1f; h += Range( 0.045f, 0.07f ) )
+						{
+							yaw += 2.4f + Range( -0.3f, 0.3f );
+							var node = Along( stem, h );
+							var heading = Flat( yaw );
+							var length = Fit( node, heading, Range( 17f, 23f ), 0.35f );
+							if ( length < 6f ) continue;
+							Kit.Blade( TrimSkin( LeafSwatch( 1 ) ), At( node ), Turn( Aim( (heading + Vector3.Up * Range( 0.3f, 0.8f )).Normal, Range( -15f, 15f ) ) ), length, length * Range( 0.48f, 0.6f ), Range( 0.3f, 0.6f ), 0.2f, 2, 0.15f, 0.5f );
+						}
+					}
+					break;
+				case 2:
 				{
-					var root = soil + new Vector3( Range( -0.5f, 0.5f ) * r, Range( -0.5f, 0.5f ) * r, 0f );
-					var lean = new Vector3( Range( -0.25f, 0.25f ), Range( -0.12f, 0.2f ), 1f ).Normal;
-					Kit.Blade( TrimSkin( LeafSwatch( 0 ) ), At( root ), Turn( Aim( lean, Range( 0f, 180f ) ) ), Range( 40f, 62f ), Range( 4.2f, 5.6f ), Range( 0.05f, 0.3f ), 0.3f, 4, 0.05f, 0.55f );
+					// Fiddle-leaf fig: a trunk or two, big leaves broadest near the tip, crowded toward the top.
+					var tallest = Range( 64f, 80f );
+					for ( var t = 1 + Pick( 2 ); t > 0; t-- )
+					{
+						var height = tallest * (t == 1 ? 1f : Range( 0.6f, 0.8f ));
+						var stem = new[] { soil, soil + new Vector3( Range( -3f, 3f ), Range( -1f, 2f ), height * 0.5f ), soil + new Vector3( Range( -6f, 6f ), Range( 0f, 3f ), height ) };
+						Inside( stem, 0.9f );
+						Kit.Tube( TrimSkin( SoilSwatch ), At( stem ), 0.9f, 5, 0.45f );
+						var yaw = Next() * MathF.Tau;
+						for ( var h = 0.3f; h <= 1.01f; h += Range( 0.026f, 0.042f ) * (1.4f - h * 0.6f) )
+						{
+							yaw += 2.4f + Range( -0.3f, 0.3f );
+							var node = Along( stem, MathF.Min( h, 1f ) );
+							var heading = Flat( yaw );
+							var length = Fit( node, heading, Range( 15f, 21f ), 0.45f );
+							if ( length < 6f ) continue;
+							Kit.Blade( TrimSkin( LeafSwatch( 1 ) ), At( node ), Turn( Aim( (heading + Vector3.Up * Range( 0.2f, 0.7f )).Normal, Range( -20f, 20f ) ) ), length, length * Range( 0.62f, 0.78f ), Range( 0.2f, 0.5f ), 0.2f, 2, 0.3f, 0.62f );
+						}
+					}
+					break;
+				}
+				case 3:
+				{
+					// Dracaena: two or three canes of different heights, a tuft of long arching straps on each.
+					var tallest = Range( 60f, 76f );
+					for ( var c = 3 + Pick( 2 ); c > 0; c-- )
+					{
+						var height = tallest * (c == 1 ? 1f : Range( 0.5f, 0.8f ));
+						var cane = new[] { soil + new Vector3( Range( -2.5f, 2.5f ), Range( -2f, 2f ), 0f ), soil + new Vector3( Range( -5f, 5f ), Range( -1f, 3f ), height ) };
+						Inside( cane, 1.3f );
+						Kit.Tube( TrimSkin( SoilSwatch ), At( cane ), 1.3f, 5, 1f );
+						for ( var k = 14 + Pick( 7 ); k > 0; k-- )
+						{
+							var heading = Flat( Next() * MathF.Tau );
+							var rise = Range( 0.45f, 1.3f );
+							var length = Fit( cane[1], heading, Range( 20f, 30f ), 0.3f );
+							if ( length < 6f ) continue;
+							Kit.Blade( TrimSkin( LeafSwatch( 0 ) ), At( cane[1] ), Turn( Aim( heading * MathF.Cos( rise ) + Vector3.Up * MathF.Sin( rise ), Range( -15f, 15f ) ) ), length, Range( 2.4f, 3.2f ), Range( 0.6f, 1.2f ), 0.3f, 3, 0.05f, 0.5f );
+						}
+					}
+					break;
+				}
+				default:
+				{
+					// Yucca: two or three thick trunks, a rosette of stiff, pointed leaves on each.
+					var tallest = Range( 50f, 62f );
+					for ( var c = 2 + Pick( 2 ); c > 0; c-- )
+					{
+						var height = tallest * (c == 1 ? 1f : Range( 0.55f, 0.85f ));
+						var trunk = new[] { soil + new Vector3( Range( -2.5f, 2.5f ), Range( -2f, 2f ), 0f ), soil + new Vector3( Range( -6f, 6f ), Range( -1f, 3f ), height ) };
+						Inside( trunk, 2.2f );
+						Kit.Tube( TrimSkin( SoilSwatch ), At( trunk ), 2.2f, 6, 1.7f );
+						for ( var k = 20 + Pick( 9 ); k > 0; k-- )
+						{
+							var heading = Flat( Next() * MathF.Tau );
+							var rise = Range( -0.1f, 1.4f );
+							var length = Fit( trunk[1], heading, Range( 16f, 24f ), 0.2f );
+							if ( length < 6f ) continue;
+							Kit.Blade( TrimSkin( LeafSwatch( 1 ) ), At( trunk[1] ), Turn( Aim( heading * MathF.Cos( rise ) + Vector3.Up * MathF.Sin( rise ), Range( -10f, 10f ) ) ), length, Range( 1.8f, 2.4f ), Range( 0.1f, 0.35f ), 0.35f, 2, 0f, 0.35f );
+						}
+					}
+					break;
 				}
 			}
-			else if ( kind == 1 )
+		}
+
+		/// <summary>
+		/// The longest a leaf from <paramref name="node"/> heading out along <paramref name="heading"/> may grow
+		/// and stay between the wall face and the edge of the play space, <paramref name="spread"/> of its
+		/// length allowed either way for its width and its droop.
+		/// </summary>
+		float Fit( Vector3 node, Vector3 heading, float length, float spread )
+		{
+			var front = node.y - Nearest( node.z ) - 1f;
+			var back = Face - node.y - 0.5f;
+			length = MathF.Min( length, front / (MathF.Max( 0f, -heading.y ) + spread) );
+			return MathF.Min( length, back / (MathF.Max( 0f, heading.y ) + spread) );
+		}
+
+		/// <summary>
+		/// A pothos on top of something at <paramref name="foot"/> whose front edge is at depth
+		/// <paramref name="front"/>: a small pot, a few leaves on it, and three to five vines trailing over the
+		/// edge and down its face, heart-shaped leaves along them.
+		/// </summary>
+		void Pothos( Vector3 foot, float front )
+		{
+			var r = Range( 3.4f, 4.4f );
+			var h = Range( 4.5f, 6f );
+			Kit.SmoothLathe( TrimSkin( Next() < 0.6f ? PotSwatch : CharcoalSwatch ), At( foot ), new[] { new Vector2( r * 0.8f, 0f ), new Vector2( r, h ), new Vector2( r * 0.9f, h ) }, 10, Run, true, true );
+			var rim = foot + new Vector3( 0f, 0f, h );
+			var leaf = TrimSkin( PothosSwatch );
+			for ( var k = 6 + Pick( 4 ); k > 0; k-- )
+				Kit.Blade( leaf, At( rim ), Turn( Aim( (Flat( Next() * MathF.Tau ) * 0.8f + Vector3.Up * 0.6f).Normal, Range( -20f, 20f ) ) ), Range( 4.5f, 6f ), Range( 3.4f, 4.4f ), 0.4f, 0.3f, 2, 0.15f, 0.45f );
+
+			for ( var vine = 3 + Pick( 3 ); vine > 0; vine-- )
 			{
-				// Rubber plant: a stem or two, broad leaves alternating up them, held out and up.
-				for ( var s = 2 + Pick( 2 ); s > 0; s-- )
+				var along = Range( -1f, 1f );
+				var drop = Range( 18f, 44f );
+				var path = new Vector3[6];
+				path[0] = rim + new Vector3( along * r * 0.7f, -r * 0.5f, -0.5f );
+				path[1] = new Vector3( foot.x + along * (r + 2f), front - 1.2f, foot.z + 0.5f );
+				for ( var i = 2; i < path.Length; i++ )
 				{
-					var height = Range( 46f, 64f );
-					var stem = new[] { soil, soil + new Vector3( Range( -4f, 4f ), Range( -1f, 2f ), height * 0.5f ), soil + new Vector3( Range( -6f, 6f ), Range( 0f, 3f ), height ) };
-					Inside( stem, 0.6f );
-					Kit.Tube( TrimSkin( SoilSwatch ), At( stem ), 0.6f, 4, 0.35f );
-					var yaw = Next() * MathF.Tau;
-					for ( var h = 0.25f; h <= 1f; h += Range( 0.07f, 0.11f ) )
+					var t = (i - 1) / (path.Length - 2f);
+					path[i] = new Vector3( path[1].x + (Range( -2.5f, 2.5f ) + along * 3f) * t, front - 1.4f - Range( 0f, 1.5f ) * t, foot.z - drop * t );
+				}
+				Inside( path, 0.3f );
+				Kit.Tube( TrimSkin( LeafSwatch( 1 ) ), At( path ), 0.3f, 3 );
+				for ( var t = Range( 0.22f, 0.3f ); t < 1f; t += Range( 0.07f, 0.1f ) )
+				{
+					var node = Along( path, t );
+					var outward = Flat( Next() < 0.5f ? Range( -0.6f, 0.6f ) : MathF.PI + Range( -0.6f, 0.6f ) ) * 0.6f + new Vector3( 0f, -0.7f, -0.35f );
+					var length = Range( 4.2f, 5.6f );
+					Kit.Blade( leaf, At( node ), Turn( Aim( outward.Normal, Range( -25f, 25f ) ) ), length, length * Range( 0.7f, 0.85f ), 0.3f, 0.25f, 2, 0.1f, 0.4f );
+				}
+			}
+		}
+
+		/// <summary>
+		/// Archive boxes stacked at <paramref name="foot"/>, <paramref name="count"/> high: kraft cardboard,
+		/// each a little out of line, its lid proud, a label and a hand hole on the end facing the room.
+		/// </summary>
+		void ArchiveBoxes( Vector3 foot, int count, float width, float height )
+		{
+			if ( foot.z <= Ledge ) Claim( _floor, foot.x, width + 2f );
+			var kraft = TrimSkin( KraftSwatch );
+			var at = foot;
+			for ( var k = 0; k < count; k++ )
+			{
+				var w = width * Range( 0.94f, 1.04f );
+				var d = Range( 11f, 12.5f );
+				var h = height * Range( 0.95f, 1.05f );
+				var turn = Turn( Rotation.FromYaw( Range( -4f, 4f ) ) );
+				var floor = At( at + new Vector3( Range( -1.2f, 1.2f ), Range( -0.6f, 0.6f ), 0f ) );
+				Kit.Box( kraft, floor + turn * new Vector3( 0f, 0f, (h - 1.5f) * 0.5f ), new Vector3( w, d, h - 1.5f ), turn );
+				Kit.Box( kraft, floor + turn * new Vector3( 0f, 0f, h - 1.3f ), new Vector3( w + 0.5f, d + 0.5f, 2.6f ), turn );
+				Kit.Box( TrimSkin( PaperSwatch( Pick( 4 ) ) ), floor + turn * new Vector3( Range( -0.15f, 0.15f ) * w, -d * 0.5f - 0.1f, h * 0.38f ), new Vector3( w * 0.42f, 0.2f, h * 0.3f ), turn );
+				Kit.Box( TrimSkin( CharcoalSwatch ), floor + turn * new Vector3( 0f, -d * 0.5f - 0.1f, h - 4.6f ), new Vector3( 4f, 0.2f, 1.4f ), turn );
+				at += new Vector3( 0f, 0f, h + 0.3f );
+			}
+		}
+
+		/// <summary>
+		/// A tall two-door stationery cupboard <paramref name="width"/> wide at <paramref name="u"/>, a little
+		/// taller than a man: a carcass in white or a cabinet paint on a dark plinth, two doors with pulls;
+		/// now and then a door stands ajar on shelves of binders and paper. On top, archive boxes, a trailing
+		/// pothos or a pile of papers.
+		/// </summary>
+		void TallCupboard( float u, float width )
+		{
+			Claim( _floor, u, width );
+			var height = Range( 78f, 84f );
+			var depth = Range( 17f, 19f );
+			var y = Skirt - depth * 0.5f;
+			var front = y - depth * 0.5f;
+			var paint = TrimSkin( Next() < 0.35f ? WhiteSwatch : CabinetSwatch( Pick( 3 ) ) );
+			const float Plinth = 3f;
+			const float T = 0.9f;
+			var bottom = Ledge + Plinth;
+			var body = height - Plinth;
+			Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( u, y + 1f, Ledge + Plinth * 0.5f ) ), new Vector3( width - 1.2f, depth - 2f, Plinth ), Run );
+
+			var ajar = Next() < 0.3f ? (Next() < 0.5f ? -1f : 1f) : 0f;
+			if ( ajar == 0f ) Kit.BevelBox( paint, At( new Vector3( u, y, bottom + body * 0.5f ) ), new Vector3( width, depth, body ), 0.6f, Run );
+			else
+			{
+				// Open: sides, top, bottom, back and the middle upright, so the shelves show behind the open door.
+				foreach ( var s in new[] { -1f, 1f } )
+					Kit.Box( paint, At( new Vector3( u + s * (width - T) * 0.5f, y, bottom + body * 0.5f ) ), new Vector3( T, depth, body ), Run );
+				Kit.Box( paint, At( new Vector3( u, y, bottom + body - T * 0.5f ) ), new Vector3( width, depth, T ), Run );
+				Kit.Box( paint, At( new Vector3( u, y, bottom + T * 0.5f ) ), new Vector3( width, depth, T ), Run );
+				Kit.Box( paint, At( new Vector3( u, y + (depth - T) * 0.5f, bottom + body * 0.5f ) ), new Vector3( width, T, body ), Run );
+				Kit.Box( paint, At( new Vector3( u, y + 0.5f, bottom + body * 0.5f ) ), new Vector3( T, depth - 1f, body - T * 2f ), Run );
+
+				var near = u + ajar * T * 0.5f;
+				var far = u + ajar * (width * 0.5f - T);
+				var (lo, hi) = (MathF.Min( near, far ), MathF.Max( near, far ));
+				const int Shelves = 4;
+				var pitch = (body - T * 2f) / Shelves;
+				for ( var k = 0; k < Shelves; k++ )
+				{
+					var v = bottom + T + k * pitch;
+					if ( k > 0 ) Kit.Box( paint, At( new Vector3( (lo + hi) * 0.5f, y + 0.5f, v - 0.4f ) ), new Vector3( hi - lo, depth - 1f, 0.8f ), Run );
+					if ( Next() < 0.3f )
 					{
-						yaw += 2.4f + Range( -0.3f, 0.3f );
-						var node = Along( stem, h );
-						var heading = Flat( yaw );
-						heading = heading.WithY( MathF.Max( heading.y, -0.2f ) ).Normal;
-						var length = Range( 14f, 19f );
-						var room = node.y - Front - 2f;
-						length = MathF.Min( length, room / MathF.Max( 0.2f, -heading.y + 0.35f ) );
-						Kit.Blade( TrimSkin( LeafSwatch( 1 ) ), At( node ), Turn( Aim( (heading + Vector3.Up * Range( 0.3f, 0.8f )).Normal, Range( -15f, 15f ) ) ), length, length * Range( 0.48f, 0.6f ), Range( 0.3f, 0.6f ), 0.2f, 3, 0.15f, 0.5f );
+						Papers( new Vector3( (lo + hi) * 0.5f, y + 1f, v ), 3 + Pick( 8 ) );
+						continue;
+					}
+					var at = lo + Range( 0.5f, 2f );
+					var lean = 0f;
+					while ( at < hi - 3.5f )
+					{
+						var bw = Range( 2.4f, 3.4f );
+						Binder( new Vector3( at + bw * 0.5f, y + Range( -0.5f, 0.5f ), v ), bw, lean, MathF.Min( pitch - 1.5f, 12.5f ) );
+						at += bw + 0.15f;
+						if ( Next() < 0.12f ) lean = Range( 10f, 20f );
 					}
 				}
 			}
-			else
+
+			// The doors: flush in front, or swung out on the hinge at the cupboard's side, its pull by the meeting edge.
+			var door = (width - 1.2f) * 0.5f;
+			foreach ( var s in new[] { -1f, 1f } )
 			{
-				// Parlour palm: fronds arching out of the pot, kept in front of the wall and off the play space.
+				var hinge = new Vector3( u + s * (width * 0.5f - 0.3f), front - 0.4f, bottom + body * 0.5f );
+				var angle = s == ajar ? Range( 25f, 40f ) : 0f;
+				var a = angle * MathF.PI / 180f;
+				var along = new Vector3( -s * MathF.Cos( a ), -MathF.Sin( a ), 0f );
+				var face = new Vector3( MathF.Sin( s * a ), -MathF.Cos( s * a ), 0f );
+				var turn = Turn( Rotation.FromYaw( s * angle ) );
+				Kit.Box( paint, At( hinge + along * (door * 0.5f) ), new Vector3( door, 0.8f, body - 1.2f ), turn );
+				Kit.Box( Metal, At( hinge + along * (door - 2.4f) + face * 0.9f + new Vector3( 0f, 0f, body * 0.06f ) ), new Vector3( 0.8f, 1f, 6f ), turn );
+			}
+
+			var top = Ledge + height;
+			var item = Next();
+			if ( item < 0.45f ) ArchiveBoxes( new Vector3( u + Range( -0.2f, 0.2f ) * width, y, top ), 1 + Pick( 2 ), Range( 14f, 16f ), Range( 10f, 11f ) );
+			else if ( item < 0.75f ) Pothos( new Vector3( u + Range( -0.25f, 0.25f ) * width, y + Range( -1f, 1f ), top ), front );
+			else if ( item < 0.9f ) Papers( new Vector3( u + Range( -0.2f, 0.2f ) * width, y, top ), 2 + Pick( 6 ) );
+		}
+
+		/// <summary>
+		/// A bank of <paramref name="columns"/> steel lockers at <paramref name="u"/>, each <paramref name="width"/>
+		/// wide, a little taller than a man: full-height doors or two tiers, each door with its vents, a handle
+		/// and a number tag; archive boxes on top now and then.
+		/// </summary>
+		void Lockers( float u, int columns, float width )
+		{
+			Claim( _floor, u, columns * width );
+			var height = Range( 72f, 80f );
+			const float Depth = 18f;
+			const float Plinth = 3f;
+			var y = Skirt - Depth * 0.5f;
+			var front = y - Depth * 0.5f;
+			var paint = TrimSkin( CabinetSwatch( Pick( 3 ) ) );
+			var total = columns * width;
+			Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( u, y + 1f, Ledge + Plinth * 0.5f ) ), new Vector3( total - 1f, Depth - 2f, Plinth ), Run );
+			Kit.BevelBox( paint, At( new Vector3( u, y, Ledge + Plinth + (height - Plinth) * 0.5f ) ), new Vector3( total, Depth, height - Plinth ), 0.5f, Run );
+			var tiers = Next() < 0.5f ? 1 : 2;
+			var tall = (height - Plinth - 1f) / tiers;
+			for ( var c = 0; c < columns; c++ )
+			for ( var t = 0; t < tiers; t++ )
+			{
+				var x = u - total * 0.5f + width * (c + 0.5f);
+				var v0 = Ledge + Plinth + 0.5f + t * tall;
+				Kit.Box( paint, At( new Vector3( x, front - 0.3f, v0 + tall * 0.5f ) ), new Vector3( width - 1f, 0.6f, tall - 1f ), Run );
+				for ( var k = 0; k < 3; k++ )
+					Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( x, front - 0.65f, v0 + tall - 4f - k * 1.6f ) ), new Vector3( width * 0.5f, 0.15f, 0.6f ), Run );
+				Kit.Box( Metal, At( new Vector3( x + width * 0.3f, front - 1f, v0 + tall * 0.5f ) ), new Vector3( 1f, 1.2f, 3.5f ), Run );
+				Kit.Box( TrimSkin( PaperSwatch( 0 ) ), At( new Vector3( x - width * 0.15f, front - 0.65f, v0 + tall - 8.5f ) ), new Vector3( 2.4f, 0.15f, 1.2f ), Run );
+			}
+			if ( Next() < 0.45f ) ArchiveBoxes( new Vector3( u + Range( -0.3f, 0.3f ) * total, y, Ledge + height ), 1 + Pick( 2 ), Range( 14f, 16f ), Range( 9.5f, 11f ) );
+		}
+
+		/// <summary>
+		/// A photocopier at <paramref name="u"/> on castors: a grey pedestal of paper drawers, the white engine
+		/// over it, the scanner lid, a control panel tipped toward whoever stands there, an output tray out to
+		/// the <paramref name="tray"/> side with copies in it, and now and then a ream of paper on the lid.
+		/// </summary>
+		void Copier( float u, float tray )
+		{
+			Claim( _floor, u + tray * 4f, 37f );
+			const float Width = 28f, Depth = 22f, Castor = 2f, Pedestal = 20f;
+			var y = Skirt - Depth * 0.5f - 0.5f;
+			var front = y - Depth * 0.5f;
+			var grey = TrimSkin( CabinetSwatch( 1 ) );
+			var charcoal = TrimSkin( CharcoalSwatch );
+			foreach ( var sx in new[] { -1f, 1f } )
+			foreach ( var sy in new[] { -1f, 1f } )
+				Kit.Ellipsoid( charcoal, At( new Vector3( u + sx * (Width * 0.5f - 2.5f), y + sy * (Depth * 0.5f - 2.5f), Ledge + 1f ) ), new Vector3( 1f, 1f, 1f ), Run, 2, 5 );
+			Kit.BevelBox( grey, At( new Vector3( u, y, Ledge + Castor + Pedestal * 0.5f ) ), new Vector3( Width, Depth, Pedestal ), 0.6f, Run );
+			for ( var d = 0; d < 3; d++ )
+			{
+				var v = Ledge + Castor + Pedestal * (d + 0.5f) / 3f;
+				Kit.Box( charcoal, At( new Vector3( u, front - 0.1f, v + Pedestal / 6f - 0.2f ) ), new Vector3( Width - 2f, 0.3f, 0.4f ), Run );
+				Kit.Box( charcoal, At( new Vector3( u, front - 0.3f, v + 1.5f ) ), new Vector3( 8f, 0.6f, 1.2f ), Run );
+			}
+
+			var body = Ledge + Castor + Pedestal;
+			Kit.BevelBox( TrimSkin( WhiteSwatch ), At( new Vector3( u, y, body + 7f ) ), new Vector3( Width, Depth, 14f ), 0.8f, Run );
+			Kit.Box( charcoal, At( new Vector3( u, front - 0.1f, body + 4f ) ), new Vector3( Width - 6f, 0.3f, 0.4f ), Run );
+			Kit.BevelBox( grey, At( new Vector3( u, y + 1f, body + 15.2f ) ), new Vector3( Width - 2f, Depth - 3f, 2.4f ), 0.4f, Run );
+			Kit.BevelBox( charcoal, At( new Vector3( u - tray * 6f, front + 1f, body + 14.2f ) ), new Vector3( 11f, 5f, 1.2f ), 0.3f, Turn( Rotation.FromRoll( -18f ) ) );
+			Kit.Box( TrimSkin( MarkerSwatch( 3 ) ), At( new Vector3( u - tray * 2.5f, front - 0.2f, body + 14.6f ) ), new Vector3( 0.8f, 0.4f, 0.4f ), Run );
+			Kit.Box( grey, At( new Vector3( u + tray * (Width * 0.5f + 4f), y, body + 9f ) ), new Vector3( 8f, Depth - 6f, 0.6f ), Run );
+			Papers( new Vector3( u + tray * (Width * 0.5f + 4f), y, body + 9.3f ), 1 + Pick( 3 ) );
+			if ( Next() < 0.6f )
+				Kit.Box( TrimSkin( PaperSwatch( 0 ) ), At( new Vector3( u + Range( -4f, 4f ), y + 1f, body + 17.5f ) ), new Vector3( 11f, 8.5f, 2.2f ), Turn( Rotation.FromYaw( Range( -12f, 12f ) ) ) );
+		}
+
+		/// <summary>
+		/// A year planner <paramref name="width"/> wide on the upper fabric at <paramref name="u"/>, its foot at
+		/// <paramref name="foot"/>, as tall as fits under the rail: the planner sheet in a thin aluminium frame,
+		/// a few magnets stuck on it.
+		/// </summary>
+		void Planner( float u, float foot, float width )
+		{
+			Hang( u, width + 2f, foot, UpperRail );
+			var height = MathF.Min( width * 0.66f, UpperRail - 4f - foot );
+			var face = Face - 1.2f;
+			Kit.Box( TrimSkin( WhiteSwatch ), At( new Vector3( u, (face + 0.2f + Face + 1f) * 0.5f, foot + height * 0.5f ) ), new Vector3( width, Face + 0.8f - face, height ), Run );
+			Room.WallPicture( Side, _trim, PlannerSwatch, u - width * 0.5f, u + width * 0.5f, foot, foot + height, face, false );
+			foreach ( var s in new[] { -1f, 1f } )
+			{
+				Kit.Box( Metal, At( new Vector3( u, face - 0.2f, foot + height * 0.5f + s * (height * 0.5f + 0.5f) ) ), new Vector3( width + 2f, 1.6f, 1f ), Run );
+				Kit.Box( Metal, At( new Vector3( u + s * (width * 0.5f + 0.5f), face - 0.2f, foot + height * 0.5f ) ), new Vector3( 1f, 1.6f, height ), Run );
+			}
+			for ( var k = 2 + Pick( 3 ); k > 0; k-- )
+				Kit.Ellipsoid( TrimSkin( MarkerSwatch( Pick( 4 ) ) ), At( new Vector3( u + Range( -0.45f, 0.45f ) * width, face - 0.4f, foot + Range( 0.1f, 0.85f ) * height ) ), new Vector3( 0.9f, 0.5f, 0.9f ), Run, 2, 6 );
+		}
+
+		/// <summary>
+		/// A wall calendar a third over life size centred at <paramref name="u"/>, <paramref name="v"/>, hung
+		/// on a nail: a pastel picture of a hill under a sun over the month's grid, the binding along its top.
+		/// </summary>
+		void Calendar( float u, float v )
+		{
+			Hang( u, 32f, v - 24f, v + 24f );
+			var width = Range( 26f, 30f );
+			var height = width * Range( 1.45f, 1.6f );
+			var top = v + height * 0.5f;
+			var bottom = v - height * 0.5f;
+			var picture = height * 0.48f;
+			Kit.Box( TrimSkin( WhiteSwatch ), At( new Vector3( u, Face - 0.05f, v ) ), new Vector3( width, 1.1f, height ), Run );
+			Room.WallPicture( Side, _trim, MonthSwatch, u - width * 0.45f, u + width * 0.45f, bottom + 1.2f, bottom + height * 0.47f, Face - 0.75f, false );
+			var sky = Pick( Art.Length );
+			Kit.Box( TrimSkin( ArtSwatch( sky ) ), At( new Vector3( u, Face - 0.8f, top - 2.2f - picture * 0.5f ) ), new Vector3( width * 0.9f, 0.2f, picture ), Run );
+			Kit.Box( TrimSkin( ArtSwatch( (sky + 2 + Pick( 5 )) % Art.Length ) ), At( new Vector3( u, Face - 1f, top - 2.2f - picture * 0.78f ) ), new Vector3( width * 0.9f, 0.2f, picture * 0.44f ), Run );
+			var r = width * Range( 0.1f, 0.14f );
+			Kit.SmoothLathe( TrimSkin( ArtSwatch( (sky + 1) % Art.Length ) ), At( new Vector3( u + Range( -0.25f, 0.25f ) * width, Face - 0.9f, top - 2.2f - picture * Range( 0.25f, 0.35f ) ) ),
+				new[] { new Vector2( r, 0f ), new Vector2( r, 0.2f ) }, 8, Turn( Rotation.FromToRotation( Vector3.Up, ToRoom ) ), false, true );
+			Kit.Box( TrimSkin( CharcoalSwatch ), At( new Vector3( u, Face - 0.9f, top - 0.8f ) ), new Vector3( width * 0.92f, 0.6f, 1.2f ), Run );
+			Kit.Ellipsoid( Metal, At( new Vector3( u, Face - 0.4f, top + 1.2f ) ), new Vector3( 0.5f, 0.6f, 0.5f ), Run, 2, 5 );
+		}
+
+		/// <summary>
+		/// A wall-mounted screen <paramref name="width"/> wide (16:9, a third over life size) centred at
+		/// <paramref name="u"/>, <paramref name="v"/>, on its bracket, showing a chart from the meeting.
+		/// </summary>
+		void Screen( float u, float v, float width )
+		{
+			Hang( u, width + 2f, v - 20f, v + 20f );
+			var height = width * 9f / 16f;
+			Kit.Box( Metal, At( new Vector3( u, Face - 1.5f, v ) ), new Vector3( 10f, 3f, 8f ), Run );
+			Kit.BevelBox( TrimSkin( CharcoalSwatch ), At( new Vector3( u, Face - 4f, v ) ), new Vector3( width + 2f, 2f, height + 2f ), 0.5f, Run );
+			Room.WallPicture( Side, _glow, ScreenGlow( Pick( 2 ) ), u - width * 0.5f, u + width * 0.5f, v - height * 0.5f, v + height * 0.5f, Face - 5.15f, false );
+		}
+
+		/// <summary>A wastepaper bin at <paramref name="u"/> against the skirting, open-topped, charcoal or brushed metal.</summary>
+		void Bin( float u )
+		{
+			Claim( _floor, u, 12f );
+			var r = Range( 4.5f, 5.5f );
+			var h = Range( 11f, 13f );
+			Kit.SmoothLathe( TrimSkin( Next() < 0.5f ? CharcoalSwatch : AluminiumSwatch ), At( new Vector3( u, Skirt - r - 1f, Ledge ) ), new[]
+			{
+				new Vector2( r * 0.8f, 0f ), new Vector2( r, h ), new Vector2( r - 0.3f, h ), new Vector2( r * 0.8f - 0.3f, 0.6f ), new Vector2( 0f, 0.6f ),
+			}, 10, Run, true, false, 50f );
+		}
+
+		/// <summary>
+		/// A pot plant to stand on a credenza at <paramref name="foot"/>, big enough to read from across the
+		/// room: a young snake plant's swords, or a peace lily's arching leaves.
+		/// </summary>
+		void MediumPlant( Vector3 foot )
+		{
+			var r = Range( 4.5f, 5.5f );
+			var h = Range( 8f, 10f );
+			Kit.SmoothLathe( TrimSkin( Next() < 0.6f ? PotSwatch : CharcoalSwatch ), At( foot ), new[] { new Vector2( r * 0.8f, 0f ), new Vector2( r, h ), new Vector2( r * 0.9f, h ) }, 12, Run, true, true );
+			var top = foot + new Vector3( 0f, 0f, h );
+			if ( Next() < 0.5f )
+			{
 				for ( var k = 8 + Pick( 5 ); k > 0; k-- )
 				{
-					var yaw = Next() * MathF.Tau;
-					var heading = Flat( yaw );
-					if ( heading.y < -0.3f ) heading = heading.WithY( -0.3f ).Normal;
-					var rise = Range( 0.7f, 1.2f );
-					var bend = rise + Range( 0.4f, 1f );
-					var reach = (MathF.Sin( rise ) - MathF.Sin( rise - bend )) / bend;
-					var length = Range( 34f, 50f );
-					var root = soil + new Vector3( Range( -2f, 2f ), Range( -2f, 2f ), 0f );
-					if ( heading.y < 0f ) length = MathF.Min( length, (root.y - Front - 2f) / (-heading.y * reach + 0.18f) );
-					else length = MathF.Min( length, (Face - root.y - 1f) / MathF.Max( 0.05f, heading.y * reach + 0.18f ) );
-					var direction = heading * MathF.Cos( rise ) + Vector3.Up * MathF.Sin( rise );
-					Kit.Pinnate( TrimSkin( LeafSwatch( 1 ) ), At( root ), Turn( Aim( direction, Range( -10f, 10f ) ) ), length, length * 0.3f, bend, Math.Clamp( (int)(length / 2.6f), 8, 14 ), 0.2f, 0.7f, 0.65f, 0.08f, 0.4f );
+					var lean = new Vector3( Range( -0.3f, 0.3f ), Range( -0.15f, 0.2f ), 1f ).Normal;
+					Kit.Blade( TrimSkin( LeafSwatch( 0 ) ), At( top + new Vector3( Range( -0.5f, 0.5f ) * r, Range( -0.4f, 0.4f ) * r, 0f ) ), Turn( Aim( lean, Range( 0f, 180f ) ) ), Range( 18f, 28f ), Range( 2.6f, 3.4f ), Range( 0.05f, 0.25f ), 0.3f, 3, 0.05f, 0.55f );
 				}
+				return;
 			}
+			for ( var k = 10 + Pick( 5 ); k > 0; k-- )
+			{
+				var heading = Flat( Next() * MathF.Tau );
+				var rise = Range( 0.6f, 1.3f );
+				var length = Fit( top, heading, Range( 11f, 15f ), 0.35f );
+				Kit.Blade( TrimSkin( LeafSwatch( 1 ) ), At( top ), Turn( Aim( heading * MathF.Cos( rise ) + Vector3.Up * MathF.Sin( rise ), Range( -15f, 15f ) ) ), length, length * Range( 0.38f, 0.46f ), Range( 0.5f, 0.9f ), 0.25f, 3, 0.1f, 0.45f );
+			}
+		}
+
+		/// <summary>A pothos in a pot hung on three cords from the window head at <paramref name="u"/>, in front of the blind, its vines trailing.</summary>
+		void HangingPlant( float u )
+		{
+			var y = Face - 9f;
+			var hook = UpperRail - 3f;
+			var foot = hook - Range( 14f, 20f );
+			foreach ( var a in new[] { 0.3f, 2.4f, 4.5f } )
+				Kit.Tube( TrimSkin( SoilSwatch ), At( new[] { new Vector3( u, y, hook ), new Vector3( u + MathF.Cos( a ) * 3.6f, y + MathF.Sin( a ) * 3.6f, foot + 5f ) } ), 0.12f, 3 );
+			Pothos( new Vector3( u, y, foot ), y - 4.5f );
 		}
 
 		/// <summary>A small succulent in a white pot, standing at <paramref name="foot"/>.</summary>
 		void SmallPlant( Vector3 foot )
 		{
 			var r = Range( 2.4f, 3.2f );
-			Kit.SmoothLathe( TrimSkin( Next() < 0.6f ? PotSwatch : CharcoalSwatch ), At( foot ), new[] { new Vector2( r * 0.8f, 0f ), new Vector2( r, r * 1.5f ), new Vector2( r * 0.85f, r * 1.5f ) }, 10, Run, true, true );
+			Kit.SmoothLathe( TrimSkin( Next() < 0.6f ? PotSwatch : CharcoalSwatch ), At( foot ), new[] { new Vector2( r * 0.8f, 0f ), new Vector2( r, r * 1.5f ), new Vector2( r * 0.85f, r * 1.5f ) }, 8, Run, true, true );
 			var top = foot + new Vector3( 0f, 0f, r * 1.5f );
 			for ( var k = 5 + Pick( 4 ); k > 0; k-- )
 			{

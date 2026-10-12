@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 /// <summary>
 /// What every theme's prop builder stands on: wall space and the rules for what may stand in it.
@@ -68,6 +69,44 @@ public abstract class WallProps
 	}
 
 	public float Next() => (float)_random.NextDouble();
+
+	/// <summary>Shuffles <paramref name="list"/> in place from the wall's stream (Fisher–Yates).</summary>
+	public void Shuffle<T>( List<T> list )
+	{
+		for ( var k = list.Count - 1; k > 0; k-- )
+		{
+			var j = (int)(Next() * (k + 1));
+			(list[k], list[j]) = (list[j], list[k]);
+		}
+	}
+
+	/// <summary>
+	/// Deals one of <paramref name="deck"/> to each of <paramref name="count"/> bays in wall order, from the
+	/// wall's stream: the deck shuffled, and shuffled afresh whenever it runs out rather than dealt round
+	/// again in the same order, and no card dealt next to itself — so neighbouring bays never share a set,
+	/// on a wall of any length. <paramref name="allowed"/> can keep a card out of a bay (by its place in the deal).
+	/// </summary>
+	public List<T> Deal<T>( List<T> deck, int count, Func<int, T, bool> allowed = null )
+	{
+		var hand = new List<T>();
+		var pile = new List<T>();
+		for ( var k = 0; k < count; k++ )
+		{
+			var slot = k;
+			bool Fits( T card ) => (slot == 0 || !EqualityComparer<T>.Default.Equals( card, hand[slot - 1] )) && (allowed is null || allowed( slot, card ));
+			var i = pile.FindIndex( Fits );
+			if ( i < 0 )
+			{
+				var fresh = new List<T>( deck );
+				Shuffle( fresh );
+				pile.AddRange( fresh );
+				i = pile.FindIndex( Fits );
+			}
+			hand.Add( pile[i] );
+			pile.RemoveAt( i );
+		}
+		return hand;
+	}
 	protected float Range( float a, float b ) => a + (b - a) * Next();
 	protected int Pick( int count ) => _random.Next( count );
 
