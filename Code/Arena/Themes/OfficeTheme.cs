@@ -1178,22 +1178,6 @@ public sealed class OfficeTheme : ArenaTheme
 			if ( bottom < 100f ) Claim( _low, u, width );
 		}
 
-		/// <summary>The stretches of <paramref name="from"/>..<paramref name="to"/> that nothing in <paramref name="taken"/> covers, kept a hair clear of what is there.</summary>
-		static List<(float From, float To)> Gaps( List<(float From, float To)> taken, float from, float to )
-		{
-			var sorted = new List<(float From, float To)>( taken );
-			sorted.Sort( ( a, b ) => a.From.CompareTo( b.From ) );
-			var gaps = new List<(float From, float To)>();
-			var at = from;
-			foreach ( var (start, end) in sorted )
-			{
-				if ( start - 2f > at ) gaps.Add( (at, MathF.Min( start - 2f, to )) );
-				at = MathF.Max( at, end + 2f );
-			}
-			if ( to > at ) gaps.Add( (at, to) );
-			return gaps.FindAll( g => g.To > g.From );
-		}
-
 		/// <summary>
 		/// Fills what a bay's set left bare, so no stretch of it reads empty from the room. Along the skirting,
 		/// where nothing hangs low over the floor: a bookcase or a stationery cupboard where there is room

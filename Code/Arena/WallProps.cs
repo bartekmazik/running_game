@@ -107,8 +107,81 @@ public abstract class WallProps
 		}
 		return hand;
 	}
+
+	/// <summary>
+	/// Keeps <paramref name="card"/> to one bay of <paramref name="hand"/>: any later one is swapped for the first of
+	/// <paramref name="spares"/> that matches neither neighbour (or the first spare, where every one would) — for the
+	/// pieces a wall should show once, which a long wall's second pass through the deck would deal again.
+	/// </summary>
+	public void Once<T>( List<T> hand, T card, List<T> spares )
+	{
+		var seen = false;
+		for ( var k = 0; k < hand.Count; k++ )
+		{
+			if ( !EqualityComparer<T>.Default.Equals( hand[k], card ) ) continue;
+			if ( !seen ) { seen = true; continue; }
+			var slot = k;
+			bool Fits( T spare ) => (slot == 0 || !EqualityComparer<T>.Default.Equals( spare, hand[slot - 1] )) && (slot + 1 >= hand.Count || !EqualityComparer<T>.Default.Equals( spare, hand[slot + 1] ));
+			var i = spares.FindIndex( Fits );
+			hand[k] = spares[Math.Max( i, 0 )];
+		}
+	}
+
 	protected float Range( float a, float b ) => a + (b - a) * Next();
 	protected int Pick( int count ) => _random.Next( count );
+
+	/// <summary>The stretches of <paramref name="from"/>..<paramref name="to"/> that nothing in <paramref name="taken"/> covers, kept a hair clear of what is there.</summary>
+	protected static List<(float From, float To)> Gaps( List<(float From, float To)> taken, float from, float to )
+	{
+		var sorted = new List<(float From, float To)>( taken );
+		sorted.Sort( ( a, b ) => a.From.CompareTo( b.From ) );
+		var gaps = new List<(float From, float To)>();
+		var at = from;
+		foreach ( var (start, end) in sorted )
+		{
+			if ( start - 2f > at ) gaps.Add( (at, MathF.Min( start - 2f, to )) );
+			at = MathF.Max( at, end + 2f );
+		}
+		if ( to > at ) gaps.Add( (at, to) );
+		return gaps.FindAll( g => g.To > g.From );
+	}
+
+	/// <summary>A closed circle of <paramref name="segments"/> about <paramref name="centre"/> in the plane of <paramref name="a"/> and <paramref name="b"/>.</summary>
+	protected static Vector3[] Loop( Vector3 centre, Vector3 a, Vector3 b, float radius, int segments )
+	{
+		var path = new Vector3[segments + 1];
+		for ( var i = 0; i <= segments; i++ )
+		{
+			var t = MathF.Tau * i / segments;
+			path[i] = centre + (a * MathF.Cos( t ) + b * MathF.Sin( t )) * radius;
+		}
+		return path;
+	}
+
+	/// <summary>
+	/// Lays <paramref name="items"/> side by side in <paramref name="from"/>..<paramref name="to"/>, each its width with
+	/// <paramref name="air"/> between, the row slid somewhere along the stretch and as often run the other way; what
+	/// does not fit is left off the end. Each item builds itself at the centre it is given.
+	/// </summary>
+	protected void Row( float from, float to, float air, params (float Width, Action<float> Place)[] items )
+	{
+		var list = new List<(float Width, Action<float> Place)>( items );
+		float Total()
+		{
+			var sum = 0f;
+			foreach ( var item in list ) sum += item.Width + air;
+			return sum - air;
+		}
+		while ( list.Count > 0 && Total() > to - from ) list.RemoveAt( list.Count - 1 );
+		if ( list.Count == 0 ) return;
+		if ( Next() < 0.5f ) list.Reverse();
+		var at = from + Range( 0f, to - from - Total() );
+		foreach ( var (width, place) in list )
+		{
+			place( at + width * 0.5f );
+			at += width + air;
+		}
+	}
 
 	protected Vector3 At( Vector3 w ) => Room.OnWall( Side, w.x, w.z, w.y );
 	protected Vector3[] At( Vector3[] path ) => Array.ConvertAll( path, p => At( p ) );

@@ -96,10 +96,12 @@ public sealed class LibraryTheme : ArenaTheme
 	/// leather armchair by a lamp table under a standard lamp, a lectern by a floor globe, a plaster or
 	/// bronze bust on a pedestal, a card catalogue with a kick stool, a book trolley, a painting on an easel —
 	/// and on two walls a longcase clock (no two bays either side of a corner match either); whatever a set
-	/// leaves bare is filled with something a head high (a standard lamp, and once a wall an easel, an
-	/// armillary sphere or a hat stand), benches, kick stools, an umbrella stand and piles of books.
-	/// Twin-armed brass sconces on the pilasters; the room's five lamps burn in two-tiered brass chandeliers
-	/// hung from the cornice. Each wall draws from its own stream.
+	/// leaves bare is filled with something a head high (a standard lamp, and once a wall an armillary sphere
+	/// or a hat stand), benches, kick stools, an umbrella stand and piles of books. Pale oak and painted pieces,
+	/// parchment, white plaster and lit shades among the walnut, so the sets read against the walnut cases.
+	/// Twin-armed brass sconces on the pilasters; the fourth wall, with neither rail nor gallery, has its own
+	/// upper layer — busts, urns and globes on corbels, picture lights over the cases, a reading-room clock. The room's
+	/// five lamps burn in two-tiered brass chandeliers hung from the cornice. Each wall draws from its own stream.
 	/// </summary>
 	public override void Dress( FloorContext room )
 	{
@@ -133,7 +135,7 @@ public sealed class LibraryTheme : ArenaTheme
 			var sideLamps = lamps.FindAll( l => l.Side == side ).ConvertAll( l => l.U );
 			props.Plates( wall, sideLamps );
 			if ( ladders ) props.Rails( wall );
-			if ( side == order[2] ) props.Gallery( wall );
+			if ( side == order[2] ) props.Gallery( wall, sideLamps );
 
 			// Ladders in two or three bays of a rail wall, never in two bays running.
 			var ladderBays = new List<int>();
@@ -153,18 +155,16 @@ public sealed class LibraryTheme : ArenaTheme
 			{
 				Props.Look.Desk, Props.Look.Reading, Props.Look.Lectern, Props.Look.Bust, Props.Look.Catalogue, Props.Look.Trolley, Props.Look.Easel,
 			}, wall.Count, ( slot, look ) => !(slot == 0 && corners.Count > 0 && look == corners[^1]) && !(slot == wall.Count - 1 && side == 1 && corners.Count > 0 && look == corners[0]) );
-			if ( (side == clock || side == otherClock) && wall.Count > 0 ) looks[(int)(props.Next() * wall.Count)] = Props.Look.Clock;
+			if ( side == clock || side == otherClock ) looks[(int)(props.Next() * wall.Count)] = Props.Look.Clock;
 
-			if ( looks.Count > 0 )
-			{
-				if ( corners.Count == 0 ) corners.Add( looks[0] );
-				corners.Add( looks[^1] );
-			}
+			if ( corners.Count == 0 ) corners.Add( looks[0] );
+			corners.Add( looks[^1] );
 
 			for ( var k = 0; k < wall.Count; k++ )
 				props.Furnish( looks[k], wall[k], ladderBays.Contains( k ) );
 
 			props.Sconces( all, sideLamps );
+			if ( side == order[3] ) props.UpperLayer( all, sideLamps, !looks.Contains( Props.Look.Clock ) );
 		}
 
 		props.Begin( 0, Seed + 1900 );
@@ -227,6 +227,10 @@ public sealed class LibraryTheme : ArenaTheme
 	static Rect InkSwatch => SolidSwatch( 18 );
 	static Rect PorcelainSwatch => SolidSwatch( 19 );
 	static Rect WaxSwatch => SolidSwatch( 20 );
+
+	/// <summary>The painted and pale finishes (pale oak, sage paint, cream paint), in the cells after the plates.</summary>
+	static Rect FinishSwatch( int k ) => Swatch( 464 + k * 16, 96, 16, 16 );
+	static readonly uint[] Finishes = { 0xD8BA8E, 0xA9B59C, 0xE6DCC4 };
 
 	/// <summary>
 	/// The plain paints in <see cref="SolidSwatch"/> order: brass, iron, oxblood and bottle-green leather, green
@@ -485,6 +489,15 @@ public sealed class LibraryTheme : ArenaTheme
 				painter.Line( new Vector2( k * 16, y1 + y ), new Vector2( k * 16 + 16, y1 + y + (Next() - 0.5f) * 1.5f ), 0.7f, LateWood, 0.35f );
 		for ( var y = 0; y < 16; y += 2 ) painter.Fill( 144, y1 + y, 16, 1, Palette.Hex( 0xD6C8AA ), roughness: 0.88f );
 		painter.Fill( 304, y1 + 7, 16, 1, Palette.Hex( 0x8E9CC0 ), roughness: 0.25f );
+
+		// ---- Pale finishes: pale oak with its grain, sage and cream paint with a little wear --------------
+		for ( var k = 0; k < Finishes.Length; k++ )
+		{
+			var color = Palette.Hex( Finishes[k] );
+			painter.Fill( 464 + k * 16, y1, 16, 16, color, roughness: k == 0 ? 0.55f : 0.7f );
+			for ( var y = 2f; y < 16f; y += 3f + Next() * 1.5f )
+				painter.Line( new Vector2( 464 + k * 16, y1 + y ), new Vector2( 480 + k * 16, y1 + y + (Next() - 0.5f) * 1.5f ), 0.6f, Mix( color, LateWood, k == 0 ? 0.35f : 0.12f ), 0.35f );
+		}
 
 		// ---- Book cloths: the wall's bindings, a gilt band near head and tail -----------------------
 		for ( var k = 0; k < BookCloths; k++ )
@@ -1150,33 +1163,25 @@ public sealed class LibraryTheme : ArenaTheme
 			_glow = glow;
 		}
 
-		/// <summary>What a bay is furnished as: one of the six sets the bays are dealt from, or the longcase clock.</summary>
+		/// <summary>What a bay is furnished as: one of the seven sets the bays are dealt from, or the longcase clock.</summary>
 		public enum Look { Desk, Reading, Lectern, Bust, Catalogue, Trolley, Easel, Clock }
 
 		Skin TrimSkin( Rect region ) => new( _trim, region );
 		Skin Brass => TrimSkin( BrassSwatch );
 		Skin Wood() => TrimSkin( WoodSwatch( Pick( 3 ) ) );
 		Skin Book() => TrimSkin( BookSwatch( Pick( BookCloths ) ) );
+
+		/// <summary>A pale or painted finish half the time, else one of the walnuts: what lifts a piece off the walnut cases behind it.</summary>
+		Skin Finish() => Next() < 0.5f ? TrimSkin( FinishSwatch( Pick( 3 ) ) ) : Wood();
+
+		/// <summary>A flat panel of <paramref name="skin"/> facing the room: a drawer front, a pull — two triangles, for detail only ever seen from the front.</summary>
+		void Flat( Skin skin, float u, float width, float v0, float v1, float depth ) =>
+			Room.WallPicture( Side, skin.Material, skin.Region, u - width * 0.5f, u + width * 0.5f, v0, v1, depth, false );
 		static Rotation Yaw( float degrees ) => Rotation.FromYaw( degrees );
 		Rotation Facing => Turn( Rotation.FromToRotation( Vector3.Up, ToRoom ) );
 
 		void Claim( float u, float width ) => _floor.Add( (u - width * 0.5f, u + width * 0.5f) );
 
-		/// <summary>The stretches of <paramref name="from"/>..<paramref name="to"/> that nothing in <paramref name="taken"/> covers, kept a hair clear of what is there.</summary>
-		static List<(float From, float To)> Gaps( List<(float From, float To)> taken, float from, float to )
-		{
-			var sorted = new List<(float From, float To)>( taken );
-			sorted.Sort( ( a, b ) => a.From.CompareTo( b.From ) );
-			var gaps = new List<(float From, float To)>();
-			var at = from;
-			foreach ( var (start, end) in sorted )
-			{
-				if ( start - 2f > at ) gaps.Add( (at, MathF.Min( start - 2f, to )) );
-				at = MathF.Max( at, end + 2f );
-			}
-			if ( to > at ) gaps.Add( (at, to) );
-			return gaps.FindAll( g => g.To > g.From );
-		}
 
 		/// <summary>
 		/// The depth a piece <paramref name="halfWidth"/> by <paramref name="halfDepth"/>, turned <paramref name="yaw"/>
@@ -1189,42 +1194,7 @@ public sealed class LibraryTheme : ArenaTheme
 			return MathF.Max( wanted, Front + 1f + MathF.Abs( MathF.Sin( a ) ) * halfWidth + MathF.Cos( a ) * halfDepth );
 		}
 
-		/// <summary>A closed circle of <paramref name="segments"/> about <paramref name="centre"/> in the plane of <paramref name="a"/> and <paramref name="b"/>.</summary>
-		static Vector3[] Loop( Vector3 centre, Vector3 a, Vector3 b, float radius, int segments )
-		{
-			var path = new Vector3[segments + 1];
-			for ( var i = 0; i <= segments; i++ )
-			{
-				var t = MathF.Tau * i / segments;
-				path[i] = centre + (a * MathF.Cos( t ) + b * MathF.Sin( t )) * radius;
-			}
-			return path;
-		}
 
-		/// <summary>
-		/// Lays <paramref name="items"/> side by side in <paramref name="from"/>..<paramref name="to"/>, each its width
-		/// with a little air between, the row slid somewhere along the stretch and as often run the other way;
-		/// what does not fit is left off the end. Each item builds itself at the centre it is given.
-		/// </summary>
-		void Row( float from, float to, params (float Width, Action<float> Place)[] items )
-		{
-			var list = new List<(float Width, Action<float> Place)>( items );
-			float Total()
-			{
-				var sum = 0f;
-				foreach ( var item in list ) sum += item.Width + 2.5f;
-				return sum - 2.5f;
-			}
-			while ( list.Count > 0 && Total() > to - from ) list.RemoveAt( list.Count - 1 );
-			if ( list.Count == 0 ) return;
-			if ( Next() < 0.5f ) list.Reverse();
-			var at = from + Range( 0f, to - from - Total() );
-			foreach ( var (width, place) in list )
-			{
-				place( at + width * 0.5f );
-				at += width + 2.5f;
-			}
-		}
 
 		// ---- Walls ------------------------------------------------------------------------------
 
@@ -1269,7 +1239,7 @@ public sealed class LibraryTheme : ArenaTheme
 		/// The gallery wall: in every bay a framed map or portrait hung on two cords from a brass hook under the
 		/// cornice, over the upper shelves — dealt so that no two neighbours hang the same picture.
 		/// </summary>
-		public void Gallery( List<Bay> wall ) => Apart( () =>
+		public void Gallery( List<Bay> wall, List<float> lamps ) => Apart( () =>
 		{
 			var deck = new List<int>();
 			for ( var k = 0; k < Pictures; k++ ) deck.Add( k );
@@ -1286,8 +1256,19 @@ public sealed class LibraryTheme : ArenaTheme
 					_ => (PanoramaSwatch( pictures[k] - 7 ), MathF.Min( room, Range( 92f, 112f ) ), 0.25f, false),
 				};
 				var height = width * aspect;
-				var u = bay.Middle + Range( -0.5f, 0.5f ) * MathF.Max( 0f, room - width );
+				var slack = MathF.Max( 0f, room - width ) * 0.5f;
+				var u = bay.Middle + Range( -1f, 1f ) * slack;
 				var bottom = MathF.Min( Range( 150f, 166f ), 226f - height );
+
+				// A chandelier's arms reach about fifteen either way along the wall and hang to v 207: slide the
+				// picture as far from one as the bay allows, and where it still comes under the arms, hang it lower.
+				var reach = width * 0.5f + 20f;
+				var lamp = lamps.FindIndex( l => MathF.Abs( l - u ) < reach );
+				if ( lamp >= 0 )
+				{
+					u = bay.Middle + (lamps[lamp] < bay.Middle ? slack : -slack);
+					if ( MathF.Abs( lamps[lamp] - u ) < reach ) bottom = MathF.Min( bottom, 203f - height );
+				}
 				Picture( u, bottom, width, height, canvas, mirror );
 			}
 		} );
@@ -1351,6 +1332,114 @@ public sealed class LibraryTheme : ArenaTheme
 		}
 
 		/// <summary>
+		/// The plain wall's upper layer, so it is not a flat picture over the furniture: a walnut corbel on every
+		/// pilaster but the pier's and the chandeliers', each carrying a white plaster bust, a porcelain urn or a table
+		/// globe, half as big again as life and dealt so no two neighbours match — pale things that carry against the
+		/// walnut from across the room; a brass picture light over the cases of every bay, lit underneath; and, unless
+		/// the wall has its longcase clock, a big reading-room clock hung on the cases of one bay.
+		/// </summary>
+		public void UpperLayer( List<Bay> wall, List<float> lamps, bool clock ) => Apart( () =>
+		{
+			var posts = new List<float>();
+			for ( var k = 0; k + 1 < wall.Count; k++ )
+			{
+				var u = (wall[k].To + wall[k + 1].From) * 0.5f;
+				if ( MathF.Abs( u - FloorContext.HalfSpan ) > 50f && !lamps.Exists( l => MathF.Abs( l - u ) < 30f ) ) posts.Add( u );
+			}
+			var pieces = Deal( new List<int> { 0, 1, 2 }, posts.Count );
+			for ( var k = 0; k < posts.Count; k++ )
+			{
+				var v = Range( 186f, 192f );
+				Corbel( posts[k], v );
+				var foot = new Vector3( posts[k], -5.5f, v );
+				if ( pieces[k] == 0 ) Bust( foot, 1.3f, TrimSkin( Next() < 0.85f ? PlasterSwatch : BronzeSwatch ) );
+				else if ( pieces[k] == 1 ) Urn( foot, 1.3f );
+				else TableGlobe( foot, 1.3f );
+			}
+
+			foreach ( var bay in wall )
+			{
+				var length = MathF.Min( bay.Width * 0.6f, Range( 64f, 90f ) );
+				var u = bay.Middle + Range( -6f, 6f );
+				var lamp = lamps.FindIndex( l => MathF.Abs( l - u ) < length * 0.5f + 18f );
+				if ( lamp >= 0 ) u = lamps[lamp] + (u < lamps[lamp] ? -1f : 1f) * (length * 0.5f + 18f);
+				if ( u - length * 0.5f > bay.From + 4f && u + length * 0.5f < bay.To - 4f ) PictureLight( u, length );
+			}
+
+			if ( !clock ) return;
+			var bays = wall.FindAll( b => !lamps.Exists( l => l > b.From - 10f && l < b.To + 10f ) );
+			var at = bays[Pick( bays.Count )];
+			ReadingClock( at.Middle + Range( -0.15f, 0.15f ) * at.Width, Range( 176f, 184f ) );
+		} );
+
+		/// <summary>A walnut corbel on a pilaster at <paramref name="v"/>: a moulded shelf on a scrolled bracket, a brass rim.</summary>
+		void Corbel( float u, float v )
+		{
+			var wood = TrimSkin( WoodSwatch( Next() < 0.5f ? 0 : 1 ) );
+			Kit.BevelBox( wood, At( new Vector3( u, -5f, v - 1.5f ) ), new Vector3( 15f, 10f, 3f ), 0.6f, Run );
+			Kit.Box( TrimSkin( GiltSwatch ), At( new Vector3( u, -5f, v - 3.4f ) ), new Vector3( 14f, 9.4f, 0.8f ), Run );
+			Kit.Box( wood, At( new Vector3( u, -3f, v - 8.5f ) ), new Vector3( 8f, 6f, 9f ), Run );
+			Kit.Box( wood, At( new Vector3( u, -1.5f, v - 15f ) ), new Vector3( 5f, 3f, 5f ), Run );
+		}
+
+		/// <summary>A white porcelain urn on its foot at <paramref name="foot"/>, <paramref name="scale"/> times life: a turned body with a neck and lip, two handles.</summary>
+		void Urn( Vector3 foot, float scale )
+		{
+			var skin = TrimSkin( PorcelainSwatch );
+			var tall = Range( 0.9f, 1.15f );
+			var profile = new[]
+			{
+				new Vector2( 3.2f, 0f ), new Vector2( 3.2f, 1.2f ), new Vector2( 1.5f, 2.6f ), new Vector2( 1.6f, 4.6f ), new Vector2( 5.4f, 9f * tall ),
+				new Vector2( 5.6f, 12f * tall ), new Vector2( 3.6f, 16.5f * tall ), new Vector2( 2.6f, 18f * tall ), new Vector2( 3.6f, 19.6f * tall ), new Vector2( 3.4f, 20.4f * tall ),
+			};
+			Kit.SmoothLathe( skin, At( foot ), Array.ConvertAll( profile, p => p * scale ), 10, Run, true, true, 40f, Next() );
+			foreach ( var s in new[] { -1f, 1f } )
+			{
+				Vector3 P( float x, float z ) => foot + new Vector3( s * x * scale, 0f, z * tall * scale );
+				Kit.Tube( skin, At( new[] { P( 3.4f, 17.6f ), P( 6.2f, 18.4f ), P( 6.6f, 14.6f ), P( 5.2f, 11.6f ) } ), 0.45f * scale, 4 );
+			}
+		}
+
+		/// <summary>A table globe at <paramref name="foot"/>, <paramref name="scale"/> times life: a turned brass stand, the globe tilted on its axis in a brass meridian.</summary>
+		void TableGlobe( Vector3 foot, float scale )
+		{
+			Kit.SmoothLathe( Brass, At( foot ), new[] { new Vector2( 3.6f, 0f ), new Vector2( 3.6f, 0.8f ), new Vector2( 1f, 2f ), new Vector2( 0.8f, 5f ), new Vector2( 1.4f, 6f ) }, 8, Run, true, false, 45f );
+			var r = 6f * scale;
+			var centre = foot + new Vector3( 0f, 0f, 6f + r );
+			var tilt = Yaw( Range( -40f, 40f ) ) * Rotation.FromRoll( 23.5f );
+			Kit.Ellipsoid( TrimSkin( GlobeSwatch ), At( centre ), new Vector3( r, r, r ), Turn( tilt * Yaw( Next() * 360f ) ), 5, 12 );
+			Kit.Tube( Brass, At( Loop( centre, tilt * Vector3.Up, tilt * Vector3.Forward, r + 0.8f, 14 ) ), 0.35f, 3 );
+		}
+
+		/// <summary>A brass picture light <paramref name="length"/> long over the cases: two arms from the top shelf and a hood lit underneath, as a gallery lights its paintings.</summary>
+		void PictureLight( float u, float length )
+		{
+			const float V = 228f;
+			const float Y = Face - 9f;
+			foreach ( var s in new[] { -1f, 1f } )
+				Kit.Tube( Brass, At( new[] { new Vector3( u + s * length * 0.3f, Face - 0.5f, V - 6f ), new Vector3( u + s * length * 0.3f, Face - 4f, V - 1f ), new Vector3( u + s * length * 0.3f, Y + 1f, V ) } ), 0.35f, 4 );
+			Kit.SmoothLathe( Brass, At( new Vector3( u - length * 0.5f, Y, V ) ), new[] { new Vector2( 2.2f, 0f ), new Vector2( 2.6f, 0.8f ), new Vector2( 2.6f, length - 0.8f ), new Vector2( 2.2f, length ) }, 6, Turn( Rotation.FromToRotation( Vector3.Up, Vector3.Forward ) ), true, true, 50f );
+			Kit.Box( new Skin( _glow, ShadeGlow( 1 ) ), At( new Vector3( u, Y + 0.4f, V - 2.9f ) ), new Vector3( length - 2f, 3f, 0.5f ), Run );
+		}
+
+		/// <summary>A reading-room clock hung on the cases, half as big again as a wall clock: a brass bezel round a cream enamel dial, black hands, on a bracket from the shelf above.</summary>
+		void ReadingClock( float u, float v )
+		{
+			var r = Range( 15f, 17f );
+			var back = new Vector3( u, Face - 2.5f, v );
+			Kit.Box( TrimSkin( WoodSwatch( 1 ) ), At( new Vector3( u, Face - 1.5f, v + r + 3f ) ), new Vector3( 4f, 3f, 8f ), Run );
+			Kit.SmoothLathe( Brass, At( back ), new[] { new Vector2( r, 0f ), new Vector2( r + 0.8f, 0.8f ), new Vector2( r + 0.8f, 2.6f ), new Vector2( r - 0.6f, 3.2f ) }, 16, Facing, true, false, 40f );
+			Kit.SmoothLathe( TrimSkin( DialSwatch ), At( back + new Vector3( 0f, -2.4f, 0f ) ), new[] { new Vector2( r - 0.6f, 0f ), new Vector2( r - 0.6f, 0.2f ) }, 16, Facing, false, true );
+			var minutes = Next() * 720f;
+			foreach ( var (turns, length, width) in new[] { (minutes / 720f, r * 0.55f, 1.4f), (minutes % 60f / 60f, r * 0.8f, 1f) } )
+			{
+				var a = turns * MathF.Tau;
+				var dir = new Vector3( MathF.Sin( a ), 0f, MathF.Cos( a ) );
+				Kit.Box( TrimSkin( InkSwatch ), At( back + new Vector3( 0f, -2.9f, 0f ) + dir * (length * 0.35f) ), new Vector3( width, 0.3f, length * 1.1f ), Turn( Rotation.LookAt( Vector3.Cross( ToRoom, dir ), dir ) ) );
+			}
+		}
+
+		/// <summary>
 		/// A brass chandelier at <paramref name="u"/> on wall <paramref name="side"/>, hung on a chain from a scrolled
 		/// bracket out of the cornice: a turned stem with a bowl, five or six arms curling up to candle cups, and
 		/// a lit candle in each. The room's lamp burns among the flames (<see cref="FlameV"/>, <see cref="HangDepth"/>).
@@ -1369,9 +1458,7 @@ public sealed class LibraryTheme : ArenaTheme
 			} ), 0.45f, 5 );
 
 			const float Crown = FlameV + 13f;
-			var link = 0;
-			for ( var z = bracket - 0.4f; z > Crown + 1.6f; z -= 1.7f, link++ )
-				Kit.Tube( metal, At( Loop( new Vector3( u, Y, z - 1f ), Vector3.Up, link % 2 == 0 ? Vector3.Forward : new Vector3( 0f, 1f, 0f ), 1f, 6 ) ), 0.2f, 3 );
+			Kit.Tube( metal, At( new[] { new Vector3( u, Y, bracket + 2.4f ), new Vector3( u, Y, Crown + 0.6f ) } ), 0.45f, 4 );
 
 			Kit.SmoothLathe( metal, At( new Vector3( u, Y, FlameV - 17f ) ), new[]
 			{
@@ -1432,38 +1519,38 @@ public sealed class LibraryTheme : ArenaTheme
 				case Look.Desk:
 				{
 					var length = MathF.Min( to - from - 6f, Range( 46f, 60f ) );
-					if ( length > 36f ) Row( from, to, (length + 2f, u => Desk( u, length )) );
+					if ( length > 36f ) Row( from, to, 2.5f, (length + 2f, u => Desk( u, length )) );
 					break;
 				}
 				case Look.Reading:
-					Row( from, to, (36f, Armchair), (17f, u => SideTable( u, Next() < 0.6f )), (19f, FloorLamp) );
+					Row( from, to, 2.5f, (36f, Armchair), (17f, u => SideTable( u, Next() < 0.6f )), (19f, FloorLamp) );
 					break;
 				case Look.Lectern:
-					Row( from, to, (22f, Lectern), (26f, Globe) );
+					Row( from, to, 2.5f, (22f, Lectern), (26f, Globe), (19f, FloorLamp) );
 					break;
 				case Look.Bust:
 				{
 					var bench = Range( 34f, 44f );
-					Row( from, to, (18f, Bust), (bench + 2f, u => Bench( u, bench )) );
+					Row( from, to, 2.5f, (18f, Bust), (bench + 2f, u => Bench( u, bench )), (17f, u => SideTable( u, true )) );
 					break;
 				}
 				case Look.Catalogue:
 				{
 					var width = Range( 30f, 36f );
-					Row( from, to, (width + 2f, u => Catalogue( u, width )), (15f, KickStool) );
+					Row( from, to, 2.5f, (width + 2f, u => Catalogue( u, width )), (15f, KickStool) );
 					break;
 				}
 				case Look.Trolley:
 				{
 					var length = Range( 34f, 42f );
-					Row( from, to, (length + 2f, u => Trolley( u, length )), (19f, FloorLamp) );
+					Row( from, to, 2.5f, (length + 2f, u => Trolley( u, length )), (19f, FloorLamp) );
 					break;
 				}
 				case Look.Easel:
-					Row( from, to, (28f, Easel), (17f, SideChair) );
+					Row( from, to, 2.5f, (28f, EaselOrSphere), (17f, SideChair) );
 					break;
 				default:
-					Row( from, to, (25f, LongcaseClock), (17f, SideChair) );
+					Row( from, to, 2.5f, (25f, LongcaseClock), (17f, SideChair) );
 					break;
 			}
 			Fill( bay );
@@ -1486,10 +1573,9 @@ public sealed class LibraryTheme : ArenaTheme
 					if ( !_tall && gap >= 21f )
 					{
 						// Something a head high: most often a standard lamp; now and then, once a wall each, an
-						// easel, an armillary sphere on its pedestal or a hat stand.
+						// armillary sphere on its pedestal or a hat stand.
 						var pick = Next();
-						if ( gap >= 30f && pick < 0.2f && _heroes.Add( "easel" ) ) Easel( Place( 28f ) );
-						else if ( pick < 0.38f && _heroes.Add( "armillary" ) ) Armillary( Place( 19f ) );
+						if ( pick < 0.38f && _heroes.Add( "armillary" ) ) Armillary( Place( 19f ) );
 						else if ( pick < 0.56f && _heroes.Add( "hats" ) ) HatStand( Place( 19f ) );
 						else FloorLamp( Place( 19f ) );
 					}
@@ -1571,7 +1657,7 @@ public sealed class LibraryTheme : ArenaTheme
 			Claim( u, length + 2f );
 			const float Depth = 22f;
 			var y = Skirt - Depth * 0.5f - 0.5f;
-			var wood = Wood();
+			var wood = Finish();
 			Kit.BevelBox( wood, At( new Vector3( u, y, DeskTop - 0.9f ) ), new Vector3( length, Depth, 1.8f ), 0.5f, Run );
 			Kit.Box( TrimSkin( Next() < 0.6f ? BaizeSwatch : LeatherSwatch( Pick( 2 ) ) ), At( new Vector3( u, y + 1f, DeskTop + 0.06f ) ), new Vector3( length - 7f, Depth - 8f, 0.1f ), Run );
 			Kit.Box( wood, At( new Vector3( u, y, DeskTop - 3.8f ) ), new Vector3( length - 3f, Depth - 3f, 4f ), Run );
@@ -1589,7 +1675,9 @@ public sealed class LibraryTheme : ArenaTheme
 			var end = Next() < 0.5f ? -1f : 1f;
 			BankerLamp( new Vector3( u + end * (length * 0.5f - 8f), y + 4f, DeskTop ) );
 			Stack( new Vector3( u - end * (length * 0.5f - 9f), y + Range( 0f, 3f ), DeskTop ), 2 + Pick( 4 ), true );
-			if ( Next() < 0.6f ) OpenBook( new Vector3( u + Range( -4f, 4f ), y - 3f, DeskTop + 0.1f ), Range( -12f, 12f ) );
+			var middle = Next();
+			if ( middle < 0.4f ) OpenBook( new Vector3( u + Range( -4f, 4f ), y - 3f, DeskTop + 0.1f ), Range( -12f, 12f ) );
+			else if ( middle < 0.75f ) Chart( new Vector3( u + Range( -3f, 3f ), y - 1f, DeskTop + 0.1f ), MathF.Min( length - 22f, Range( 20f, 26f ) ) );
 			else Inkstand( new Vector3( u + Range( -5f, 5f ), y + 3f, DeskTop ) );
 			Chair( u + Range( -0.15f, 0.15f ) * length, y - Depth * 0.5f - 0.5f, false );
 		}
@@ -1646,6 +1734,16 @@ public sealed class LibraryTheme : ArenaTheme
 			Kit.Box( Book(), At( foot + new Vector3( 0f, 0f, 0.2f ) ), new Vector3( w * 2f + 0.8f, d + 0.6f, 0.4f ), Turn( turn ) );
 			foreach ( var s in new[] { -1f, 1f } )
 				Kit.Box( TrimSkin( ParchmentSwatch ), At( foot + turn * new Vector3( s * (w * 0.5f + 0.1f), 0f, 0.9f ) ), new Vector3( w, d, 1f ), Turn( turn * Rotation.FromPitch( s * 5f ) ) );
+		}
+
+		/// <summary>A parchment chart <paramref name="length"/> wide unrolled on a desk: the sheet, curling up into a roll at either end.</summary>
+		void Chart( Vector3 foot, float length )
+		{
+			var turn = Yaw( Range( -8f, 8f ) );
+			var parchment = TrimSkin( ParchmentSwatch );
+			Kit.Box( parchment, At( foot + new Vector3( 0f, 0f, 0.1f ) ), new Vector3( length - 3f, 13f, 0.2f ), Turn( turn ) );
+			foreach ( var s in new[] { -1f, 1f } )
+				Kit.SmoothLathe( parchment, At( foot + turn * new Vector3( s * (length * 0.5f - 1.5f), -7f, 1.2f ) ), new[] { new Vector2( 1.2f, 0f ), new Vector2( 1.2f, 14f ) }, 6, Turn( turn * Rotation.FromToRotation( Vector3.Up, new Vector3( 0f, 1f, 0f ) ) ), true, true );
 		}
 
 		/// <summary>A brass inkstand: a tray, two ink pots and a quill.</summary>
@@ -1825,7 +1923,7 @@ public sealed class LibraryTheme : ArenaTheme
 			Claim( u, 22f );
 			const float Height = 42f;
 			var y = Skirt - 10f;
-			var wood = Wood();
+			var wood = Finish();
 			Kit.BevelBox( wood, At( new Vector3( u, y, Ledge + 1.5f ) ), new Vector3( 16f, 13f, 3f ), 0.6f, Run );
 			Kit.SmoothLathe( wood, At( new Vector3( u, y, Ledge + 3f ) ), new[]
 			{
@@ -1865,13 +1963,13 @@ public sealed class LibraryTheme : ArenaTheme
 			Kit.Tube( Brass, At( Loop( centre, tilt * Vector3.Up, tilt * new Vector3( 0f, 1f, 0f ), R + 0.8f, 22 ) ), 0.35f, 4 );
 		}
 
-		/// <summary>A plaster or bronze bust on a pedestal, a head high, turned to look along the room.</summary>
+		/// <summary>A bust, white plaster as a rule and bronze now and then, on a marble or walnut pedestal, a head high.</summary>
 		void Bust( float u )
 		{
 			Claim( u, 18f );
 			const float Shaft = 40f;
 			var y = Skirt - 8f;
-			var stone = TrimSkin( Next() < 0.5f ? MarbleSwatch : WoodSwatch( 1 ) );
+			var stone = TrimSkin( Next() < 0.75f ? MarbleSwatch : WoodSwatch( 1 ) );
 			Kit.BevelBox( stone, At( new Vector3( u, y, Ledge + 2f ) ), new Vector3( 14f, 14f, 4f ), 0.6f, Run );
 			Kit.SmoothLathe( stone, At( new Vector3( u, y, Ledge + 4f ) ), new[]
 			{
@@ -1880,18 +1978,23 @@ public sealed class LibraryTheme : ArenaTheme
 			var top = Ledge + 4f + Shaft;
 			Kit.BevelBox( stone, At( new Vector3( u, y, top + 1.2f ) ), new Vector3( 13f, 13f, 2.4f ), 0.5f, Run );
 			top += 2.4f;
-
-			var cast = TrimSkin( Next() < 0.6f ? PlasterSwatch : BronzeSwatch );
-			var turn = Yaw( Range( -28f, 28f ) );
-			var c = new Vector3( u, y, top );
-			Kit.SmoothLathe( cast, At( c ), new[] { new Vector2( 3.2f, 0f ), new Vector2( 3.2f, 0.8f ), new Vector2( 2.2f, 1.6f ), new Vector2( 1.8f, 3f ) }, 10, Run, true, false, 45f );
-			Kit.Ellipsoid( cast, At( c + new Vector3( 0f, 0f, 7f ) ), new Vector3( 8f, 4.6f, 5f ), Turn( turn ), 5, 12 );
-			Kit.SmoothLathe( cast, At( c + new Vector3( 0f, -0.3f, 10.5f ) ), new[] { new Vector2( 2.1f, 0f ), new Vector2( 1.9f, 4f ) }, 8, Run, false, false );
-			var head = c + new Vector3( 0f, -0.5f, 18.4f );
-			Kit.Ellipsoid( cast, At( head ), new Vector3( 3.6f, 4.2f, 5f ), Turn( turn ), 6, 12 );
-			Kit.Ellipsoid( cast, At( head + turn * new Vector3( 0f, -4f, -0.6f ) ), new Vector3( 0.7f, 1.1f, 1.3f ), Turn( turn ), 3, 6 );
-			Kit.Ellipsoid( cast, At( head + turn * new Vector3( 0f, 0.7f, 1.6f ) ), new Vector3( 3.9f, 4f, 4.1f ), Turn( turn ), 5, 10 );
+			Bust( new Vector3( u, y, top ), 1f, TrimSkin( Next() < 0.85f ? PlasterSwatch : BronzeSwatch ) );
 			_tall = true;
+		}
+
+		/// <summary>A bust on its socle at <paramref name="foot"/>, <paramref name="scale"/> times life, cast in <paramref name="cast"/>: shoulders, neck, head, nose and hair, turned to look along the room.</summary>
+		void Bust( Vector3 foot, float scale, Skin cast )
+		{
+			var turn = Yaw( Range( -28f, 28f ) );
+			Vector2[] Scaled( params Vector2[] profile ) => Array.ConvertAll( profile, p => p * scale );
+			Vector3 Up( float y, float z ) => foot + new Vector3( 0f, y, z ) * scale;
+			Kit.SmoothLathe( cast, At( foot ), Scaled( new Vector2( 3.2f, 0f ), new Vector2( 3.2f, 0.8f ), new Vector2( 2.2f, 1.6f ), new Vector2( 1.8f, 3f ) ), 8, Run, true, false, 45f );
+			Kit.Ellipsoid( cast, At( Up( 0f, 7f ) ), new Vector3( 8f, 4.6f, 5f ) * scale, Turn( turn ), 4, 10 );
+			Kit.SmoothLathe( cast, At( Up( -0.3f, 10.5f ) ), Scaled( new Vector2( 2.1f, 0f ), new Vector2( 1.9f, 4f ) ), 6, Run, false, false );
+			var head = Up( -0.5f, 18.4f );
+			Kit.Ellipsoid( cast, At( head ), new Vector3( 3.6f, 4.2f, 5f ) * scale, Turn( turn ), 5, 10 );
+			Kit.Ellipsoid( cast, At( head + turn * new Vector3( 0f, -4f, -0.6f ) * scale ), new Vector3( 0.7f, 1.1f, 1.3f ) * scale, Turn( turn ), 2, 5 );
+			Kit.Ellipsoid( cast, At( head + turn * new Vector3( 0f, 0.7f, 1.6f ) * scale ), new Vector3( 3.9f, 4f, 4.1f ) * scale, Turn( turn ), 4, 8 );
 		}
 
 		/// <summary>
@@ -1942,7 +2045,7 @@ public sealed class LibraryTheme : ArenaTheme
 			const float Body = 27f;
 			const int Rows = 5;
 			var y = Skirt - D * 0.5f - 0.5f;
-			var wood = Wood();
+			var wood = Finish();
 			foreach ( var sx in new[] { -1f, 1f } )
 			foreach ( var sy in new[] { -1f, 1f } )
 				Leg( wood, new Vector3( u + sx * (width * 0.5f - 2f), y + sy * (D * 0.5f - 2f), Ledge ), Stand, 1f );
@@ -1953,21 +2056,27 @@ public sealed class LibraryTheme : ArenaTheme
 			var cw = (width - 2f) / columns;
 			var rh = (Body - 2f) / Rows;
 			var front = y - D * 0.5f;
-			var drawers = TrimSkin( WoodSwatch( Pick( 3 ) ) );
+			var drawers = Next() < 0.5f ? TrimSkin( FinishSwatch( Pick( 3 ) ) ) : TrimSkin( WoodSwatch( Pick( 3 ) ) );
 			for ( var c = 0; c < columns; c++ )
 			for ( var r = 0; r < Rows; r++ )
 			{
 				var x = u - width * 0.5f + 1f + cw * (c + 0.5f);
 				var z = Ledge + Stand + 1f + rh * (r + 0.5f);
-				var pulled = Next() < 0.04f ? Range( 2f, 5f ) : 0f;
-				Kit.Box( drawers, At( new Vector3( x, front - 0.25f - pulled * 0.5f, z ) ), new Vector3( cw - 0.7f, 0.5f + pulled, rh - 0.7f ), Run );
-				Kit.Box( Brass, At( new Vector3( x, front - 0.75f - pulled, z - rh * 0.18f ) ), new Vector3( 1.8f, 0.6f, 0.7f ), Run );
+				if ( Next() < 0.04f )
+				{
+					var pulled = Range( 2f, 5f );
+					Kit.Box( drawers, At( new Vector3( x, front - 0.25f - pulled * 0.5f, z ) ), new Vector3( cw - 0.7f, 0.5f + pulled, rh - 0.7f ), Run );
+					Flat( Brass, x, 1.8f, z - rh * 0.18f - 0.35f, z - rh * 0.18f + 0.35f, front - 0.55f - pulled );
+					continue;
+				}
+				Flat( drawers, x, cw - 0.7f, z - (rh - 0.7f) * 0.5f, z + (rh - 0.7f) * 0.5f, front - 0.1f );
+				Flat( Brass, x, 1.8f, z - rh * 0.18f - 0.35f, z - rh * 0.18f + 0.35f, front - 0.2f );
 			}
 			var top = new Vector3( u, y, Ledge + Stand + Body + 1.6f );
 			var side = Next() < 0.5f ? -1f : 1f;
-			if ( Next() < 0.6f ) TableLamp( top + new Vector3( side * width * 0.28f, 1.5f, 0f ) );
-			else Bookends( top + new Vector3( side * width * 0.15f, 0f, 0f ), width * 0.5f );
-			Stack( top + new Vector3( -side * width * 0.22f, 0f, 0f ), 2 + Pick( 3 ), true );
+			TableLamp( top + new Vector3( side * width * 0.28f, 1.5f, 0f ) );
+			if ( Next() < 0.5f ) Bookends( top + new Vector3( -side * width * 0.12f, 0f, 0f ), width * 0.4f );
+			else Stack( top + new Vector3( -side * width * 0.22f, 0f, 0f ), 2 + Pick( 3 ), true );
 			_tall = true;
 		}
 
@@ -1988,7 +2097,7 @@ public sealed class LibraryTheme : ArenaTheme
 			Claim( u, length + 2f );
 			const float D = 15f;
 			var y = Skirt - D * 0.5f - 0.5f;
-			var wood = Wood();
+			var wood = Finish();
 			foreach ( var s in new[] { -1f, 1f } )
 			{
 				Kit.BevelBox( wood, At( new Vector3( u + s * (length * 0.5f - 0.7f), y, Ledge + 18f ) ), new Vector3( 1.4f, D, 30f ), 0.3f, Run );
@@ -2033,9 +2142,19 @@ public sealed class LibraryTheme : ArenaTheme
 			Kit.SmoothLathe( TrimSkin( LeatherSwatch( Pick( 2 ) ) ), At( foot + new Vector3( 0f, 0f, 15.6f ) ), new[] { new Vector2( 5.4f, 0f ), new Vector2( 5.3f, 0.9f ), new Vector2( 4.4f, 1.3f ) }, 12, Run, false, true, 50f );
 		}
 
+		/// <summary>The easel once a wall; where the wall has had it, an armillary sphere (or a standard lamp) in its place.</summary>
+		void EaselOrSphere( float u )
+		{
+			if ( _heroes.Add( "easel" ) ) Easel( u );
+			else if ( _heroes.Add( "armillary" ) ) Armillary( u );
+			else FloorLamp( u );
+		}
+
 		/// <summary>
-		/// A painter's easel a head high: two front legs to an apex, a back leg, a ledge across; on it a portrait or
-		/// a landscape on its stretcher, leaning back with the legs.
+		/// A painter's easel a head high: two front legs to an apex, a back leg, a ledge across; on it a study in hand
+		/// on its stretcher, leaning back with the legs — a primed canvas, a wash of ground, a still life blocked in (a
+		/// jug, fruit, the table's edge), the last strip still bare but for its charcoal lines. Its own picture, never
+		/// one of the gallery's.
 		/// </summary>
 		void Easel( float u )
 		{
@@ -2063,13 +2182,29 @@ public sealed class LibraryTheme : ArenaTheme
 
 			var portrait = Next() < 0.45f;
 			var (w, h) = portrait ? (Range( 24f, 28f ), Range( 34f, 40f )) : (Range( 36f, 42f ), Range( 24f, 28f ));
-			var canvas = portrait ? PortraitSwatch( Pick( 2 ) ) : LandscapeSwatch( Pick( 2 ) );
 			var foot0 = OnLegs( 0f, Shelf + 0.8f ) + new Vector3( 0f, -2.4f, 0f );
-			var bl = foot0 - Vector3.Forward * (w * 0.5f);
-			var br = foot0 + Vector3.Forward * (w * 0.5f);
-			Kit.Quad( _trim, At( bl ), At( br ), At( br + up * h ), At( bl + up * h ),
-				new Vector2( canvas.Left, canvas.Top + canvas.Height ), new Vector2( canvas.Left + canvas.Width, canvas.Top + canvas.Height ),
-				new Vector2( canvas.Left + canvas.Width, canvas.Top ), new Vector2( canvas.Left, canvas.Top ) );
+			var toRoom = Vector3.Cross( Vector3.Forward, up );
+			void Patch( Skin skin, float x0, float y0, float x1, float y1, float lift )
+			{
+				Vector3 C( float x, float y ) => foot0 + Vector3.Forward * ((x - 0.5f) * w) + up * (y * h) + toRoom * lift;
+				Kit.Quad( skin, At( C( x0, y0 ) ), At( C( x1, y0 ) ), At( C( x1, y1 ) ), At( C( x0, y1 ) ) );
+			}
+			Patch( TrimSkin( LinenSwatch ), 0f, 0f, 1f, 1f, 0f );
+			var done = Range( 0.62f, 0.8f );
+			Patch( TrimSkin( Next() < 0.5f ? VelvetSwatch : Next() < 0.5f ? BaizeSwatch : FinishSwatch( Pick( 3 ) ) ), 0.05f, 0.05f, done, 0.95f, 0.04f );
+			Patch( TrimSkin( WoodSwatch( Pick( 3 ) ) ), 0.05f, 0.05f, done, Range( 0.24f, 0.32f ), 0.08f );
+			var jug = Range( 0.14f, 0.24f );
+			Patch( TrimSkin( Next() < 0.5f ? PorcelainSwatch : GreenGlassSwatch ), jug, 0.28f, jug + Range( 0.12f, 0.16f ), Range( 0.56f, 0.68f ), 0.12f );
+			var at = jug + 0.2f;
+			for ( var k = 2 + Pick( 2 ); k > 0 && at < done - 0.08f; k-- )
+			{
+				var size = Range( 0.07f, 0.1f );
+				Patch( TrimSkin( Next() < 0.4f ? GiltSwatch : Next() < 0.5f ? VelvetSwatch : BaizeSwatch ), at, 0.28f, at + size, 0.28f + size * w / h, 0.12f );
+				at += size + Range( 0.02f, 0.05f );
+			}
+			Patch( TrimSkin( InkSwatch ), done + 0.04f, Range( 0.25f, 0.3f ), 0.95f, Range( 0.31f, 0.33f ), 0.04f );
+			var line = Range( done + 0.06f, 0.88f );
+			Patch( TrimSkin( InkSwatch ), line, 0.3f, line + 0.015f, Range( 0.55f, 0.7f ), 0.04f );
 			Kit.Box( wood, At( foot0 + up * (h * 0.5f) + new Vector3( 0f, 0.9f, 0f ) ), new Vector3( w, 1.6f, h ), turn );
 		}
 
