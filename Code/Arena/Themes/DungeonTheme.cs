@@ -125,6 +125,7 @@ public sealed class DungeonTheme : ArenaTheme
 			var spares = new List<Props.Upper> { Props.Upper.Banner, Props.Upper.Window, Props.Upper.Tapestry, Props.Upper.Banners };
 			props.Once( uppers, Props.Upper.Cage, spares );
 			props.Once( uppers, Props.Upper.Trophy, spares );
+			props.ReserveShields( (looks.Contains( Props.Look.Armoury ) ? 1 : 0) + (uppers.Contains( Props.Upper.Trophy ) ? 1 : 0) );
 
 			for ( var k = 0; k < wall.Count; k++ )
 			{
@@ -1043,13 +1044,27 @@ public sealed class DungeonTheme : ArenaTheme
 		bool _tall;
 
 		int _shelfUnits;
+		int _shelves;
 		int _cupboards;
 		int _cloaks;
 		int _notices;
 		int _racks;
+		int _sconces;
+		int _coils;
+		int _sacks;
 
 		/// <summary>Cell doors on the wall being dressed: a row of cells is a dungeon's own repeat, up to a point.</summary>
 		int _doors;
+
+		/// <summary>
+		/// Shields on the wall being dressed, the armoury's and the trophy's counted in from the deal (<see cref="ReserveShields"/>):
+		/// at most <see cref="MaxShields"/>, where one in every stretch of wall put a dozen on a wall (task 10 review).
+		/// </summary>
+		int _shields;
+		const int MaxShields = 4;
+
+		/// <summary>The next shield's design: the four come round in turn along a wall, so no two shields near each other match.</summary>
+		int _design;
 
 		public Props( FloorContext room, Material trim, Material glow, Material wall ) : base( room )
 		{
@@ -1098,12 +1113,21 @@ public sealed class DungeonTheme : ArenaTheme
 			_heroes.Clear();
 			_arches.Clear();
 			_shelfUnits = 0;
+			_shelves = 0;
 			_doors = 0;
+			_shields = 0;
+			_design = Side;
 			_cupboards = 0;
 			_cloaks = 0;
 			_notices = 0;
 			_racks = 0;
+			_sconces = 0;
+			_coils = 0;
+			_sacks = 0;
 		}
+
+		/// <summary>Counts in the shields the wall's armoury and trophy will carry, before the bays are dressed in order.</summary>
+		public void ReserveShields( int count ) => _shields = count;
 
 		// ---- Arches -------------------------------------------------------------------------------
 
@@ -1334,9 +1358,13 @@ public sealed class DungeonTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// Fills a bare stretch of wall from one end, a piece at a time: a painted shield, a shelf of pots and jugs, a
+		/// Fills a bare stretch of wall from one end, a piece at a time: a painted shield (four a wall, counting the armoury's
+		/// and the trophy's, and the pair beside a window), a shelf of pots and jugs (three a wall, counting the table's), a
 		/// boarded cupboard, a rack of weapons laid on pegs, cloaks on a peg rail, proclamations nailed up, or once a wall
-		/// a board of great keys — at a player's chest, or (<paramref name="high"/>) over the heads of the room.
+		/// a board of great keys, a pair of candle sconces (four pairs a wall), a coil of rope on its peg or sacks hung on
+		/// pegs (two a wall each) — at a player's chest, or (<paramref name="high"/>) over the heads of the room.
+		/// Cupboards come three a wall, half of those at the chest tall ones up past the heads of the room; proclamations
+		/// four a wall.
 		/// </summary>
 		void Band( float from, float to, bool high )
 		{
@@ -1350,24 +1378,28 @@ public sealed class DungeonTheme : ArenaTheme
 				var width = 0f;
 				for ( var tries = 0; tries < 8 && width == 0f; tries++ )
 				{
-					var kind = Pick( 7 );
+					var kind = Pick( 10 );
 					if ( kind == last ) continue;
 					switch ( kind )
 					{
-						case 0 when !shield && room >= 24f:
+						case 0 when !shield && room >= 24f && _shields < MaxShields:
 						{
 							var r = MathF.Min( Range( 11f, 15f ), room * 0.5f - 1f );
 							width = r * 2f + 2f;
 							Shield( at + width * 0.5f, foot + r + 2f, r );
+							_shields++;
 							shield = true;
 							break;
 						}
-						case 1 when room >= 40f: width = MathF.Min( room - 2f, Range( 40f, 70f ) ); Shelf( at + width * 0.5f, width, foot + 4f ); break;
-						case 2 when room >= 34f && _cupboards < 2: width = MathF.Min( room - 2f, Range( 32f, 44f ) ); Cupboard( at + width * 0.5f, width, foot, MathF.Min( width * Range( 0.85f, 1.15f ), high ? 132f - foot : 46f ) ); break;
+						case 1 when room >= 40f && _shelves < 3: width = MathF.Min( room - 2f, Range( 40f, 70f ) ); Shelf( at + width * 0.5f, width, foot + 4f ); break;
+						case 2 when room >= 34f && _cupboards < 3: width = MathF.Min( room - 2f, Range( 32f, 44f ) ); Cupboard( at + width * 0.5f, width, foot, high ? MathF.Min( width * Range( 0.85f, 1.15f ), 132f - foot ) : Next() < 0.5f ? Range( 62f, 78f ) : MathF.Min( width * Range( 0.85f, 1.15f ), 46f ) ); break;
 						case 3 when room >= 48f && _racks < 3: width = MathF.Min( room - 2f, Range( 48f, 76f ) ); WallRack( at + width * 0.5f, width, foot + 8f ); break;
 						case 4 when !high && room >= 36f && _cloaks < 2: width = MathF.Min( room - 2f, Range( 32f, 44f ) ); CloakRail( at + width * 0.5f, width ); break;
-						case 5 when room >= 30f && _notices < 3: width = Range( 26f, 30f ); Notices( at + width * 0.5f, width, foot + Range( 6f, 14f ) ); break;
+						case 5 when room >= 30f && _notices < 4: width = Range( 26f, 30f ); Notices( at + width * 0.5f, width, foot + Range( 6f, 14f ) ); break;
 						case 6 when !high && room >= 24f && _heroes.Add( "keys" ): width = 22f; Keys( at + 11f, foot + 12f ); break;
+						case 7 when room >= 30f && _sconces < 4: width = Range( 26f, 32f ); Sconces( at + width * 0.5f, width, foot + Range( 14f, 22f ) ); break;
+						case 8 when room >= 28f && _coils < 2: width = 26f; RopeCoil( at + 13f, foot + Range( 30f, 36f ) ); break;
+						case 9 when room >= 34f && _sacks < 2: width = MathF.Min( room - 2f, Range( 34f, 42f ) ); HungSacks( at + width * 0.5f, width, foot + Range( 34f, 40f ) ); break;
 					}
 					if ( width > 0f ) last = kind;
 				}
@@ -1375,7 +1407,7 @@ public sealed class DungeonTheme : ArenaTheme
 			}
 		}
 
-		/// <summary>A cupboard hung on the wall: two doors of boards in a dark carcass, iron strap hinges, a top board. Two a wall at most.</summary>
+		/// <summary>A cupboard hung on the wall: two doors of boards in a dark carcass, iron strap hinges, a top board. Three a wall at most.</summary>
 		void Cupboard( float u, float width, float v, float height )
 		{
 			_cupboards++;
@@ -1393,6 +1425,56 @@ public sealed class DungeonTheme : ArenaTheme
 				Room.WallPicture( Side, _trim, cut, door - width * 0.23f, door + width * 0.23f, v + 2f, v + height - 2f, front, false );
 				foreach ( var t in new[] { 0.22f, 0.78f } )
 					Kit.Box( iron, At( new Vector3( u + s * (width * 0.5f - 5f), front - 0.4f, v + height * t ) ), new Vector3( 8f, 0.8f, 1.6f ), Run );
+			}
+		}
+
+		/// <summary>A pair of iron candle sconces in the wall, each an arm out to a drip dish with a burning candle. Four pairs a wall at most.</summary>
+		void Sconces( float u, float width, float v )
+		{
+			_sconces++;
+			Hang( u, width, v + 10f );
+			var iron = P( Paint.Iron );
+			foreach ( var s in new[] { -1f, 1f } )
+			{
+				var x = u + s * (width * 0.5f - 4f) + Range( -1f, 1f );
+				var z = v + Range( -2f, 2f );
+				Kit.Box( iron, At( new Vector3( x, Face - 0.5f, z - 1f ) ), new Vector3( 3.4f, 1f, 8f ), Run );
+				Kit.Tube( iron, At( new[] { new Vector3( x, Face - 1f, z - 3f ), new Vector3( x, Face - 6f, z - 1.4f ), new Vector3( x, Face - 7f, z ) } ), 0.4f, 3 );
+				Candle( new Vector3( x, Face - 7f, z ) );
+			}
+		}
+
+		/// <summary>A coil of rope hung on a peg, its loose end hanging below. Two a wall at most.</summary>
+		void RopeCoil( float u, float v )
+		{
+			_coils++;
+			Hang( u, 24f, v + 2f );
+			Kit.Box( P( Paint.DarkWood ), At( new Vector3( u, Face - 2.4f, v ) ), new Vector3( 1.6f, 4.8f, 1.6f ), Run );
+			var rope = P( Paint.Rope );
+			var r = Range( 8f, 10f );
+			for ( var k = 0; k < 3; k++ )
+			{
+				var centre = new Vector3( u + Range( -1f, 1f ), Face - 2.6f - k * 0.9f, v - r + 0.8f - k * 0.6f );
+				Kit.Tube( rope, At( Loop( centre, Vector3.Forward, Vector3.Up, r - k * 0.4f, 10 ) ), 0.9f, 4 );
+			}
+			Kit.Tube( rope, At( new[] { new Vector3( u + r * 0.5f, Face - 3f, v - r * 1.8f ), new Vector3( u + r * 0.6f, Face - 3.2f, v - r * 2f - Range( 8f, 14f ) ) } ), 0.9f, 4 );
+		}
+
+		/// <summary>Two or three sacks hung by their necks from pegs on a board, the stores kept off the damp floor. Two a wall at most.</summary>
+		void HungSacks( float u, float width, float v )
+		{
+			_sacks++;
+			Hang( u, width, v + 3f );
+			Kit.BevelBox( P( Paint.DarkWood ), At( new Vector3( u, Face - 1f, v ) ), new Vector3( width, 2f, 5f ), 0.4f, Run );
+			var count = width > 38f ? 3 : 2;
+			var skin = T( SackSwatch );
+			for ( var k = 0; k < count; k++ )
+			{
+				var x = u - width * 0.5f + (k + 0.5f) * width / count + Range( -1.5f, 1.5f );
+				Kit.Box( P( Paint.DarkWood ), At( new Vector3( x, Face - 3.5f, v ) ), new Vector3( 1.4f, 5f, 1.4f ), Run );
+				Kit.SmoothLathe( P( Paint.Rope ), At( new Vector3( x, Face - 5f, v - 4f ) ), new[] { new Vector2( 1.6f, 0f ), new Vector2( 1.1f, 2f ), new Vector2( 1.4f, 3.6f ) }, 5, Run, false, false );
+				var h = Range( 9f, 12f );
+				Kit.Ellipsoid( skin, At( new Vector3( x, Face - 6f, v - 4.5f - h ) ), new Vector3( Range( 5f, 6.4f ), 5f, h ), Yaw( Range( -30f, 30f ) ), 3, 6 );
 			}
 		}
 
@@ -1693,6 +1775,7 @@ public sealed class DungeonTheme : ArenaTheme
 		/// <summary>A plank shelf on two iron brackets at <paramref name="v"/>, set with pots, jugs, a candle stub and the odd skull.</summary>
 		void Shelf( float u, float width, float v )
 		{
+			_shelves++;
 			Hang( u, width + 2f, v + 12f );
 			const float D = 9f;
 			var y = Face - D * 0.5f;
@@ -2015,11 +2098,20 @@ public sealed class DungeonTheme : ArenaTheme
 				}
 				case Upper.Window:
 				{
+					// Flanked, where the bay is wide enough, by a pair of shields while the wall has two to spare (they come up
+					// in two designs), else by a pair of wall rings.
 					var width = Window( u, Under( 20f ) );
 					var r = Range( 9f, 11f );
 					var v = Range( 176f, 184f );
+					if ( bay.Width <= width + 4f * r + 30f ) break;
+					var shields = _shields + 2 <= MaxShields;
+					if ( shields ) _shields += 2;
 					foreach ( var s in new[] { -1f, 1f } )
-						if ( bay.Width > width + 4f * r + 30f ) Shield( u + s * (width * 0.5f + r + Range( 12f, 16f )), v, r );
+					{
+						var x = u + s * (width * 0.5f + r + Range( 12f, 16f ));
+						if ( shields ) Shield( x, v, r );
+						else WallRing( x, v + Range( -2f, 2f ) );
+					}
 					break;
 				}
 				case Upper.Tapestry: Tapestry( u, Under ); break;
@@ -2180,12 +2272,55 @@ public sealed class DungeonTheme : ArenaTheme
 			ShieldAt( new Vector3( u, Face - 3.2f, v ), r );
 		}
 
-		/// <summary>A round shield with its back at <paramref name="back"/>, facing the room: painted boards, an iron rim, a boss.</summary>
+		/// <summary>
+		/// A shield with its back at <paramref name="back"/>, facing the room, in the wall's next design: a round shield
+		/// painted lilac with a pale chevron, or quartered wine and cream, or pale stone with a wine band across it (all
+		/// with an iron rim and a boss), or a heater — the pointed knight's shield — in wine with a cream cross.
+		/// </summary>
 		void ShieldAt( Vector3 back, float r )
 		{
-			Kit.SmoothLathe( T( ShieldSwatch( Pick( 2 ) ) ), At( back ), new[] { new Vector2( r, 0f ), new Vector2( r, 1.2f ) }, 10, Facing, false, true, 45f, Next() );
+			var design = _design++ % 4;
+			if ( design == 3 )
+			{
+				Heater( back, r );
+				return;
+			}
+			// The face's texture turned half round: facing the room, the lathe's cap shows its picture upside down.
+			var face = design == 2 ? P( Paint.PaleStone ) : T( ShieldSwatch( design ) );
+			Kit.SmoothLathe( face, At( back ), new[] { new Vector2( r, 0f ), new Vector2( r, 1.2f ) }, 10, Facing, false, true, 45f, 0.5f + Range( -0.03f, 0.03f ) );
 			Kit.SmoothLathe( P( Paint.Iron ), At( back ), new[] { new Vector2( r + 0.5f, 0.2f ), new Vector2( r + 0.2f, 1.7f ) }, 10, Facing, false, false );
+			if ( design == 2 ) Kit.Box( P( Paint.Wine ), At( back + new Vector3( 0f, -1.4f, 0f ) ), new Vector3( r * 1.9f, 0.5f, r * 0.42f ), Run );
 			Kit.Ellipsoid( P( Paint.Rubbed ), At( back + new Vector3( 0f, -1.4f, 0f ) ), new Vector3( r * 0.26f, r * 0.26f, r * 0.26f ), Facing, 2, 6 );
+		}
+
+		/// <summary>
+		/// A heater shield, its back at <paramref name="back"/> and about <paramref name="r"/> in half-height: flat across the
+		/// top, straight sides curving in to a point, a wine field with a cream cross, its edge in iron.
+		/// </summary>
+		void Heater( Vector3 back, float r )
+		{
+			var w = r * 0.86f;
+			var outline = new[]
+			{
+				new Vector2( -w, r ), new Vector2( w, r ), new Vector2( w, -0.1f * r ), new Vector2( 0.8f * w, -0.55f * r ), new Vector2( 0.45f * w, -0.95f * r ),
+				new Vector2( 0f, -1.2f * r ), new Vector2( -0.45f * w, -0.95f * r ), new Vector2( -0.8f * w, -0.55f * r ), new Vector2( -w, -0.1f * r ),
+			};
+			const float Thick = 1.2f;
+			Vector3 Front( Vector2 p ) => back + new Vector3( p.x, -Thick, p.y );
+			Vector3 Rear( Vector2 p ) => back + new Vector3( p.x, 0f, p.y );
+			var field = P( Paint.Wine );
+			var iron = P( Paint.Iron );
+			var centre = Front( new Vector2( 0f, 0f ) );
+			for ( var k = 0; k < outline.Length; k++ )
+			{
+				// Corners go round clockwise as the room sees them, so each face is wound to face the room (and the edge out).
+				var a = outline[k]; var b = outline[(k + 1) % outline.Length];
+				Kit.Tri( field, At( centre ), At( Front( b ) ), At( Front( a ) ) );
+				Kit.Quad( iron, At( Rear( b ) ), At( Rear( a ) ), At( Front( a ) ), At( Front( b ) ) );
+			}
+			var cream = P( Paint.Cream );
+			Kit.Box( cream, At( back + new Vector3( 0f, -Thick - 0.25f, -0.05f * r ) ), new Vector3( r * 0.26f, 0.5f, r * 1.85f ), Run );
+			Kit.Box( cream, At( back + new Vector3( 0f, -Thick - 0.25f, 0.38f * r ) ), new Vector3( w * 1.7f, 0.5f, r * 0.26f ), Run );
 		}
 	}
 }

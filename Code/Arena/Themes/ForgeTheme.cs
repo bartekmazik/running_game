@@ -15,18 +15,27 @@ public sealed class ForgeTheme : ArenaTheme
 	public override int Floor => 7;
 	public override Color LightColor => new( 1.60f, 0.62f, 0.36f );
 
-	static Color Basalt => Palette.Hex( 0x4A4250 );
-	static Color BasaltLight => Palette.Hex( 0x5E5566 );
-	static Color BasaltShade => Palette.Hex( 0x352F3A );
-
-	/// <summary>Weathered columns lean brown-grey; fresh ones toward the floor's dark violet.</summary>
+	/// <summary>Weathered rock leans brown-grey (the walls' patches).</summary>
 	static Color BasaltBrown => Palette.Hex( 0x51473F );
 
 	/// <summary>The joints between columns: near black.</summary>
 	static Color Fissure => Palette.Hex( 0x1F1B22 );
 
-	/// <summary>Ash settled on the stone.</summary>
+	/// <summary>Ash settled on the stone (the ceiling's dusting, the firebrick's).</summary>
 	static Color Ash => Palette.Hex( 0x6E6770 );
+
+	/// <summary>
+	/// The column tops underfoot, a value step above the rock of the walls (R49). No lamp reaches the middle of the
+	/// floor, so the tops are lit by the room's ambient alone; painted as dark as the walls they read near black from
+	/// the room, and a hole further than a few tiles off was a dark slot on a dark floor — on the last floor above the
+	/// lava, where seeing the holes is the game. The joints (<see cref="Fissure"/>) stay near black, so the columns
+	/// still read as rock. Weathered columns lean brown-grey, fresh ones toward the floor's violet; ash drifts paler.
+	/// </summary>
+	static Color Basalt => Palette.Hex( 0x6A6274 );
+	static Color BasaltLight => Palette.Hex( 0x7E7488 );
+	static Color BasaltShade => Palette.Hex( 0x544C5C );
+	static Color ColumnBrown => Palette.Hex( 0x6E6258 );
+	static Color FloorAsh => Palette.Hex( 0x8A838C );
 
 	/// <summary>Scorched stone either side of a hot crack.</summary>
 	static Color Scorch => Palette.Hex( 0x5A2E2A );
@@ -95,9 +104,13 @@ public sealed class ForgeTheme : ArenaTheme
 	/// so that no two neighbours match (nor the bays either side of a corner): an anvil on its stump by a stone quench
 	/// trough, a smith's bench under a board of tongs and hammers, a great pair of bellows by a heap of coal, a rack
 	/// of bar stock with ingots and a crate of horseshoes, a grindstone in its frame, or a quench tub under a rack of
-	/// finished blades. What a set leaves bare is filled: on the floor something a head high first where the bay has
-	/// nothing tall, then barrels, crates, coal sacks, coal, ingots, chain and buckets; on the wall at a player's
-	/// chest tool boards, shelves of ingots and pots and rows of horseshoes on their nails. Over the heads of the room
+	/// finished blades — the bellows, the grindstone and the quench tub once a wall. Every set carries a light of its
+	/// own for the bays the lamps do not reach (task 10 review): a billet glowing on the anvil, a lantern on the bench
+	/// or on a bracket over the grindstone, coal raked out hot by the bellows, a pile of fresh-cast ingots, a blade
+	/// glowing in the quench tub. What a set leaves bare is filled: on the floor something a head high first where the
+	/// bay has nothing tall, then barrels, crates, coal sacks, coal, ingots, chain and buckets; on the wall, at a
+	/// player's chest and up to the heads of the room, chunky pieces that read from the middle of the room — tool
+	/// boards, cupboards, pigeonholes, racks of tongs and of bar stock, shelf units, the smith's apron. Higher up,
 	/// each bay gets two pieces dealt per wall — iron tyres on a peg, a board of horseshoes, a rail of hooks with tongs
 	/// and ladles, a rack of blades, a cartwheel (one a wall) or a jib crane with its hook (one a wall); and beside it
 	/// a high shelf of crocks, an iron vent, bar stock laid on brackets or the smithy's sign (one a wall) — and
@@ -120,27 +133,31 @@ public sealed class ForgeTheme : ArenaTheme
 			props.Begin( side, Seed + 1000 + side * 137 );
 			var all = bays.FindAll( b => b.Side == side );
 			var wall = all.FindAll( b => b.Width > 60f );
-			props.StartWall();
 			props.Stalactites( all );
 
 			var looks = props.Deal( new List<Props.Look>
 			{
 				Props.Look.Anvil, Props.Look.Bench, Props.Look.Bellows, Props.Look.Stock, Props.Look.Grind, Props.Look.Quench,
 			}, wall.Count, ( slot, look ) => !(slot == 0 && corners.Count > 0 && look == corners[^1]) && !(slot == wall.Count - 1 && side == 1 && corners.Count > 0 && look == corners[0]) );
-			props.Once( looks, Props.Look.Grind, new List<Props.Look> { Props.Look.Anvil, Props.Look.Stock, Props.Look.Bench } );
-			props.Once( looks, Props.Look.Quench, new List<Props.Look> { Props.Look.Anvil, Props.Look.Stock, Props.Look.Bench } );
+			var sets = new List<Props.Look> { Props.Look.Anvil, Props.Look.Stock, Props.Look.Bench };
+			props.Once( looks, Props.Look.Grind, sets );
+			props.Once( looks, Props.Look.Quench, sets );
+			props.Once( looks, Props.Look.Bellows, sets );
 
 			// The wall's forge in one of its wider bays away from the corners, clear of the lamps' cressets.
 			var places = new List<int>();
 			for ( var k = 1; k + 1 < wall.Count; k++ )
 				if ( wall[k].Width > 150f ) places.Add( k );
-			if ( places.Count > 0 ) looks[places[(int)(props.Next() * places.Count)]] = Props.Look.Forge;
+			looks[places[(int)(props.Next() * places.Count)]] = Props.Look.Forge;
 			if ( corners.Count == 0 ) corners.Add( looks[0] );
 			corners.Add( looks[^1] );
+			props.StartWall( looks.FindAll( l => l == Props.Look.Stock ).Count );
 
 			// Two pieces over the heads of the room in every bay but the forge's, whose hood fills it, one from each
 			// deck. Tyres and rails of hooks come twice in the first deck (a smithy has several); the wheel, the crane
-			// and the blades once a wall; the smithy's sign once a wall in the second.
+			// and the blades once a wall — and no blades at all where the wall's quench set hangs its own rack over
+			// the tub (the sentinel at the head of the hand counts that rack as the wall's one); the smithy's sign once
+			// a wall in the second.
 			var uppers = props.Deal( new List<Props.Upper>
 			{
 				Props.Upper.Hoops, Props.Upper.Horseshoes, Props.Upper.Hooks, Props.Upper.Blades, Props.Upper.Hoops, Props.Upper.Hooks, Props.Upper.Wheel, Props.Upper.Crane,
@@ -148,7 +165,10 @@ public sealed class ForgeTheme : ArenaTheme
 			var spares = new List<Props.Upper> { Props.Upper.Hoops, Props.Upper.Hooks, Props.Upper.Horseshoes };
 			props.Once( uppers, Props.Upper.Wheel, spares );
 			props.Once( uppers, Props.Upper.Crane, spares );
+			var quench = looks.Contains( Props.Look.Quench );
+			if ( quench ) uppers.Insert( 0, Props.Upper.Blades );
 			props.Once( uppers, Props.Upper.Blades, spares );
+			if ( quench ) uppers.RemoveAt( 0 );
 			var seconds = props.Deal( new List<Props.Second> { Props.Second.Shelf, Props.Second.Vent, Props.Second.Sign, Props.Second.Bars, Props.Second.Shelf, Props.Second.Bars }, wall.Count );
 			props.Once( seconds, Props.Second.Sign, new List<Props.Second> { Props.Second.Shelf, Props.Second.Bars } );
 
@@ -203,21 +223,27 @@ public sealed class ForgeTheme : ArenaTheme
 	static Rect EndGrainSwatch => Swatch( 192, 32, 32, 32 );
 	static Rect LeatherSwatch => Swatch( 224, 32, 32, 32 );
 	static Rect SackSwatch => Swatch( 256, 0, 64, 32 );
-	static Rect SolidSwatch( int k ) => Swatch( k * 16, 128, 16, 16 );
+
+	/// <summary>A cupboard door: boards in a painted frame, a ledge and brace, strap hinges; oxide red or slate blue.</summary>
+	static Rect DoorSwatch( int k ) => Swatch( 320 + k * 64, 0, 64, 64 );
+	static Rect SolidSwatch( int k ) => Swatch( (k % 32) * 16, 128 + (k / 32) * 16, 16, 16 );
 
 	/// <summary>
 	/// The plain paints in <see cref="SolidSwatch"/> order: iron, rubbed iron, bright steel, oak, charred wood, pine,
 	/// leather, rope, brass, copper, coal, ash, water, firebrick, stone, soot, carrot, cream, wine, rust, slate,
-	/// hot iron, tallow, horn, pewter, clay, dark wood, black, linen, sand, bronze, blued steel.
+	/// hot iron, tallow, horn, pewter, clay, dark wood, black, linen, sand, bronze, blued steel; then tan leather.
+	/// Iron, charred wood and dark wood are a step lighter than they would be in daylight: the bays between the lamp
+	/// pools have only the room's ambient, and painted true they went black against the rock (task 10 review).
 	/// </summary>
 	static readonly uint[] Solids =
 	{
-		0x7A7470, 0xA09A94, 0xC4C6C8, 0xA27C54, 0x4A3A30, 0xAA8C64, 0x7E5A40, 0xB09A70, 0xB8955E, 0xA87050, 0x2A2628, 0x8A8480,
+		0x8E8884, 0xA09A94, 0xC4C6C8, 0xA27C54, 0x6A5244, 0xAA8C64, 0x7E5A40, 0xB09A70, 0xB8955E, 0xA87050, 0x2A2628, 0x8A8480,
 		0x2C3236, 0x8A5A48, 0x8C8480, 0x2A252C, 0xE9A06A, 0xE8E2D2, 0x7A4A52, 0x8A5E42, 0x5C5A66, 0xC87A50, 0xE6DCC4, 0xC8B89A,
-		0x8C8C88, 0xA06A50, 0x5A4636, 0x26242A, 0xD8CFBC, 0xB8A27E, 0x8E7448, 0x4E5670,
+		0x8C8C88, 0xA06A50, 0x6E5642, 0x26242A, 0xD8CFBC, 0xB8A27E, 0x8E7448, 0x4E5670,
+		0xBC966E,
 	};
 
-	enum Paint { Iron, Rubbed, Steel, Oak, Charred, Pine, LeatherPaint, Rope, Brass, Copper, Coal, AshPaint, Water, Firebrick, StonePaint, SootPaint, Carrot, Cream, Wine, Rust, Slate, HotIron, Tallow, Horn, Pewter, Clay, DarkWood, Black, Linen, Sand, Bronze, Blued }
+	enum Paint { Iron, Rubbed, Steel, Oak, Charred, Pine, LeatherPaint, Rope, Brass, Copper, Coal, AshPaint, Water, Firebrick, StonePaint, SootPaint, Carrot, Cream, Wine, Rust, Slate, HotIron, Tallow, Horn, Pewter, Clay, DarkWood, Black, Linen, Sand, Bronze, Blued, Tan }
 
 	/// <summary>
 	/// The props' paints, in the trim's infill band (the forge hangs no pictures in it), painted over the finished
@@ -302,14 +328,47 @@ public sealed class ForgeTheme : ArenaTheme
 		for ( var x = 0; x < 64; x += 2 ) painter.Rect( 256f + x, band, 0.8f, 32f, Palette.Hex( 0x4E4640 ), alpha: 0.35f );
 		for ( var k = 0; k < 8; k++ ) painter.Circle( 256f + Next() * 64f, band + Next() * 32f, 2f + Next() * 4f, Palette.Hex( 0x2A2628 ), 0.3f );
 
+		// ---- Cupboard doors: upright boards in a frame, ledge and brace, strap hinges, a ring; painted, worn -------
+		for ( var k = 0; k < 2; k++ )
+		{
+			var x0 = 320f + k * 64f; var y0 = (float)band;
+			var paint = k == 0 ? Palette.Hex( 0x9A5A48 ) : Palette.Hex( 0x5E7088 );
+			var dark = Mix( paint, Soot, 0.55f );
+			painter.Fill( (int)x0, band, 64, 64, dark, roughness: 0.85f );
+			for ( var x = 6f; x < 58f; )
+			{
+				var w = MathF.Min( 9f + Next() * 4f, 58f - x );
+				painter.Rect( x0 + x, y0 + 6f, w - 0.8f, 52f, Mix( paint, Palette.Hex( 0xE8E2D2 ), Next() * 0.12f ), roughness: 0.8f );
+				x += w;
+			}
+			painter.Rect( x0 + 2f, y0 + 2f, 60f, 5f, paint, height: 0.9f, bevel: 1f, roughness: 0.8f );
+			painter.Rect( x0 + 2f, y0 + 57f, 60f, 5f, paint, height: 0.9f, bevel: 1f, roughness: 0.8f );
+			painter.Rect( x0 + 2f, y0 + 2f, 5f, 60f, paint, height: 0.9f, bevel: 1f, roughness: 0.8f );
+			painter.Rect( x0 + 57f, y0 + 2f, 5f, 60f, paint, height: 0.9f, bevel: 1f, roughness: 0.8f );
+			painter.Line( new Vector2( x0 + 9f, y0 + 52f ), new Vector2( x0 + 55f, y0 + 12f ), 4f, Mix( paint, Soot, 0.15f ), height: 0.95f, roughness: 0.8f );
+			foreach ( var y in new[] { 14f, 50f } )
+			{
+				painter.Rect( x0 + 2f, y0 + y - 1.6f, 30f, 3.2f, Palette.Hex( 0x2E2A2C ), radius: 1f, height: 1f, roughness: 0.5f );
+				for ( var n = 0; n < 3; n++ ) painter.Circle( x0 + 6f + n * 10f, y0 + y, 1f, Palette.Hex( 0x8A8480 ), height: 1f );
+			}
+			painter.Circle( x0 + 50f, y0 + 33f, 3.6f, Palette.Hex( 0x2E2A2C ), height: 1f );
+			painter.Circle( x0 + 50f, y0 + 33f, 2.2f, dark );
+
+			// Paint rubbed through to the wood at the edges and round the ring, soot from the forge over the top.
+			for ( var s = 0; s < 26; s++ )
+				painter.Circle( x0 + 3f + Next() * 58f, y0 + 3f + Next() * 58f, 1f + Next() * 2.6f, Palette.Hex( 0x8E6C4A ), 0.4f );
+			for ( var y = 0; y < 22; y++ ) painter.Rect( x0, y0 + y, 64f, 1f, Soot, alpha: (1f - y / 22f) * 0.3f );
+		}
+
 		// ---- Plain paints, each with a little soot ----------------------------------------------------------
 		for ( var k = 0; k < Solids.Length; k++ )
 		{
 			var color = Palette.Hex( Solids[k] );
 			var roughness = k switch { 2 or 8 or 9 or 24 or 30 or 31 => 0.35f, 12 => 0.15f, _ => 0.8f };
-			painter.Fill( k * 16, band + 128, 16, 16, color, roughness: roughness );
+			var x0 = (k % 32) * 16; var y0 = band + 128 + (k / 32) * 16;
+			painter.Fill( x0, y0, 16, 16, color, roughness: roughness );
 			for ( var d = 0; d < 6; d++ )
-				painter.Circle( k * 16 + Next() * 16f, band + 128 + Next() * 16f, 0.4f + Next() * 0.5f, Mix( color, Soot, 0.35f ), 0.4f );
+				painter.Circle( x0 + Next() * 16f, y0 + Next() * 16f, 0.4f + Next() * 0.5f, Mix( color, Soot, 0.35f ), 0.4f );
 		}
 	}
 
@@ -589,7 +648,7 @@ public sealed class ForgeTheme : ArenaTheme
 		}
 
 		// Ash in drifts across the floor.
-		painter.Blend( Ramp( painter.Noise( 5, Seed + 30, 2 ), 0.58f, 0.85f, 0.3f ), Ash, roughness: 0.95f );
+		painter.Blend( Ramp( painter.Noise( 5, Seed + 30, 2 ), 0.58f, 0.85f, 0.3f ), FloorAsh, roughness: 0.95f );
 
 		painter.HeightNoise( 0.45f, 8, Seed + 31, 2 );
 		painter.Mottle( 0.08f, 4, Seed + 32, 3 );
@@ -645,7 +704,7 @@ public sealed class ForgeTheme : ArenaTheme
 
 				var tone = Bits( h, 4 ) * 2f - 1f;
 				var color = tone > 0f ? Mix( Basalt, BasaltLight, tone * 0.5f ) : Mix( Basalt, BasaltShade, -tone * 0.55f );
-				palette[1 + c * 64 + k] = Mix( color, BasaltBrown, 0.15f + Bits( h, 12 ) * 0.6f );
+				palette[1 + c * 64 + k] = Mix( color, ColumnBrown, 0.15f + Bits( h, 12 ) * 0.6f );
 			}
 
 			var footInset = 6f + (float)random.NextDouble() * 2f;
@@ -1116,16 +1175,24 @@ public sealed class ForgeTheme : ArenaTheme
 		readonly List<(float From, float To)> _floor = new();
 		readonly List<(float From, float To)> _chest = new();
 		readonly List<(float From, float To)> _head = new();
-		readonly HashSet<string> _heroes = new();
 
 		/// <summary>Whether the bay being furnished has something a head high yet.</summary>
 		bool _tall;
 
 		int _boards;
-		int _racks;
 		int _cupboards;
 		int _baskets;
 		int _braziers;
+		int _shelves;
+
+		/// <summary>Racks of bar stock standing on the wall, the stock sets' own counted in from the start: two a wall.</summary>
+		int _racks;
+
+		/// <summary>The chest band's racks and hangings on the wall being dressed (see <see cref="Band"/>).</summary>
+		int _pigeonholes;
+		int _barRacks;
+		int _tongRacks;
+		int _aprons;
 
 		public Props( FloorContext room, Material trim, Material glow ) : base( room )
 		{
@@ -1154,28 +1221,39 @@ public sealed class ForgeTheme : ArenaTheme
 
 		void Claim( float u, float width ) => _floor.Add( (u - width * 0.5f, u + width * 0.5f) );
 
-		/// <summary>Claims a stretch of the chest band, and of the band over the heads of the room as well where the piece reaches <paramref name="top"/> that high.</summary>
-		void Hang( float u, float width, float top = 0f )
+		/// <summary>
+		/// Claims a stretch of the chest band where the piece reaches <paramref name="top"/> well into it, and of the band
+		/// over the heads of the room where it reaches well into that. A barrel stack or a pile of crates only tops out
+		/// at the foot of the chest band; claiming the band over them left the rock bare from their tops to the heads of
+		/// the room, half of most bays (task 10 review).
+		/// </summary>
+		void Hang( float u, float width, float top )
 		{
-			_chest.Add( (u - width * 0.5f, u + width * 0.5f) );
-			if ( top > HeadFoot - 2f ) _head.Add( (u - width * 0.5f, u + width * 0.5f) );
+			if ( top > ChestFoot + 12f ) _chest.Add( (u - width * 0.5f, u + width * 0.5f) );
+			if ( top > HeadFoot + 8f ) _head.Add( (u - width * 0.5f, u + width * 0.5f) );
 		}
 
-		public void StartWall()
+		/// <summary>Starts the count of a wall's pieces afresh, its <paramref name="stockSets"/> racks of bar stock already counted.</summary>
+		public void StartWall( int stockSets )
 		{
-			_heroes.Clear();
 			_boards = 0;
-			_racks = 0;
+			_racks = stockSets;
 			_cupboards = 0;
 			_baskets = 0;
 			_braziers = 0;
+			_shelves = 0;
+			_pigeonholes = 0;
+			_barRacks = 0;
+			_tongRacks = 0;
+			_aprons = 0;
 		}
 
 		// ---- The cornice ------------------------------------------------------------------------------
 
 		/// <summary>
 		/// Stalactites under the cornice along the whole wall, in clusters of two to five at uneven spacing, each cone
-		/// its own girth and length, the odd one long: mineral dripped out of the rock above and furred with ash.
+		/// its own girth and length, the odd one long: mineral dripped out of the rock above and furred with ash — stone and
+		/// slate grey, only the odd one pale, as a field of pale ones read as fangs or icicles under the iron (task 10 review).
 		/// </summary>
 		public void Stalactites( List<Bay> all ) => Apart( () =>
 		{
@@ -1183,15 +1261,15 @@ public sealed class ForgeTheme : ArenaTheme
 			var at = Range( 10f, 60f );
 			while ( at < FloorContext.Span - 10f )
 			{
-				for ( var k = 2 + Pick( 4 ); k > 0; k-- )
+				for ( var k = 2 + Pick( 3 ); k > 0; k-- )
 				{
 					var r = Range( 1.8f, 4.4f );
 					var length = Next() < 0.15f ? Range( 22f, 30f ) : Range( 7f, 18f );
 					var foot = new Vector3( at + Range( -12f, 12f ), Range( -14f, 30f ), Beam + 0.5f );
-					Kit.SmoothLathe( Any( Paint.Sand, Paint.AshPaint, Paint.StonePaint, Paint.Tallow ), At( foot ), new[]
+					Kit.SmoothLathe( Next() < 0.12f ? Any( Paint.Sand, Paint.Tallow ) : Any( Paint.StonePaint, Paint.Slate, Paint.AshPaint ), At( foot ), new[]
 					{
 						new Vector2( r, 0f ), new Vector2( r * Range( 0.5f, 0.7f ), length * Range( 0.35f, 0.55f ) ), new Vector2( 0f, length ),
-					}, 5, down, false, false, 60f, Next() );
+					}, 4, down, false, false, 60f, Next() );
 				}
 				at += Range( 55f, 130f );
 			}
@@ -1260,30 +1338,27 @@ public sealed class ForgeTheme : ArenaTheme
 				case Look.Bench:
 				{
 					var length = Range( 50f, 64f );
-					Row( from, to, 4f, (length + 2f, u => { SmithBench( u, length ); ToolBoard( u + Range( -4f, 4f ), MathF.Min( length, Range( 48f, 60f ) ), Range( 58f, 64f ) ); }), (26f, Barrel) );
+					Row( from, to, 4f, (length + 2f, u => { SmithBench( u, length ); ToolBoard( u + Range( -4f, 4f ), MathF.Min( length, Range( 48f, 60f ) ), Range( 58f, 64f ), Range( 38f, 44f ) ); }), (26f, Barrel) );
 					break;
 				}
 				case Look.Bellows:
 				{
 					var heap = Range( 34f, 44f );
-					Row( from, to, 4f, (52f, Bellows), (heap, u => CoalHeap( u, heap )), (13f, Bucket) );
+					Row( from, to, 4f, (52f, Bellows), (heap, u => CoalHeap( u, heap, true )), (13f, Bucket) );
 					break;
 				}
 				case Look.Stock:
 				{
 					var width = Range( 36f, 46f );
-					Row( from, to, 4f, (width + 2f, u => StockRack( u, width )), (24f, Ingots), (26f, u => HorseshoeCrate( u )) );
+					Row( from, to, 4f, (width + 2f, u => StockRack( u, width )), (24f, u => Ingots( u, true )), (26f, u => HorseshoeCrate( u )) );
 					break;
 				}
 				case Look.Grind:
-					Row( from, to, 4f, (34f, Grindstone), (26f, Barrel), (28f, u => CrateStack( u, false )) );
+					Row( from, to, 4f, (34f, u => { Grindstone( u ); WallLantern( u + Range( -6f, 6f ), Range( 84f, 92f ) ); }), (26f, Barrel), (28f, u => CrateStack( u, false )) );
 					break;
 				case Look.Quench:
-				{
-					var width = Range( 40f, 52f );
-					Row( from, to, 4f, (30f, u => { Tub( u ); Blades( u + Range( -4f, 4f ), Range( 40f, 48f ), Range( 58f, 66f ) ); }), (26f, Barrel), (30f, ChainCoil) );
+					Row( from, to, 4f, (30f, u => { Tub( u ); HotBlade( u ); Blades( u + Range( -4f, 4f ), Range( 40f, 48f ), Range( 58f, 66f ) ); }), (26f, Barrel), (30f, ChainCoil) );
 					break;
-				}
 				default:
 				{
 					var width = MathF.Min( bay.Width - 40f, Range( 84f, 96f ) );
@@ -1325,6 +1400,7 @@ public sealed class ForgeTheme : ArenaTheme
 						{
 							var width = Range( 32f, MathF.Min( 40f, room - 4f ) );
 							StockRack( Put( width + 2f ), width );
+							_racks++;
 						}
 						else if ( roll < 0.7f && room >= 46f ) BarrelStack( Put( 46f ) );
 						else CrateStack( Put( 28f ), true );
@@ -1333,8 +1409,8 @@ public sealed class ForgeTheme : ArenaTheme
 					else if ( room >= 26f && roll < 0.26f ) Barrel( Put( 26f ) );
 					else if ( room >= 28f && roll < 0.38f ) CrateStack( Put( 28f ), false );
 					else if ( room >= 30f && roll < 0.52f ) Sacks( Put( 30f ) );
-					else if ( room >= 30f && roll < 0.64f ) { var width = Range( 28f, MathF.Min( 40f, room - 2f ) ); CoalHeap( Put( width ), width ); }
-					else if ( room >= 24f && roll < 0.76f ) Ingots( Put( 24f ) );
+					else if ( room >= 30f && roll < 0.64f ) { var width = Range( 28f, MathF.Min( 40f, room - 2f ) ); CoalHeap( Put( width ), width, false ); }
+					else if ( room >= 24f && roll < 0.76f ) Ingots( Put( 24f ), false );
 					else if ( room >= 30f && roll < 0.86f ) ChainCoil( Put( 30f ) );
 					else Bucket( Put( 13f ) );
 				}
@@ -1345,52 +1421,73 @@ public sealed class ForgeTheme : ArenaTheme
 		}
 
 		/// <summary>
-		/// Fills a bare stretch of wall from one end, a piece at a time: a board of tongs and hammers (four a wall), a shelf
-		/// of ingots, pots and horseshoes, a tool cupboard (three a wall) or a fire basket burning on its bracket (five a
-		/// wall) — at a player's chest, or (<paramref name="high"/>) over the heads of the room.
-		/// A pick that does not fit leaves a little bare stone rather than repeat the last.
+		/// The pieces a bare stretch draws from, as <see cref="Band"/> numbers them: the chunky ones — boards, cupboards,
+		/// pigeonholes, tongs — dealt more often than the shelf and the bar stock, which read as lines from the room.
+		/// </summary>
+		static readonly int[] Kinds = { 0, 0, 0, 2, 2, 2, 4, 4, 6, 6, 7, 3, 1, 5 };
+
+		/// <summary>
+		/// Fills a bare stretch of wall from one end, a piece at a time: a dark board of bright tools or a painted tool
+		/// cupboard (five a wall each), a pigeonhole rack of ingots and bar ends or a rail of hanging tongs (four a wall
+		/// each), a shelf unit of ingots, pots and horseshoes or bar stock laid on brackets (three a wall each), a fire
+		/// basket burning on its bracket (five a wall), or the smith's leather apron and gloves on their pegs (two); at a
+		/// player's chest, or (<paramref name="high"/>) over the heads of the room. The pieces are chunky and stand
+		/// off the rock in value, so each reads as itself from the middle of the room: thin planks with small things on
+		/// them read as lines from there, and plain boards as blank rectangles (task 10 review). A pick that does not
+		/// fit leaves a little bare stone rather than repeat the last.
 		/// </summary>
 		void Band( float from, float to, bool high )
 		{
-			var at = from + Range( 0f, 6f );
+			var at = from + Range( 0f, 5f );
 			var last = -1;
-			while ( to - at >= 22f )
+			while ( to - at >= 20f )
 			{
 				var room = to - at;
-				var foot = (high ? HeadFoot + 8f : ChestFoot + 6f) + Range( 0f, 8f );
+				var foot = (high ? HeadFoot + 6f : ChestFoot + 4f) + Range( 0f, 6f );
+
+				// At the chest, a board, a cupboard or a rack of pigeonholes is as often a tall one, up past the heads of
+				// the room, which claims that band too: fewer, bigger pieces cover the rock where many small ones dotted it.
+				var height = high ? 136f - foot : Next() < 0.55f ? Range( 70f, 82f ) : Range( 38f, 46f );
 				var width = 0f;
-				for ( var tries = 0; tries < 8 && width == 0f; tries++ )
+				for ( var tries = 0; tries < 10 && width == 0f; tries++ )
 				{
-					var kind = Pick( 4 );
+					var kind = Kinds[Pick( Kinds.Length )];
 					if ( kind == last ) continue;
 					switch ( kind )
 					{
-						case 0 when room >= 40f && _boards < 4: width = MathF.Min( room - 2f, Range( 40f, 56f ) ); ToolBoard( at + width * 0.5f, width, foot ); break;
-						case 1 when room >= 38f: width = MathF.Min( room - 2f, Range( 38f, 64f ) ); Shelf( at + width * 0.5f, width, foot + 6f ); break;
-						case 2 when room >= 32f && _cupboards < 3: width = MathF.Min( room - 2f, Range( 30f, 40f ) ); Cupboard( at + width * 0.5f, width, foot, MathF.Min( width * Range( 0.9f, 1.2f ), high ? 132f - foot : 46f ) ); break;
+						case 0 when room >= 40f && _boards < 5: width = MathF.Min( room - 2f, Range( 44f, 62f ) ); ToolBoard( at + width * 0.5f, width, foot, height ); break;
+						case 1 when room >= 38f && _shelves < 3: width = MathF.Min( room - 2f, Range( 40f, 60f ) ); Shelf( at + width * 0.5f, width, foot + 6f ); break;
+						case 2 when room >= 32f && _cupboards < 5: width = MathF.Min( room - 2f, Range( 32f, 44f ) ); Cupboard( at + width * 0.5f, width, foot, MathF.Max( height, 30f ) ); break;
 						case 3 when room >= 24f && _baskets < 5: width = 22f; FireBasket( at + 11f, foot + Range( 20f, 30f ) ); break;
+						case 4 when room >= 32f && _pigeonholes < 4: width = MathF.Min( room - 2f, Range( 32f, 46f ) ); Pigeonholes( at + width * 0.5f, width, foot, MathF.Max( height, 30f ) ); break;
+						case 5 when room >= 48f && _barRacks < 3: width = MathF.Min( room - 2f, Range( 50f, 80f ) ); BarRack( at + width * 0.5f, width, foot + 6f ); break;
+						case 6 when room >= 34f && _tongRacks < 4: width = MathF.Min( room - 2f, Range( 36f, 52f ) ); TongRack( at + width * 0.5f, width, foot + Range( 34f, 40f ) ); break;
+						case 7 when room >= 32f && _aprons < 2 && !high: width = MathF.Min( room - 2f, Range( 32f, 38f ) ); Apron( at + width * 0.5f, width, foot + Range( 44f, 50f ) ); break;
 					}
 					if ( width > 0f ) last = kind;
 				}
-				at += (width > 0f ? width : 10f) + Range( 5f, 10f );
+				at += (width > 0f ? width : 10f) + Range( 3f, 7f );
 			}
 		}
 
-		/// <summary>A tool cupboard hung on the wall: two doors of boards in a sooted carcass, iron strap hinges. Three a wall at most.</summary>
+		/// <summary>
+		/// A tool cupboard hung on the wall: two painted doors (oxide red or slate blue, a swatch of their own, so they do
+		/// not read as one more board) in a sooted carcass under a top board. Five a wall at most.
+		/// </summary>
 		void Cupboard( float u, float width, float v, float height )
 		{
 			_cupboards++;
 			Hang( u, width + 2f, v + height + 2f );
 			const float D = 12f;
 			Kit.BevelBox( P( Paint.Charred ), At( new Vector3( u, Face - D * 0.5f, v + height * 0.5f ) ), new Vector3( width, D, height ), 0.6f, Run );
+			Kit.Box( P( Paint.Charred ), At( new Vector3( u, Face - D * 0.5f - 0.8f, v + height + 1f ) ), new Vector3( width + 3f, D + 1.6f, 2f ), Run );
 			var front = Face - D - 0.1f;
-			var boards = PlankSwatch;
+			var doors = DoorSwatch( Pick( 2 ) );
 			foreach ( var s in new[] { -1f, 1f } )
 			{
 				var door = u + s * width * 0.25f;
-				Room.WallPicture( Side, _trim, boards, door - width * 0.23f, door + width * 0.23f, v + 2f, v + height - 2f, front, false );
-				foreach ( var t in new[] { 0.22f, 0.78f } )
-					Kit.Box( P( Paint.Iron ), At( new Vector3( u + s * (width * 0.5f - 5f), front - 0.4f, v + height * t ) ), new Vector3( 8f, 0.8f, 1.6f ), Run );
+				var region = s < 0f ? doors : new Rect( doors.Right, doors.Top, -doors.Width, doors.Height );
+				Room.WallPicture( Side, _trim, region, door - width * 0.23f, door + width * 0.23f, v + 2f, v + height - 2f, front, false );
 			}
 		}
 
@@ -1408,6 +1505,166 @@ public sealed class ForgeTheme : ArenaTheme
 			var flame = new Skin( _glow, FlameGlow );
 			for ( var k = 0; k < 2; k++ )
 				Kit.SmoothLathe( flame, At( new Vector3( u + (k == 0 ? -1.6f : 1.8f), y + Range( -1f, 1f ), v + 5.6f ) ), new[] { new Vector2( 2f, 0f ), new Vector2( 1.4f, 3f ), new Vector2( 0f, Range( 6f, 9f ) ) }, 5, Turn( Rotation.FromAxis( Into, Range( -12f, 12f ) ) ), false, false, 60f, Next() );
+		}
+
+		/// <summary>
+		/// A lantern standing at <paramref name="foot"/>: an iron base and cap round glowing panes, corner posts, a ring
+		/// on top — one of the bays' own lights where the lamps do not reach (task 10 review).
+		/// </summary>
+		void Lantern( Vector3 foot, float scale )
+		{
+			var iron = P( Paint.Iron );
+			var w = 5.6f * scale; var h = 8.4f * scale;
+			var turn = Rotation.FromYaw( Range( -30f, 30f ) );
+			var rotation = Turn( turn );
+			Kit.Box( iron, At( foot + new Vector3( 0f, 0f, 0.7f * scale ) ), new Vector3( w + 1.6f, w + 1.6f, 1.4f * scale ), rotation );
+			var glass = 1.4f * scale;
+			Kit.Box( new Skin( _glow, FlameGlow ), At( foot + new Vector3( 0f, 0f, glass + h * 0.5f ) ), new Vector3( w, w, h ), rotation );
+			foreach ( var sx in new[] { -1f, 1f } )
+			foreach ( var sy in new[] { -1f, 1f } )
+				Kit.Box( iron, At( foot + turn * new Vector3( sx * w * 0.5f, sy * w * 0.5f, glass + h * 0.5f ) ), new Vector3( 0.9f, 0.9f, h ), rotation );
+			var top = glass + h;
+			Kit.SmoothLathe( iron, At( foot + new Vector3( 0f, 0f, top ) ), new[] { new Vector2( w * 0.78f, 0f ), new Vector2( w * 0.5f, 2.4f * scale ), new Vector2( 0.9f, 4f * scale ) }, 4, Turn( turn * Rotation.FromYaw( 45f ) ), true, false, 30f );
+			Kit.Tube( iron, At( Loop( foot + new Vector3( 0f, 0f, top + 5.6f * scale ), Vector3.Forward, Vector3.Up, 1.6f * scale, 6 ) ), 0.35f, 3 );
+		}
+
+		/// <summary>A lantern hung from an iron bracket in the wall, its ring at <paramref name="v"/>.</summary>
+		void WallLantern( float u, float v )
+		{
+			const float Out = 11f;
+			Hang( u, 16f, v + 4f );
+			var iron = P( Paint.Iron );
+			Kit.Box( iron, At( new Vector3( u, Face - 0.6f, v + 1f ) ), new Vector3( 4.6f, 1.2f, 11f ), Run );
+			Kit.Tube( iron, At( new[] { new Vector3( u, Face - 1f, v + 4f ), new Vector3( u, Face - Out, v + 4f ), new Vector3( u, Face - Out, v + 2.4f ) } ), 0.6f, 4 );
+			Kit.Tube( iron, At( new[] { new Vector3( u, Face - 1f, v - 4f ), new Vector3( u, Face - Out * 0.6f, v + 3.6f ) } ), 0.45f, 4 );
+			Lantern( new Vector3( u, Face - Out, v - 15.4f ), 1.2f );
+		}
+
+		/// <summary>A blade just out of the fire, glowing, stood in the quench tub in a pair of tongs leant on its rim.</summary>
+		void HotBlade( float u )
+		{
+			const float R = 13f;
+			var centre = new Vector3( u + Range( -4f, 4f ), Back - R - 1.5f, Ledge + 4f );
+			var tilt = Rotation.FromAxis( Into, Range( 14f, 22f ) * (Next() < 0.5f ? -1f : 1f) );
+			var dir = tilt * Vector3.Up;
+			var length = Range( 26f, 30f );
+			var mid = centre + dir * (length * 0.5f);
+			Kit.BevelBox( new Skin( _glow, EmberGlow ), At( mid ), new Vector3( 2.8f, 0.8f, length ), 0.3f, Turn( tilt ) );
+			Tongs( centre + dir * (length - 3f), dir * Range( 16f, 20f ), new Vector3( 0f, 1.4f, 0f ), Paint.Rubbed, 0.5f );
+		}
+
+		/// <summary>
+		/// A pigeonhole rack on the wall, two rows of cells or (a tall rack) four, a cell to a kind: ingots end on, bar ends
+		/// of every gauge, a cell of horseshoes. Four a wall at most.
+		/// </summary>
+		void Pigeonholes( float u, float width, float v, float height )
+		{
+			_pigeonholes++;
+			Hang( u, width + 2f, v + height );
+			const float D = 13f;
+			var y = Face - D * 0.5f;
+			var wood = Any( Paint.Charred, Paint.DarkWood );
+			Kit.Box( wood, At( new Vector3( u, Face - 0.6f, v + height * 0.5f ) ), new Vector3( width, 1.2f, height ), Run );
+			foreach ( var s in new[] { -1f, 1f } )
+			{
+				Kit.Box( wood, At( new Vector3( u + s * (width * 0.5f - 1f), y, v + height * 0.5f ) ), new Vector3( 2f, D, height ), Run );
+				Kit.Box( wood, At( new Vector3( u, y, v + height * 0.5f + s * (height * 0.5f - 1f) ) ), new Vector3( width, D, 2f ), Run );
+			}
+			var columns = width > 38f ? 3 : 2;
+			var rows = height > 54f ? 4 : 2;
+			var cell = (width - 2f) / columns;
+			var tall = (height - 2f) / rows;
+			for ( var c = 1; c < columns; c++ )
+				Kit.Box( wood, At( new Vector3( u - width * 0.5f + 1f + c * cell, y, v + height * 0.5f ) ), new Vector3( 1.6f, D, height - 2f ), Run );
+			for ( var r = 1; r < rows; r++ )
+				Kit.Box( wood, At( new Vector3( u, y, v + 1f + r * tall ) ), new Vector3( width - 2f, D, 1.6f ), Run );
+			for ( var r = 0; r < rows; r++ )
+			for ( var c = 0; c < columns; c++ )
+			{
+				var x = u - width * 0.5f + 1f + (c + 0.5f) * cell;
+				var floor = v + 1f + r * tall + 0.8f;
+				switch ( Pick( 3 ) )
+				{
+					case 0:
+						for ( var k = 0; k < 3 + Pick( 2 ); k++ )
+							Kit.Box( Any( Paint.Rubbed, Paint.Bronze, Paint.Copper ), At( new Vector3( x + Range( -1f, 1f ), y - 0.5f, floor + 1.2f + k * 2.4f ) ), new Vector3( cell - 4f, D - 3f, 2.2f ), Run );
+						break;
+					case 1:
+						for ( var k = 0; k < 5; k++ )
+						{
+							var r2 = Range( 0.6f, 1.2f );
+							var end = new Vector3( x + (k % 3 - 1) * (cell * 0.25f), y - D * 0.5f + 1f, floor + r2 + (k / 3) * 2.6f );
+							Kit.Tube( Any( Paint.Rubbed, Paint.Steel, Paint.Rust ), At( new[] { end, end + new Vector3( 0f, D - 2f, 0f ) } ), r2, 4 );
+						}
+						break;
+					default:
+						for ( var k = 0; k < 2; k++ )
+							Horseshoe( new Vector3( x + (k - 0.5f) * cell * 0.4f, y - D * 0.5f + 1.4f, floor + 4.2f ), 0f, false, 1.1f );
+						break;
+				}
+			}
+		}
+
+		/// <summary>Bar stock laid along the wall at a player's chest on three iron brackets, in three tiers. Three a wall at most.</summary>
+		void BarRack( float u, float length, float v )
+		{
+			_barRacks++;
+			Hang( u, length + 4f, v + 22f );
+			var iron = P( Paint.Iron );
+			var tiers = new[] { 0f, 9f, 18f };
+			foreach ( var t in new[] { -0.42f, 0f, 0.42f } )
+			{
+				var x = u + t * length;
+				Kit.Box( iron, At( new Vector3( x, Face - 0.7f, v + 9f ) ), new Vector3( 3f, 1.4f, 24f ), Run );
+				foreach ( var tier in tiers )
+					Kit.Box( iron, At( new Vector3( x, Face - 5f, v + tier - 1f ) ), new Vector3( 2f, 9f, 2f ), Run );
+			}
+			foreach ( var tier in tiers )
+			for ( var k = 0; k < 3 + Pick( 3 ); k++ )
+			{
+				var r = Range( 0.8f, 1.6f );
+				var y = Face - 1.8f - k * 1.6f;
+				var z = v + tier + r;
+				var shift = Range( -4f, 4f );
+				Kit.Tube( Any( Paint.Rubbed, Paint.Steel, Paint.Rust, Paint.Rubbed ), At( new[] { new Vector3( u - length * 0.5f + shift, y, z ), new Vector3( u + length * 0.5f + shift, y, z ) } ), r, 4 );
+			}
+		}
+
+		/// <summary>A rail on two brackets hung with tongs of every size, reins over the rail, jaws down. Four a wall at most.</summary>
+		void TongRack( float u, float width, float v )
+		{
+			_tongRacks++;
+			Hang( u, width + 2f, v + 3f );
+			var wood = Any( Paint.Charred, Paint.DarkWood );
+			Kit.BevelBox( wood, At( new Vector3( u, Face - 0.8f, v - 8f ) ), new Vector3( width, 1.6f, 22f ), 0.3f, Run );
+			Kit.Tube( P( Paint.Iron ), At( new[] { new Vector3( u - width * 0.5f + 1f, Face - 4f, v ), new Vector3( u + width * 0.5f - 1f, Face - 4f, v ) } ), 0.8f, 4 );
+			foreach ( var s in new[] { -1f, 1f } )
+				Kit.Box( P( Paint.Iron ), At( new Vector3( u + s * (width * 0.5f - 2f), Face - 2f, v ) ), new Vector3( 1.4f, 4f, 1.4f ), Run );
+			var at = u - width * 0.5f + Range( 4f, 6f );
+			while ( at < u + width * 0.5f - 4f )
+			{
+				Tongs( new Vector3( at, Face - 5.4f, v - 3f ), new Vector3( Range( -1.5f, 1.5f ), 0f, -Range( 22f, 32f ) ), new Vector3( Range( 1.2f, 2.2f ), 0f, 0f ), Next() < 0.3f ? Paint.Steel : Paint.Rubbed, 0.55f );
+				at += Range( 5f, 7f );
+			}
+		}
+
+		/// <summary>The smith's leather apron hung on a peg by its neck strap, and his gloves on the next peg. Two a wall at most.</summary>
+		void Apron( float u, float width, float v )
+		{
+			_aprons++;
+			var apron = u - width * 0.5f + 11f;
+			var gloves = u + width * 0.5f - 6f;
+			var length = Range( 38f, 44f );
+			Hang( u, width, v + 2f );
+			foreach ( var x in new[] { apron, gloves } )
+				Kit.Box( P( Paint.DarkWood ), At( new Vector3( x, Face - 2.4f, v ) ), new Vector3( 1.6f, 4.8f, 1.6f ), Run );
+			var leather = Any( Paint.Tan, Paint.Tan, Paint.LeatherPaint );
+			var top = v - 6f;
+			Kit.Tube( P( Paint.LeatherPaint ), At( new[] { new Vector3( apron - 5f, Face - 2f, top - 2f ), new Vector3( apron, Face - 3.6f, v + 0.8f ), new Vector3( apron + 5f, Face - 2f, top - 2f ) } ), 0.5f, 3 );
+			Kit.BevelBox( leather, At( new Vector3( apron, Face - 1.6f, top - 5f ) ), new Vector3( 11f, 1.6f, 10f ), 0.5f, Run );
+			Kit.BevelBox( leather, At( new Vector3( apron, Face - 1.8f, top - 10f - (length - 10f) * 0.5f ) ), new Vector3( 19f, 1.8f, length - 10f ), 0.6f, Turn( Rotation.FromAxis( Into, Range( -3f, 3f ) ) ) );
+			foreach ( var s in new[] { -1f, 1f } )
+				Kit.Ellipsoid( leather, At( new Vector3( gloves + s * 2.4f, Face - 3.4f, v - 8f - Range( 0f, 2f ) ) ), new Vector3( 3f, 2.2f, 7.4f ), Turn( Rotation.FromAxis( Into, s * Range( 6f, 14f ) ) ), 2, 6 );
 		}
 
 		/// <summary>A standing brazier on a tripod, its bowl heaped with glowing coals. Three a wall at most.</summary>
@@ -1510,7 +1767,7 @@ public sealed class ForgeTheme : ArenaTheme
 
 		// ---- Smithing ---------------------------------------------------------------------------------
 
-		/// <summary>An anvil on its stump: a waisted body, a flat face, a horn and a heel, a hammer resting on it.</summary>
+		/// <summary>An anvil on its stump: a waisted body, a flat face, a horn and a heel, a billet glowing on the face just out of the fire, the hammer by it.</summary>
 		void Anvil( float u )
 		{
 			Claim( u, 26f );
@@ -1529,7 +1786,8 @@ public sealed class ForgeTheme : ArenaTheme
 			Kit.BevelBox( P( Paint.Rubbed ), At( On( 1f, 12.5f ) ), new Vector3( 21f, 9f, 5f ), 0.5f, rotation );
 			Kit.Box( iron, At( On( -11f, 13f ) ), new Vector3( 4f, 7f, 3f ), rotation );
 			Kit.SmoothLathe( iron, At( On( 11.4f, 12.5f ) ), new[] { new Vector2( 4f, 0f ), new Vector2( 3f, 4.5f ), new Vector2( 1.4f, 8.5f ), new Vector2( 0f, 11.5f ) }, 6, Turn( turn * Rotation.FromToRotation( Vector3.Up, Vector3.Forward ) ), false, false, 50f );
-			Hammer( On( Range( -4f, 4f ), 15.2f ), yaw + Range( 60f, 120f ) );
+			Kit.BevelBox( new Skin( _glow, EmberGlow ), At( On( Range( 2f, 6f ), 16.6f ) ), new Vector3( Range( 13f, 16f ), 3.2f, 3.2f ), 0.4f, Turn( turn * Rotation.FromYaw( Range( -20f, 20f ) ) ) );
+			Hammer( On( Range( -9f, -6f ), 15.2f ), yaw + Range( 60f, 120f ) );
 		}
 
 		/// <summary>A smith's hammer lying at <paramref name="at"/>, its handle turned <paramref name="yaw"/> degrees.</summary>
@@ -1541,11 +1799,11 @@ public sealed class ForgeTheme : ArenaTheme
 		}
 
 		/// <summary>A pair of tongs from <paramref name="pivot"/>, jaws one way and reins the other, open a little.</summary>
-		void Tongs( Vector3 pivot, Vector3 reins, Vector3 open )
+		void Tongs( Vector3 pivot, Vector3 reins, Vector3 open, Paint paint = Paint.Iron, float radius = 0.4f )
 		{
-			var iron = P( Paint.Iron );
+			var iron = P( paint );
 			foreach ( var s in new[] { -1f, 1f } )
-				Kit.Tube( iron, At( new[] { pivot - reins * 0.3f + open * s * 0.6f, pivot, pivot + reins + open * s } ), 0.4f, 3 );
+				Kit.Tube( iron, At( new[] { pivot - reins * 0.3f + open * s * 0.6f, pivot, pivot + reins + open * s } ), radius, 3 );
 		}
 
 		/// <summary>A stone quench trough of water, tongs left standing in it.</summary>
@@ -1563,7 +1821,7 @@ public sealed class ForgeTheme : ArenaTheme
 			Tongs( at, new Vector3( Range( -4f, 4f ), -2f, 18f ), new Vector3( 1.6f, 0f, 0f ) );
 		}
 
-		/// <summary>A smith's bench: a thick top on four legs, a shelf under it with ingots, a leg vice at one end, horseshoes and tongs on top.</summary>
+		/// <summary>A smith's bench: a thick top on four legs, a shelf under it with ingots, a leg vice at one end, horseshoes and tongs on top, a lantern burning at the other end.</summary>
 		void SmithBench( float u, float length )
 		{
 			Claim( u, length + 2f );
@@ -1587,56 +1845,71 @@ public sealed class ForgeTheme : ArenaTheme
 			Horseshoe( new Vector3( u - end * length * 0.15f, y + Range( -4f, 2f ), top + 0.3f ), 0f, true );
 			Horseshoe( new Vector3( u - end * length * 0.15f + Range( 5f, 8f ), y + Range( -2f, 4f ), top + 0.3f ), 0f, true );
 			Tongs( new Vector3( u + Range( -6f, 6f ), y - 2f, top + 0.6f ), new Vector3( end * 14f, 2f, 0f ), new Vector3( 0f, 1.6f, 0f ) );
+			Lantern( new Vector3( u - end * (length * 0.5f - 6f), y + Range( -1f, 2f ), top ), Range( 1.1f, 1.25f ) );
 		}
 
 		/// <summary>A horseshoe at <paramref name="at"/>: lying flat on a surface, or hung toe down on a nail in the wall.</summary>
-		void Horseshoe( Vector3 at, float turn, bool flat )
+		void Horseshoe( Vector3 at, float turn, bool flat, float scale = 1f )
 		{
-			var path = new Vector3[6];
-			for ( var i = 0; i < 6; i++ )
+			var path = new Vector3[5];
+			for ( var i = 0; i < 5; i++ )
 			{
-				var a = MathF.PI * (-0.12f + 1.24f * i / 5f) + turn;
-				var p = new Vector3( MathF.Cos( a ) * 2.8f, 0f, MathF.Sin( a ) * 3.2f );
+				var a = MathF.PI * (-0.12f + 1.24f * i / 4f) + turn;
+				var p = new Vector3( MathF.Cos( a ) * 2.8f, 0f, MathF.Sin( a ) * 3.2f ) * scale;
 				path[i] = flat ? at + new Vector3( p.x, p.z, 0.4f ) : at + new Vector3( p.x, 0f, -p.z );
 			}
-			Kit.Tube( P( Paint.Rubbed ), At( path ), 0.45f, 3 );
+			Kit.Tube( P( Paint.Rubbed ), At( path ), 0.45f * scale, 3 );
 		}
 
-		/// <summary>A board of tools on the wall: tongs, hammers, a file and a horseshoe, each on its peg. Four a wall at most.</summary>
-		void ToolBoard( float u, float width, float v )
+		/// <summary>
+		/// A dark board of tools on the wall, in one row or (a tall board) two: tongs, hammers, a rasp and a horseshoe, each on its peg, the iron rubbed
+		/// bright — the blade rack's idiom (bright steel on dark wood), the one that reads from across the room; a pale
+		/// board with dark iron on it read as a blank plank there (task 10 review). Five a wall at most.
+		/// </summary>
+		void ToolBoard( float u, float width, float v, float h )
 		{
 			_boards++;
-			var h = Range( 32f, 38f );
 			Hang( u, width + 2f, v + h );
-			Kit.BevelBox( T( PlankSwatch ), At( new Vector3( u, Face - 0.8f, v + h * 0.5f ) ), new Vector3( width, 1.6f, h ), 0.3f, Run );
-			var at = u - width * 0.5f + Range( 4f, 6f );
-			var y = Face - 2.6f;
-			while ( at < u + width * 0.5f - 4f )
+			Kit.BevelBox( Any( Paint.Charred, Paint.DarkWood, Paint.Charred ), At( new Vector3( u, Face - 0.9f, v + h * 0.5f ) ), new Vector3( width, 1.8f, h ), 0.4f, Run );
+			var rows = h > 60f ? 2 : 1;
+			for ( var row = 0; row < rows; row++ )
 			{
-				var peg = v + h - Range( 4f, 7f );
-				Kit.Box( P( Paint.DarkWood ), At( new Vector3( at, Face - 2.2f, peg ) ), new Vector3( 1.2f, 2.8f, 1.2f ), Run );
+				var top = v + h - row * h * 0.5f;
+				ToolRow( u, width, top );
+			}
+		}
+
+		/// <summary>One row of tools on a board, hung from pegs a little under <paramref name="top"/>.</summary>
+		void ToolRow( float u, float width, float top )
+		{
+			var at = u - width * 0.5f + Range( 4f, 6f );
+			var y = Face - 3f;
+			while ( at < u + width * 0.5f - 5f )
+			{
+				var peg = top - Range( 3f, 5f );
+				Kit.Box( P( Paint.Iron ), At( new Vector3( at, Face - 2.4f, peg ) ), new Vector3( 1.2f, 3f, 1.2f ), Run );
 				switch ( Pick( 4 ) )
 				{
 					case 0:
-						Tongs( new Vector3( at, y, peg - 7f ), new Vector3( 0f, 0f, -Range( 14f, 20f ) ), new Vector3( 1.4f, 0f, 0f ) );
-						at += 7f;
+						Tongs( new Vector3( at, y, peg - 6f ), new Vector3( 0f, 0f, -Range( 25f, 30f ) ), new Vector3( 1.8f, 0f, 0f ), Paint.Rubbed, 0.6f );
+						at += 8f;
 						break;
 					case 1:
 					{
-						var length = Range( 14f, 18f );
-						Kit.Tube( P( Paint.Oak ), At( new[] { new Vector3( at, y, peg - 1f ), new Vector3( at, y, peg - length ) } ), 0.6f, 4 );
-						Kit.BevelBox( P( Paint.Iron ), At( new Vector3( at, y, peg - length - 1f ) ), new Vector3( 6f, 2.4f, 2.6f ), 0.3f, Run );
-						at += 9f;
+						var length = Range( 18f, 22f );
+						Kit.Tube( P( Paint.Oak ), At( new[] { new Vector3( at, y, peg - 1f ), new Vector3( at, y, peg - length ) } ), 0.8f, 4 );
+						Kit.BevelBox( P( Paint.Steel ), At( new Vector3( at, y, peg - length - 2f ) ), new Vector3( 11f, 4f, 4.6f ), 0.5f, Run );
+						at += 13f;
 						break;
 					}
 					case 2:
-						Kit.Box( P( Paint.Steel ), At( new Vector3( at, y, peg - 9f ) ), new Vector3( 1.4f, 0.6f, 14f ), Run );
-						Kit.Tube( P( Paint.Oak ), At( new[] { new Vector3( at, y, peg - 1.5f ), new Vector3( at, y, peg - 4f ) } ), 0.6f, 4 );
-						at += 5f;
+						Kit.Box( P( Paint.Steel ), At( new Vector3( at, y, peg - 13f ) ), new Vector3( 2.6f, 0.8f, 20f ), Run );
+						Kit.Tube( P( Paint.Oak ), At( new[] { new Vector3( at, y, peg - 1.5f ), new Vector3( at, y, peg - 4.5f ) } ), 0.8f, 4 );
+						at += 6f;
 						break;
 					default:
-						Horseshoe( new Vector3( at, y, peg - 0.5f ), 0f, false );
-						at += 8f;
+						Horseshoe( new Vector3( at + 1f, y, peg - 0.5f ), 0f, false, 1.4f );
+						at += 10f;
 						break;
 				}
 				at += Range( 2f, 4f );
@@ -1646,7 +1919,6 @@ public sealed class ForgeTheme : ArenaTheme
 		/// <summary>A rack of finished blades on the wall, point down: swords and a long knife, brass guards, leather grips. One a wall.</summary>
 		void Blades( float u, float width, float v )
 		{
-			_heroes.Add( "blades" );
 			Hang( u, width + 2f, v + 46f );
 			Kit.BevelBox( P( Paint.DarkWood ), At( new Vector3( u, Face - 1.2f, v + 40f ) ), new Vector3( width, 2.4f, 4f ), 0.4f, Run );
 			Kit.BevelBox( P( Paint.DarkWood ), At( new Vector3( u, Face - 1.2f, v + 6f ) ), new Vector3( width, 2.4f, 3f ), 0.4f, Run );
@@ -1669,7 +1941,7 @@ public sealed class ForgeTheme : ArenaTheme
 		{
 			Hang( u, width, v + 2f );
 			var iron = P( Paint.Iron );
-			if ( high ) Kit.BevelBox( T( PlankSwatch ), At( new Vector3( u, Face - 0.8f, v - 12f ) ), new Vector3( width + 6f, 1.6f, 30f ), 0.3f, Run );
+			if ( high ) Kit.BevelBox( Any( Paint.Charred, Paint.DarkWood ), At( new Vector3( u, Face - 0.8f, v - 12f ) ), new Vector3( width + 6f, 1.6f, 30f ), 0.3f, Run );
 			Kit.Tube( iron, At( new[] { new Vector3( u - width * 0.5f, Face - 3.6f, v ), new Vector3( u + width * 0.5f, Face - 3.6f, v ) } ), 0.6f, 4 );
 			foreach ( var s in new[] { -1f, 1f } )
 				Kit.Box( iron, At( new Vector3( u + s * (width * 0.5f - 2f), Face - 1.8f, v ) ), new Vector3( 1.2f, 3.6f, 1.2f ), Run );
@@ -1726,12 +1998,13 @@ public sealed class ForgeTheme : ArenaTheme
 			Kit.Tube( P( Paint.DarkWood ), At( new[] { post + new Vector3( dir * 1f, -2.2f, 78f ), post + new Vector3( -dir * 14f, -2.2f, 70f ) } ), 0.7f, 4 );
 		}
 
-		/// <summary>A heap of coal against the wall, a shovel stood in it.</summary>
-		void CoalHeap( float u, float width )
+		/// <summary>A heap of coal against the wall, a shovel stood in it; a <paramref name="hot"/> one glowing through at its foot, raked out of the fire.</summary>
+		void CoalHeap( float u, float width, bool hot )
 		{
 			Claim( u, width );
 			var h = Range( 8f, 13f );
 			Kit.Dome( T( CoalSwatch ), At( new Vector3( u, Back - 13f, Ledge ) ), new Vector3( width * 0.5f, 12f, h ), Yaw( Range( -5f, 5f ) ), 3, 10 );
+			if ( hot ) Kit.Dome( new Skin( _glow, EmberGlow ), At( new Vector3( u + Range( -0.12f, 0.12f ) * width, Back - 17f, Ledge ) ), new Vector3( width * 0.34f, 10f, h * 0.72f ), Yaw( Range( -10f, 10f ) ), 2, 8 );
 			if ( Next() < 0.5f ) return;
 			var foot = new Vector3( u + Range( -0.2f, 0.2f ) * width, Back - 12f, Ledge + h * 0.6f );
 			Kit.Box( P( Paint.Iron ), At( foot ), new Vector3( 7f, 1f, 8f ), Turn( Rotation.FromAxis( Vector3.Forward, 20f ) ) );
@@ -1744,7 +2017,6 @@ public sealed class ForgeTheme : ArenaTheme
 			Claim( u, width + 2f );
 			Hang( u, width + 2f, 96f );
 			_tall = true;
-			_racks++;
 			var y = Back - 5.5f;
 			var wood = Any( Paint.Oak, Paint.Charred );
 			Kit.BevelBox( wood, At( new Vector3( u, y, Ledge + 1.6f ) ), new Vector3( width, 10f, 3.2f ), 0.4f, Run );
@@ -1761,8 +2033,8 @@ public sealed class ForgeTheme : ArenaTheme
 			}
 		}
 
-		/// <summary>Ingots stacked in a criss-cross pile, three layers or four.</summary>
-		void Ingots( float u )
+		/// <summary>Ingots stacked in a criss-cross pile, three layers or four; a <paramref name="hot"/> pile freshly cast, its top layer still glowing.</summary>
+		void Ingots( float u, bool hot )
 		{
 			Claim( u, 24f );
 			var y = Back - 11f;
@@ -1773,7 +2045,8 @@ public sealed class ForgeTheme : ArenaTheme
 				var across = l % 2 == 0;
 				var offset = (k - 1) * 5.5f;
 				var at = new Vector3( u + (across ? offset : 0f), y + (across ? 0f : offset), Ledge + 1.2f + l * 2.6f );
-				Kit.Box( Any( Paint.Rubbed, Paint.Iron, Paint.Bronze ), At( at ), across ? new Vector3( 4.4f, 15f, 2.4f ) : new Vector3( 15f, 4.4f, 2.4f ), Yaw( Range( -4f, 4f ) ) );
+				var skin = hot && l == layers - 1 ? new Skin( _glow, EmberGlow ) : Any( Paint.Rubbed, Paint.Iron, Paint.Bronze );
+				Kit.Box( skin, At( at ), across ? new Vector3( 4.4f, 15f, 2.4f ) : new Vector3( 15f, 4.4f, 2.4f ), Yaw( Range( -4f, 4f ) ) );
 			}
 		}
 
@@ -1839,11 +2112,11 @@ public sealed class ForgeTheme : ArenaTheme
 		void BarrelAt( Vector3 foot, float r, float h, Rotation rotation )
 		{
 			var profile = new[] { new Vector2( r - 1.4f, 0f ), new Vector2( Bulge( r, 0.25f ), h * 0.25f ), new Vector2( Bulge( r, 0.5f ), h * 0.5f ), new Vector2( Bulge( r, 0.75f ), h * 0.75f ), new Vector2( r - 1.4f, h ) };
-			Kit.SmoothLathe( T( StaveSwatch ), At( foot ), profile, 8, rotation, false, true, 50f, Next() );
+			Kit.SmoothLathe( T( StaveSwatch ), At( foot ), profile, 7, rotation, false, true, 50f, Next() );
 			foreach ( var t in new[] { 0.13f, 0.87f } )
 			{
 				var rr = Bulge( r, t ) + 0.3f;
-				Kit.SmoothLathe( P( Paint.Iron ), At( foot ), new[] { new Vector2( rr, h * t - 0.9f ), new Vector2( rr, h * t + 0.9f ) }, 8, rotation, false, false );
+				Kit.SmoothLathe( P( Paint.Iron ), At( foot ), new[] { new Vector2( rr, h * t - 0.9f ), new Vector2( rr, h * t + 0.9f ) }, 7, rotation, false, false );
 			}
 		}
 
@@ -1926,41 +2199,47 @@ public sealed class ForgeTheme : ArenaTheme
 			Kit.Tube( P( Paint.Iron ), At( path ), 0.3f, 3 );
 		}
 
-		/// <summary>A plank shelf on two iron brackets at <paramref name="v"/>: ingots, pots, horseshoes and a ladle.</summary>
+		/// <summary>
+		/// A shelf unit on the wall from <paramref name="v"/>: two plank shelves between side boards, set with ingots, pots
+		/// and horseshoes — a box with things in it, which reads from the room where one plank on brackets read as a line.
+		/// Three a wall at most.
+		/// </summary>
 		void Shelf( float u, float width, float v )
 		{
-			Hang( u, width + 2f, v + 12f );
-			const float D = 9f;
+			_shelves++;
+			const float D = 10f;
+			const float Tier = 17f;
 			var y = Face - D * 0.5f;
-			Kit.BevelBox( Any( Paint.Oak, Paint.Charred ), At( new Vector3( u, y, v - 0.8f ) ), new Vector3( width, D, 1.6f ), 0.4f, Run );
+			var wood = Any( Paint.Oak, Paint.Charred, Paint.DarkWood );
+			Hang( u, width + 2f, v + Tier + 12f );
 			foreach ( var s in new[] { -1f, 1f } )
+				Kit.Box( wood, At( new Vector3( u + s * (width * 0.5f - 0.8f), y, v + Tier * 0.5f + 2f ) ), new Vector3( 1.6f, D, Tier + 8f ), Run );
+			for ( var tier = 0; tier < 2; tier++ )
 			{
-				var x = u + s * (width * 0.5f - 5f);
-				Kit.Box( P( Paint.Iron ), At( new Vector3( x, Face - 0.6f, v - 4f ) ), new Vector3( 1.4f, 1.2f, 6f ), Run );
-				Kit.Box( P( Paint.Iron ), At( new Vector3( x, Face - D * 0.45f, v - 2.2f ) ), new Vector3( 1.2f, D * 0.9f, 1f ), Turn( Rotation.FromAxis( Vector3.Forward, -28f ) ) );
-			}
-			var at = u - width * 0.5f + Range( 3f, 6f );
-			while ( at < u + width * 0.5f - 5f )
-			{
-				var foot = new Vector3( at, y + Range( -1f, 1f ), v );
-				var roll = Next();
-				if ( roll < 0.35f )
+				var level = v + tier * Tier;
+				Kit.BevelBox( wood, At( new Vector3( u, y, level - 1.2f ) ), new Vector3( width, D, 2.4f ), 0.4f, Run );
+				var at = u - width * 0.5f + Range( 3f, 5f );
+				while ( at < u + width * 0.5f - 6f )
 				{
-					for ( var k = 0; k < 2 + Pick( 2 ); k++ )
-						Kit.Box( Any( Paint.Rubbed, Paint.Bronze, Paint.Copper ), At( foot + new Vector3( 0f, 0f, 1.1f + k * 2.2f ) ), new Vector3( 8f, 4f, 2.2f ), Yaw( Range( -10f, 10f ) ) );
-					at += 11f;
-				}
-				else if ( roll < 0.6f )
-				{
-					var s = Range( 1.1f, 1.4f );
-					Kit.SmoothLathe( Any( Paint.Clay, Paint.Copper, Paint.Pewter ), At( foot ), new[]
+					var foot = new Vector3( at, y + Range( -1f, 1f ), level );
+					var roll = Next();
+					if ( roll < 0.4f )
 					{
-						new Vector2( 1.8f * s, 0f ), new Vector2( 3.3f * s, 1.6f * s ), new Vector2( 3.6f * s, 4f * s ), new Vector2( 2.5f * s, 6.4f * s ), new Vector2( 2.1f * s, 7f * s ), new Vector2( 2.5f * s, 7.6f * s ),
-					}, 6, Run, true, false, 50f, Next() );
-					at += 8f * s + 3f;
+						for ( var k = 0; k < 2 + Pick( 3 ); k++ )
+							Kit.Box( Any( Paint.Rubbed, Paint.Bronze, Paint.Copper ), At( foot + new Vector3( 0f, 0f, 1.1f + k * 2.2f ) ), new Vector3( 8f, 4.4f, 2.2f ), Yaw( Range( -10f, 10f ) ) );
+						at += 11f;
+					}
+					else if ( roll < 0.75f )
+					{
+						var size = Range( 1.3f, 1.7f );
+						Kit.SmoothLathe( Any( Paint.Clay, Paint.Copper, Paint.Pewter ), At( foot ), new[]
+						{
+							new Vector2( 1.8f * size, 0f ), new Vector2( 3.4f * size, 2.6f * size ), new Vector2( 2.6f * size, 6.2f * size ), new Vector2( 2.2f * size, 7.4f * size ),
+						}, 5, Run, true, false, 50f, Next() );
+						at += 7f * size + 3f;
+					}
+					else { Horseshoe( foot, Range( 0f, MathF.Tau ), true, 1.3f ); at += 10f; }
 				}
-				else if ( roll < 0.8f ) { Horseshoe( foot, Range( 0f, MathF.Tau ), true ); at += 8f; }
-				else at += Range( 4f, 8f );
 			}
 		}
 
@@ -2010,8 +2289,7 @@ public sealed class ForgeTheme : ArenaTheme
 					case Upper.Hoops: Hoops( u ); break;
 					case Upper.Horseshoes: ShoeBoard( u, span - 4f ); break;
 					case Upper.Hooks: HookRail( u, span - 6f, Range( 206f, 214f ), true ); break;
-					case Upper.Blades when !_heroes.Contains( "blades" ): Blades( u, span - 4f, Range( 158f, 166f ) ); break;
-					case Upper.Blades: HookRail( u, span - 6f, Range( 206f, 214f ), true ); break;
+					case Upper.Blades: Blades( u, span - 4f, Range( 158f, 166f ) ); break;
 					default: Wheel( u ); break;
 				}
 				(near, far) = (u - span * 0.5f, u + span * 0.5f);
@@ -2134,14 +2412,14 @@ public sealed class ForgeTheme : ArenaTheme
 		void ShoeBoard( float u, float width )
 		{
 			var v = Range( 168f, 178f );
-			Kit.BevelBox( T( PlankSwatch ), At( new Vector3( u, Face - 0.8f, v + 13f ) ), new Vector3( width, 1.6f, 26f ), 0.3f, Run );
+			Kit.BevelBox( Any( Paint.Charred, Paint.DarkWood ), At( new Vector3( u, Face - 0.8f, v + 13f ) ), new Vector3( width, 1.6f, 26f ), 0.3f, Run );
 			for ( var row = 0; row < 2; row++ )
 			{
 				var at = u - width * 0.5f + Range( 4f, 6f );
 				while ( at < u + width * 0.5f - 4f )
 				{
-					Horseshoe( new Vector3( at, Face - 2f, v + 20f - row * 11f ), Range( -0.2f, 0.2f ), false );
-					at += Range( 8f, 10f );
+					Horseshoe( new Vector3( at, Face - 2f, v + 20f - row * 11f ), Range( -0.2f, 0.2f ), false, 1.25f );
+					at += Range( 9f, 11f );
 				}
 			}
 		}
