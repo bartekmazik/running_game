@@ -138,7 +138,7 @@ public static class AbilityFx
 
 	/// <summary>
 	/// The matte dev surface with full model tint — out of the box it applies only part of the tint,
-	/// which turns pastels grey (the same fix TileTextures makes for the floor). Built once; the
+	/// which turns pastels grey (the same fix Painter makes for the arena's surfaces). Built once; the
 	/// source material never changes, so a static is safe here.
 	/// </summary>
 	public static Material Matte

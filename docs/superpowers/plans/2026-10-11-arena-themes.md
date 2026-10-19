@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- `Arena` constants unchanged: GridSize 30, TileSize 56, TileThickness 12, FloorCount 8, FloorGap 220, LavaOffset 250.
+- `Arena` constants unchanged: GridSize 30, TileSize 56, TileThickness 12, FloorCount 8, FloorGap 220 (raised to 280 in Task 6c per user request, R35 in the SDD ledger), LavaOffset 250.
 - Tiles keep position, 56×56×12 box collision, `Enabled=false` lifecycle, arithmetic lookup, batched collapse RPC.
 - Everything generated is `GameObjectFlags.NotSaved` + `NetworkMode.Never`, deterministic from constant seeds.
 - `ModelRenderer.Tint` ≤ 1 per channel. `Light.LightColor` may exceed 1.
@@ -22,6 +22,7 @@
 - Walls: inner face on the grid edge (±840), 64 thick, collision = one static `BoxCollider` per side per floor. Nothing visible protrudes into the play volume below 140 units above the tile top; above 140, overhang ≤ 24 units.
 - Light budget: ≤ 6 `PointLight` per floor, `Shadows = false`.
 - One step per user turn; stop after each numbered checkpoint for the user's test.
+- **Irregularity (spec, Textures section):** no exact repetition — elements vary in size, outline, rotation, colour and wear; repeated wall elements use jittered spacing; loose props vary scale ±15% / rotation ±8°; no two neighbouring props identical; all seeded.
 
 ## Review Focus
 
@@ -193,7 +194,45 @@ public sealed class SpikeProbe : Component
 
 - [ ] **Step 5: Record and remove** — write findings into this plan below, save memory `sbox-procedural-mesh` (type reference) with the five answers, delete `SpikeProbe.cs` and the `AddComponent` line, confirm `compile_status` clean. No commit of the probe.
 
-**Spike findings:** (filled in by Step 5)
+**Spike findings:** (filled in by Step 5 — 2026-10-11, editor 26.09.29; evidence in `.superpowers/sdd/2026-10-11-arena-themes/task-0-report.md`)
+
+1. **Winding: CCW seen from the front.** Indices `0,1,2, 0,2,3` over a=bottom-left, b=bottom-right,
+   c=top-right, d=top-left (as seen by the viewer) render from −X and are back-face culled from +X
+   (nothing visible). Single-sided; a two-sided wall needs a second, reversed quad.
+2. **`Vertex.Layout`: compiles and renders, but is obsolete** (CS0618 "use CreateVertexBuffer without
+   layout"). Use the non-obsolete overload instead — verified rendering identically:
+   `mesh.CreateVertexBuffer( verts.Count, verts );` (`List<Vertex>`). Vertex ctor used:
+   `new Vertex( pos, normal, tangentAsVector3 /* = +U direction */, new Vector4( u, v, 0, 0 ) )`,
+   V grows downward (v=0 at the top of the image).
+3. **Normal map: hemi-octahedral, tangent-space +Y = image UP, either param name.**
+   - `material.Set( "Normal", tex )` and `material.Set( "g_tNormal", tex )` behave identically.
+   - The shader always decodes hemi-oct RG: plain RGB data comes out rotated 45° (top bevels lit
+     from the upper-left etc.), so RGB is wrong.
+   - Green direction: with `dy` = height difference along image rows (row+1 minus row−1, i.e. down),
+     the normal is `new Vector3( -dx, +dy, 1f ).Normal` — the brief's `-dy` lit the bricks upside down.
+   - Working encode (RGBA8888, B = roughness byte, only 200 ≈ 0.8 tried — not verified that B drives
+     roughness):
+     ```csharp
+     var n = new Vector3( -dx, dy, 1f ).Normal;
+     var sum = MathF.Abs( n.x ) + MathF.Abs( n.y ) + n.z;
+     var ox = n.x / sum; var oy = n.y / sum;
+     target[o + 0] = (byte)(((ox + oy) * 0.5f + 0.5f) * 255f);
+     target[o + 1] = (byte)(((ox - oy) * 0.5f + 0.5f) * 255f);
+     target[o + 2] = 200; // roughness
+     target[o + 3] = 255;
+     ```
+   - For `Painter`: change the caller to `EncodeNormal( new Vector3( -dx, dy, 1f ).Normal, ... )` and
+     replace the RGB body of `EncodeNormal` with the hemi-oct body above.
+4. **Glass: not usable.** `SetFeature( "F_TRANSLUCENT", 1 )` on a `dev_nonmetal_rough70` copy (with or
+   without `g_flOpacityScale = 0.4`) does turn on alpha blending (texture alpha × opacity) — opaque
+   geometry drawn *before* it shows through tinted. But it is not ordered after opaque geometry: the
+   floor tiles, the cloud ring and some panels behind it paint straight over it, so it reads as a
+   hole/grey card, not a pane. A copy of the shipped `materials/dev/primary_white_trans.vmat` (complex,
+   F_TRANSLUCENT compiled in) + `g_flOpacityScale` showed the same floor-overwrite. `g_flOpacityScale`
+   alone: fully opaque. **Decision: no translucent panes — build glass as opaque painted
+   "sky-tinted" panels or leave the frame open** (Task 6 roof: open lattice or opaque panes).
+5. **`Mesh.Bounds` is settable** — `mesh.Bounds = BBox.FromPositionAndSize( center, size );` compiles and
+   the meshes render (no culling glitches seen). `ModelBuilder.WithViewBounds( BBox )` also exists.
 
 ---
 
@@ -767,6 +806,49 @@ public sealed class MeshKit
 
 ---
 
+### Task 3b: Painter realism (roughness channel, cavity, wear, detail)
+
+Added 2026-10-11 after the user asked for a "very realistic" look and chose **stylised realism**
+(spec, Textures section). Tasks 0–3 stay valid; this extends `Painter` before any surface is painted.
+
+**Files:**
+- Modify: `Code/Art/Painter.cs`
+
+**Interfaces — Consumes:** Task 2 `Painter`. **Produces (additions; existing signatures stay source-compatible):**
+- `Painter( int size, Color fill, float roughness = 0.75f )` — per-pixel roughness channel, filled with `roughness`.
+- `Shape(…)`, `Rect(…)`, `Circle(…)`, `Line(…)` gain an optional trailing `float roughness = float.NaN` — when a number, the shape writes it into the roughness channel with the same coverage as colour.
+- `void RoughnessNoise( float amount, int period, int seed )` — fbm variation of roughness (smudges, polish, wear).
+- `Mottle` / `HeightNoise` gain an optional `int octaves = 4` (max 6) for finer detail at 1024².
+- `void Cavity( float amount, int radius )` — ambient-occlusion bake: blur the height field (separable box blur, wrapping), darken colour where height is below its neighbourhood (`colour *= 1 − amount · clamp( (blur − h) · k )`), and raise roughness slightly there (dust collects in crevices).
+- `void EdgeWear( float amount, int radius, int seed )` — where height is above its neighbourhood (convex edges), lighten colour toward a worn tone and lower roughness slightly, masked by fbm noise so wear is patchy.
+- `ToMaterial( string name, string baseMaterial, float normalStrength )` — writes per-pixel roughness into the normal texture's B channel. The old `roughness` parameter of `ToMaterial` is removed (the constructor carries the fill value); update any caller (there are none outside Painter yet).
+
+- [ ] **Step 1: Verify the roughness channel in-engine (temporary, uncommitted).** Two 128² test materials identical except B = 20 vs 240, on two tiles of floor 0 next to each other, a `PointLight` close and low so a highlight falls across both. Screenshot. Expected: the B=20 tile shows a tight bright highlight, the B=240 tile a broad dim one. If they look identical, B does not drive roughness: try `material.Set( "g_flRoughnessScaleFactor", … )` / inspect `core/materials/dev/dev_nonmetal_rough30.vmat_c` strings for a roughness parameter, and record what works. Record the finding in the plan under this task and in memory `sbox-procedural-mesh`.
+- [ ] **Step 2:** Implement the additions above. Blur must wrap so textures stay seamless. Keep everything deterministic (seeded).
+- [ ] **Step 3: Performance.** Time a 1024² surface with 3 fbm passes (6 octaves) + Cavity + EdgeWear + `ToMaterial` (use `System.Diagnostics.Stopwatch` if allowed by the sandbox, else `RealTime.Now` deltas); log it once. Target ≤ 120 ms per 1024² surface. If over, optimise the hot loops (precompute lattice per row, avoid closures in inner loops) before committing.
+- [ ] **Step 4: Visual check (temporary, uncommitted).** A 1024² flagstone test (3 irregular stones from rounded rects with height + bevel, HeightNoise for chisel texture, Cavity 0.5 radius 6, EdgeWear 0.4, RoughnessNoise 0.2, Mottle with 6 octaves) on 4 floor-0 tiles; screenshots straight down and at a grazing angle under the moving PointLight. It must read as stone: dark joints, lighter worn edges, varied sheen.
+- [ ] **Step 5:** Remove temp code (`git checkout -- Code/ArenaGenerator.cs` afterwards), `compile_status` clean, commit `Painter: roughness channel, cavity and edge wear for realistic surfaces`.
+
+**Added mid-task (2026-10-11, user: "irregular elements are key" to realism):**
+- `void Polygon( Vector2[] points, Color color, float alpha = 1f, float height = float.NaN, float bevel = 0f, float roughness = float.NaN )` — exact-SDF fill of any simple polygon (convex or concave), wrapping.
+- `Rect(…)` gains a trailing `float angle = 0f` (degrees about the centre, clockwise in the image).
+- `static Vector2[] Blob( Vector2 center, Vector2 halfSize, int corners, float jitter, int seed )` — seeded irregular superellipse outline for `Polygon` (stones, chipped blocks); radii only shrink, so a blob stays inside its box.
+- Step 4 used 9 Blob stones of different sizes, turned ±3.5°, uneven joints, instead of 3 rounded rects.
+
+**Roughness finding:** **B drives per-pixel roughness — verified 2026-10-11.** Two 128² flat materials on
+copies of `dev_nonmetal_rough70`, identical except normal-map B = 20 vs 240, side by side on floor 0 under a
+low PointLight: with the light over the B=20 tile it shows a tight bright specular spot (plus a soft warm
+reflection that stays put when the light moves); moved the same distance over the B=240 tile, that tile shows only a faint
+broad brightening (`.superpowers/sdd/2026-10-11-arena-themes/task-3b-roughness.png`, `-right.png`).
+Consistent with the shipped files: `dev_nonmetal_rough30.vmat_c` and `rough70.vmat_c` share the same colour
+texture hash and differ only in the normal texture (compiled `HemiOctIsoRoughness_RG_B`). No material
+parameter needed; `g_flRoughnessScaleFactor` exists in `complex.shader_c` but was not required.
+**Performance finding:** local builds compile with `DEBUG` defined and optimisations off, so editor timings
+are ~2.4× a published (release) build (same loops measured debug vs `/optimize+` on this machine). The
+Step 3 surface takes ~235 ms in the editor after optimisation (was ~340 ms); estimated ~100 ms released.
+
+---
+
 ### Task 4: Theme framework + themed tiles (all eight floor surfaces)
 
 **Files:**
@@ -828,13 +910,15 @@ public abstract class ArenaTheme
 
 Tile model per floor and variant: `MeshKit.BevelBox` 56×56×12, bevel 2, but faces split by material: top + sides → `new Skin( theme.FloorSurface, ArenaTheme.Cell( v % 2, v / 2, 2 ) )`; underside → `new Skin( below.Ceiling, Arena.TileSize )` where `below = themes[floor + 1]` (floor 7 uses its own Ceiling). Implement as a dedicated `BuildTileModel( ArenaTheme self, ArenaTheme below, int variant )` in `ArenaGenerator` using `MeshKit.Quad` for the bottom face and `BevelBox` with the bottom face left out — add `bool skipBottom` parameter to `BevelBox` (default false) in this task.
 
-Variant choice: `variant = Hash( floor, x, y ) & 3` with `Hash = (x * 73856093) ^ (y * 19349663) ^ (floor * 83492791)`, unsigned.
+Variant choice: `h = Hash( floor, x, y )` with `Hash = (x * 73856093) ^ (y * 19349663) ^ (floor * 83492791)`, unsigned; atlas cell = `h & 3`, UV rotation = `(h >> 2) & 3` (0/90/180/270° of the top face's UVs inside its cell) → `_tileModels[8, 16]`. Tint gets a per-tile jitter from `h >> 4`: value ±3%, hue shift ±2° (keep every channel ≤ 1). Each atlas cell is drawn with Painter's `Polygon`/`Blob` so chips, cracks, joint widths and wear differ per cell — no two cells may look like rotations of each other.
 
-Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness )`, `ModelRenderer.Model = _tileModels[floor, variant]`, no `MaterialOverride` at rest, `Tint = TileColor(floor,x,y)` = `Color.White.Darken( (x + y) % 2 == 0 ? 0f : 0.04f )`.
+Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness )`, `ModelRenderer.Model = _tileModels[floor, variant]`, no `MaterialOverride` at rest, `Tint = TileColor(floor,x,y)` = the per-tile jitter above (no checker — irregularity replaces it).
 
 `SetTileWarning` keeps `MaterialOverride = _glowMaterial` (it now lights the underside too — intended, see spec). `RestoreTile` sets `MaterialOverride = null`, tint and position.
 
-**Floor surface recipes** (512², 2×2 atlas → each cell 256 px = one 56-unit tile; every cell draws a 6-px darker rim + 3-px light bevel so tiles read as separate blocks; all `Mottle(0.04, 4, seed)` + `Grain(0.02, seed)`; colours from the theme's own 4-colour palette inside the FloorHue band):
+**Realism rules for every surface in this and later tasks (stylised realism, spec Textures section):** paint real structure in height (joints, grain, chips, weave, ripples) with bevels; then `Cavity` (0.35–0.6), `EdgeWear` where the material wears (stone, wood, metal, terracotta — not snow), `RoughnessNoise`, `Mottle` with 5–6 octaves for large-scale colour variation, `Grain` ≤ 0.02. Per-material roughness: snow 0.55 with sparkle flecks at 0.15, ice 0.2, terracotta glaze 0.35 / body 0.8, sand 0.9, carpet 0.95, polished oak 0.35, steel plate on `Painter.Metal` 0.45, granite 0.7 with wet-ish joints 0.5, basalt 0.8. Colours are natural material colours chosen near the floor's identity hue (spec Palette section); the hexes below are starting points, tuned on screenshots. Log total texture generation time once at startup (spec budget ≤ 4 s).
+
+**Floor surface recipes** (1024², 2×2 atlas → each cell 512 px = one 56-unit tile; every cell has a real bevelled block edge in height + a darker joint so tiles read as separate blocks; colours from the theme's own palette):
 
 | Floor | Cell art | Base / light / shade / accent |
 |---|---|---|
@@ -847,7 +931,7 @@ Tile GameObject: `LocalScale = Vector3.One`, `BoxCollider.Scale = new Vector3( A
 | Dungeon | Flagstones: 2–3 irregular stones per cell (Voronoi from 3 seeded points), moss in joints | `#8D8798` / `#A49FAE` / `#6F6A7A` / moss `#7FA06A` |
 | Forge | Basalt: hex-ish columns tops, dark, thin ember cracks (`Palette.Lava` at 60%) — the only floor allowed a danger colour, because it sits on the lava | `#4A4250` / `#5E5566` / `#352F3A` / `Palette.Lava` |
 
-Ceilings (seen from below; 256²): Greenhouse — none (glass roof; tiles of floor 0 have floor 1's ceiling under them). Winter — pine boards `#C9A27A`. Beach — sailcloth stripes `#F4ECDC`/`#E9A39A`. Office — 2×2 acoustic ceiling tiles `#E8E4DA` with pinholes. Library — dark walnut coffers `#6E4F3E`. Workshop — galvanised sheet `#8E959C`. Dungeon — rough stone `#5E5866`. Forge — rock `#3B3440` with ember glints. (Floor 7's tile undersides face the lava shaft and use the Forge ceiling.)
+Ceilings (seen from below; 512², same realism rules): Greenhouse — none (glass roof; tiles of floor 0 have floor 1's ceiling under them). Winter — pine boards `#C9A27A`. Beach — sailcloth stripes `#F4ECDC`/`#E9A39A`. Office — 2×2 acoustic ceiling tiles `#E8E4DA` with pinholes. Library — dark walnut coffers `#6E4F3E`. Workshop — galvanised sheet `#8E959C`. Dungeon — rough stone `#5E5866`. Forge — rock `#3B3440` with ember glints. (Floor 7's tile undersides face the lava shaft and use the Forge ceiling.)
 
 Walls and trims for each theme are painted in this task as simple, correct first versions (base colour + one structural pattern each: glazing grid, log courses, planks, partition panels, bookcase grid, corrugation, ashlar, rock) so Task 6 has something to build; Tasks 7–10 refine them with the props.
 
@@ -880,13 +964,13 @@ public sealed class FloorContext
 {
 	public int Floor { get; init; }
 	public float TileTopZ { get; init; }          // local z of this floor's walkable surface
-	public float CeilingZ { get; init; }          // local z of the underside above (TileTopZ + 208), roof base for floor 0
+	public float CeilingZ { get; init; }          // local z of the underside above (TileTopZ + ClearHeight; 268 since Task 6c), roof base for floor 0
 	public float BottomZ { get; init; }           // local z where this floor's wall segment starts (tile underside, or lava for floor 7)
 	public MeshKit Kit { get; init; }             // this floor's batch; everything the theme adds lands in one Model
 	public ArenaTheme Theme { get; init; }
 	public const float HalfSpan = Arena.GridSize * Arena.TileSize * 0.5f; // 840
 	public const float WallThickness = 64f;
-	public const float ClearHeight = Arena.FloorGap - Arena.TileThickness; // 208
+	public const float ClearHeight = Arena.FloorGap - Arena.TileThickness; // 268 since Task 6c (was 208)
 
 	/// <summary>Wall-space → room-local: side 0..3 (+X,+Y,-X,-Y), u along the wall from its left end
 	/// (0..1680, seen from inside), v up from the tile top, depth into the wall (0 = grid edge, + = into wall).</summary>
@@ -927,7 +1011,7 @@ TowerBuilder per floor:
 
 Each task has the same shape. **Files:** the two theme files; nothing else unless a `MeshKit` primitive is missing (then add it to `MeshKit.cs` with the same `QuadFacing`/`TriFacing` approach and say so in the commit).
 
-Placement rules for every prop (from the spec): inside the wall's 64-unit thickness below v=140; ceiling props above v=140 overhang ≤ 24; props are batched into the floor's `Kit` (no per-prop GameObjects, except `PointLight`s and emissive props that need their own renderer for a different material — those also go through `Kit`, which batches by material automatically); four walls are dressed by looping `side` 0..3 with a per-side seed so they differ.
+Irregularity (spec + Global Constraints) overrides every fixed spacing written below — "every 210 / 280 / 420 units" means *on average*, jittered ±30% and never mirrored wall-to-wall; every repeated prop varies scale, rotation, colour and wear. Placement rules for every prop (from the spec): inside the wall's 64-unit thickness below v=140; ceiling props above v=140 overhang ≤ 24; props are batched into the floor's `Kit` (no per-prop GameObjects, except `PointLight`s and emissive props that need their own renderer for a different material — those also go through `Kit`, which batches by material automatically); four walls are dressed by looping `side` 0..3 with a per-side seed so they differ.
 
 **Task 7 — Floors 1 Greenhouse, 2 Winter**
 - Greenhouse: wall = glazing (sage bars over pale sky-tinted glass panels, not translucent); planting beds along the skirting (BevelBox planters 40 deep, soil top, 6–9 lathe pots per wall with leaf clusters of flattened spheres in two greens); hanging ferns from roof bars (cone + sphere clusters); potting shelves with watering can (lathe body + box spout), seed trays; roof as built in Task 6, refined bar profile.

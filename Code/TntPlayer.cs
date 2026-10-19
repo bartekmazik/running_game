@@ -803,7 +803,7 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		var desired = target - rotation.Forward * distance;
 
 		var trace = Scene.Trace.Ray( target, desired )
-			.Radius( 8f )
+			.Radius( 12f )
 			.WithoutTags( new[] { "player" } )
 			.IgnoreGameObjectHierarchy( GameObject )
 			.Run();
@@ -835,7 +835,8 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		var camera = Scene.Camera;
 		if ( !camera.IsValid() ) return;
 
-		camera.WorldPosition = centre - orbit.Forward * 3000f;
+		// Out in proportion to the tower's height, roof to lava (3000 for floors 220 apart), so it all stays in view.
+		camera.WorldPosition = centre - orbit.Forward * (1.5f * (Arena.FloorCount * Arena.FloorGap + Arena.LavaOffset));
 		camera.WorldRotation = orbit;
 	}
 

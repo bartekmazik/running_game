@@ -74,7 +74,7 @@ public static class Arena
     public const float TileSize      = 56f;   // world units (s&box unit ≈ 1 inch)
     public const float TileThickness = 12f;
     public const int   FloorCount    = 8;   // 5 until 2026-10-05; KONTEKST.md asks for eight
-    public const float FloorGap      = 220f;  // vertical spacing between floors
+    public const float FloorGap      = 280f;  // 220 until 2026-10-11; user asked for taller floors
     public const float DecayDelay    = 0.6f;  // seconds from step-on to disappear
     public const float LavaOffset    = 250f;  // below the lowest floor
 }
@@ -253,6 +253,26 @@ bots that were removed again):
   `sbox-render-audio-findings`): every `<label>` carries class `label`; absolute children need a
   `position: relative` container; emissive pastels blow out, so effects use a matte copy with
   full tint.
+
+**Status after the 2026-10-19 arena-themes pass** (branch `arena-themes`; plan and ledger in
+`.superpowers/sdd/2026-10-11-arena-themes/`). Supersedes the Kenney-floor and `TileTextures.cs`
+notes above: those floor/edge/frame textures and `TileTextures.cs` are deleted; only the lava
+still wears `textures/kenney/lava_blobs.png`, loaded in `ArenaGenerator`.
+
+- The tower is eight themed rooms, top to bottom: greenhouse, winter cabin, beach, office, library,
+  workshop, dungeon, forge. All built in code: `Code/Arena/` (`ArenaTheme`, `Themes/*Theme.cs`,
+  `TowerBuilder`, `WallProps`, `FloorContext`) and `Code/Art/` (`Painter`, `MeshKit`, `Palette`).
+- Textures are painted in code on worker threads and uploaded on the main thread, within a 4 s
+  budget. Walls and their colliders stand at ±840, which is the grid edge. `FloorGap` is 280.
+- Rules for the rooms:
+  - Props sit inside the 64-unit wall thickness below v140 and overhang at most 24 above it.
+    Props have no colliders.
+  - Each floor gets at most 80k triangles and at most 6 lights. Lamps are downward SpotLights
+    whose light must not reach the floor above (R31).
+  - `Palette.Warn` and the lava colours are reserved for danger.
+  - Everything is deterministic and seeded.
+- Since engine 26.10.13a the editor bridge is `sbox-cli.exe` (named pipe). The old HTTP port is
+  gone.
 
 ## Working style
 

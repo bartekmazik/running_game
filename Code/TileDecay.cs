@@ -30,7 +30,7 @@ public sealed class TileDecay : Component
 	const int TileTolerance = 2;
 
 	/// <summary>
-	/// Floors are 220 apart and a fall between them takes ~0.74s, so one floor of slack covers
+	/// Floors are <see cref="Arena.FloorGap"/> (280) apart and a fall between them takes ~0.84s, so one floor of slack covers
 	/// a player the host already sees dropping while the client reported itself grounded.
 	/// </summary>
 	const int FloorTolerance = 1;

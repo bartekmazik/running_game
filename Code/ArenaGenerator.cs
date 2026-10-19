@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Threading;
 
 /// <summary>
-/// Builds the whole arena at runtime: <see cref="Arena.FloorCount"/> stacked grids of tiles,
-/// plus a lava plane under the lowest floor. Lives on the "Arena" GameObject.
+/// Builds the whole arena at runtime: <see cref="Arena.FloorCount"/> stacked grids of tiles, the
+/// tower around them (<see cref="TowerBuilder"/>: walls, colliders, facade, glass roof) and the lava
+/// at the bottom of the shaft. Lives on the "Arena" GameObject.
 /// Floor 0 is the top floor (where players spawn); the last floor is the bottom.
 /// </summary>
 public sealed class ArenaGenerator : Component
@@ -30,61 +33,39 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	public const string SurfaceMaterialPath = "materials/dev/dev_nonmetal_rough30.vmat";
 
-	/// <summary>Matte surface for the non-solid cream frame around each floor.</summary>
-	const string FrameMaterialPath = SurfaceMaterialPath;
-
 	/// <summary>
 	/// Unlit-looking emissive white. Tint carries the colour, and with bloom on the camera it
 	/// reads as a glowing surface rather than an orange box. Core content, always mounted.
 	/// </summary>
-	const string GlowMaterialPath = "materials/dev/primary_white_emissive.vmat";
+	public const string GlowMaterialPath = "materials/dev/primary_white_emissive.vmat";
 
-	/// <summary>Height of the lava glow light above the slab.</summary>
-	const float LavaGlowHeight = 120f;
-
-	/// <summary>Frame beam cross-section. Sits just outside the grid, entirely below tile tops.</summary>
-	const float FrameWidth = 14f;
-	const float FrameDepth = 22f;
-
-	/// <summary>Square corner posts that carry the frames down into the lava.</summary>
-	const float PillarSize = 30f;
-
-	/// <summary>How far above floor 0's top face the corner posts rise, and their glowing caps.</summary>
-	const float PillarRise = 90f;
+	/// <summary>Height of the lava glow light above the slab's centre: just over its top face.</summary>
+	const float LavaGlowHeight = 32f;
 
 	/// <summary>
-	/// One identity colour per floor, top to bottom: a walk around the pastel colour wheel from warm
-	/// butter on top to cool mint just above the lava, so depth reads from hue alone. The HUD's depth
-	/// ladder and the menu use the same values (_ui.scss $floor0..$floor7), so they can't disagree.
-	///
-	/// A switch rather than a static array: editor hotload keeps static arrays alive across code
-	/// reloads, so edited colours never showed up until the editor restarted.
-	///
-	/// Every channel stays at or below 1 — ModelRenderer.Tint is 8-bit and wraps above it.
+	/// Reach of the lava glow: the shaft, the last floor's undersides over it and the sides of its tiles,
+	/// and no further. The light casts no shadows, so a longer reach (it was 0.8 of the grid) lit the
+	/// sides of the tiles a floor higher through the forge floor, as pink slivers along the dungeon's joints.
 	/// </summary>
-	public static Color FloorColor( int floor ) => floor switch
-	{
-		0 => new Color( 1.00f, 0.80f, 0.38f ), // butter
-		1 => new Color( 1.00f, 0.64f, 0.46f ), // peach
-		2 => new Color( 0.98f, 0.56f, 0.70f ), // bubblegum
-		3 => new Color( 0.82f, 0.54f, 0.92f ), // lilac
-		4 => new Color( 0.62f, 0.58f, 0.98f ), // lavender
-		5 => new Color( 0.46f, 0.72f, 0.98f ), // sky
-		6 => new Color( 0.38f, 0.82f, 0.82f ), // aqua
-		_ => new Color( 0.48f, 0.86f, 0.58f ), // mint
-	};
+	const float LavaGlowRadius = 420f;
 
 	/// <summary>
-	/// Outermost ring of every floor — reads as "edge" before you reach it. Tints the candy-stripe
-	/// texture, so the ring comes out as cream-and-coral stripes.
+	/// Where the floor plaques hang: centred on every wall, at this height above the tile top — well
+	/// over the players' heads, so a crowd never hides it, and a good way under the cornice, where it
+	/// reads from across the room rather than as part of the ceiling.
 	/// </summary>
-	static readonly Color EdgeColor = new Color( 1.00f, 0.52f, 0.50f );
+	const float PlaqueHeight = 170f;
+
+	/// <summary>Height of the trophy sign's centre above floor 0's tiles: about three hundred units over the roof's ridge.</summary>
+	const float TrophyHeight = FloorContext.ClearHeight + 352f;
+
+	/// <summary>
+	/// One identity colour per floor, top to bottom. The values live in <see cref="Palette"/>.
+	/// </summary>
+	public static Color FloorColor( int floor ) => Palette.FloorHue( floor );
 
 	/// <summary>What a stepped-on tile heats towards during its <see cref="Arena.DecayDelay"/>.</summary>
-	public static readonly Color WarnColor = new Color( 1.0f, 0.36f, 0.20f );
-
-	/// <summary>Cream rails and posts — the "toy" frame the floors sit in.</summary>
-	static readonly Color FrameColor = new Color( 0.98f, 0.94f, 0.86f );
+	public static Color WarnColor => Palette.Warn;
 
 	/// <summary>Candy lava: hot coral-pink rather than volcanic orange, so it belongs to the palette.</summary>
 	static readonly Color LavaColor = new Color( 0.92f, 0.22f, 0.38f );
@@ -100,22 +81,54 @@ public sealed class ArenaGenerator : Component
 
 	const float ExposureCompensation = 0f;
 
-	/// <summary>Flat pastel sky behind everything — the camera's clear colour.</summary>
-	public static readonly Color SkyColor = new Color( 0.60f, 0.82f, 1.00f );
-
 	static readonly Color SunColor = new Color( 1.00f, 0.95f, 0.88f );
-	static readonly Color SunSkyColor = new Color( 0.74f, 0.80f, 0.94f );
+	/// <summary>
+	/// The sky's ambient fill, which reaches every room alike — the rooms are closed, but ambient light
+	/// is not occluded. A neutral grey at a little over half strength, so each room's own lamps carry its
+	/// light and colour (the old blue-lilac fill at 0.8 gave every floor the same cool, flat cast) and
+	/// still no corner goes black — at 0.5 the forge's ceiling did.
+	/// </summary>
+	static readonly Color SunSkyColor = new Color( 0.55f, 0.55f, 0.58f );
 
-	/// <summary>Lilac haze for the drop, so the bottom of the shaft is soft rather than black.</summary>
-	static readonly Color FogColor = new Color( 0.80f, 0.66f, 0.86f );
+	/// <summary>Chamfer on the tile's top edges: catches the light, so neighbouring tiles read as separate blocks.</summary>
+	public const float TileBevel = 2f;
+
+	/// <summary>Four atlas cells times four quarter-turns of the top face's UVs.</summary>
+	const int TileLooks = 16;
+
+	/// <summary>
+	/// Largest per-tile lean toward warm or cool, per channel. On the tiles' own colours that turns
+	/// the hue by about two degrees — enough that no two neighbours are quite the same, never enough
+	/// to read as a different material.
+	/// </summary>
+	const float TileHueJitter = 0.02f;
 
 	GameObject[,,] _tiles;
 	ModelRenderer[,,] _renderers;
 
-	/// <summary>One material per floor — each wears its own Kenney motif.</summary>
-	Material[] _floorMaterials;
-	Material _hazardMaterial;
+	/// <summary>One theme per floor, top to bottom; each holds the surfaces it painted for this build.</summary>
+	ArenaTheme[] _themes;
+
+	/// <summary>[floor, look]: every tile shares one of its floor's sixteen generated slabs.</summary>
+	Model[,] _tileModels;
+
+	/// <summary>The tower's own surfaces (outside stone, window parts, roof glass), painted with the themes.</summary>
+	Material _facade;
+	Material _facadeDetail;
+	Material _roofPanes;
+
 	Material _glowMaterial;
+
+	/// <summary>
+	/// A doomed tile's glow: <see cref="WarnColor"/> painted into the emissive material's own colour,
+	/// with the renderer's tint left as a grey brightness. Tinting the shipped emissive white orange
+	/// came out cream — its glow doesn't take the tint's hue — however dim the tint.
+	/// </summary>
+	Material _warnMaterial;
+
+	/// <summary>Glow brightness of a doomed tile when it starts warning, and when it is about to drop: above about 0.7 the orange blows out toward cream.</summary>
+	const float WarnEmber = 0.18f;
+	const float WarnGlow = 0.6f;
 
 	ModelRenderer _lavaRenderer;
 	PointLight _lavaLight;
@@ -171,14 +184,22 @@ public sealed class ArenaGenerator : Component
 		var span = Arena.GridSize * Arena.TileSize;
 
 		var boxModel = Model.Load( "models/dev/box.vmdl" );
-		var fallbackBlock = TileTextures.CreateBlock();
-		_floorMaterials = new Material[Arena.FloorCount];
-		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
-			_floorMaterials[floor] = TileTextures.CreateFromFile( $"tnt_floor{floor}", TileTextures.FloorTexturePath( floor ) ) ?? fallbackBlock;
-
-		_hazardMaterial = TileTextures.CreateFromFile( "tnt_edge", TileTextures.EdgeTexturePath ) ?? TileTextures.CreateHazard();
 		_glowMaterial = Material.Load( GlowMaterialPath );
-		var tileScale = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness ) / BoxModelUnits;
+		_warnMaterial = new Painter( 16, WarnColor, 1f ).Bake( "arena_tile_warning", GlowMaterialPath, 1f ).Upload();
+
+		PaintThemes();
+
+		_tileModels = new Model[Arena.FloorCount, TileLooks];
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+		{
+			// The underside of a floor is the ceiling of the room below it; the bottom floor's
+			// undersides face the lava shaft and wear the forge's own rock.
+			var below = _themes[Math.Min( floor + 1, Arena.FloorCount - 1 )];
+			for ( var look = 0; look < TileLooks; look++ )
+				_tileModels[floor, look] = BuildTileModel( _themes[floor], below, look / 4, look % 4 );
+		}
+
+		var tileSize = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness );
 
 		for ( int floor = 0; floor < Arena.FloorCount; floor++ )
 		{
@@ -188,16 +209,14 @@ public sealed class ArenaGenerator : Component
 				{
 					var tile = new GameObject( GameObject, true, $"Tile_{floor}_{x}_{y}" );
 					tile.LocalPosition = TileLocalPosition( floor, x, y );
-					tile.LocalScale = tileScale;
 					MakeLocalOnly( tile );
 
 					var renderer = tile.AddComponent<ModelRenderer>();
-					renderer.Model = boxModel;
-					renderer.MaterialOverride = TileMaterial( floor, x, y );
+					renderer.Model = _tileModels[floor, TileLook( floor, x, y )];
 					renderer.Tint = TileColor( floor, x, y );
 
 					var collider = tile.AddComponent<BoxCollider>();
-					collider.Scale = new Vector3( BoxModelUnits );
+					collider.Scale = tileSize;
 					collider.Static = true;
 
 					_tiles[floor, x, y] = tile;
@@ -206,52 +225,209 @@ public sealed class ArenaGenerator : Component
 			}
 		}
 
-		CreateFrame( boxModel, span );
+		new TowerBuilder( GameObject, _themes, _facade, _facadeDetail, _roofPanes )
+			.Build( LavaCenterZ + LavaThickness * 0.5f, LavaCenterZ - LavaThickness * 0.5f );
 		CreateLava( boxModel, span );
 		CreateClouds();
-		CreateSigns( span );
+		CreateSigns();
 		ConfigureLighting();
 		ConfigureCamera();
 
 		Log.Info( $"Arena: {Arena.FloorCount} floors x {Arena.GridSize}x{Arena.GridSize} = {Arena.FloorCount * Arena.GridSize * Arena.GridSize} tiles" );
 	}
 
-	static bool IsEdge( int x, int y )
-	{
-		var last = Arena.GridSize - 1;
-		return x == 0 || y == 0 || x == last || y == last;
-	}
-
-	/// <summary>Code-generated block texture inside, hazard stripes on the outermost ring.</summary>
-	Material TileMaterial( int floor, int x, int y ) => IsEdge( x, y ) ? _hazardMaterial : _floorMaterials[floor];
+	/// <summary>
+	/// How many surfaces paint at once. One parallel loop over all of them let the thread pool run
+	/// some thirty-five side by side, each holding its canvases (tens of megabytes), and the build
+	/// swung between 2.5 and 4.7 s from one start to the next; twelve workers taking jobs in turn ran
+	/// it in 2.3 s every time on the twelve-thread machine it is tuned on (fix round 1 of Task 6b).
+	/// </summary>
+	const int BakeWorkers = 12;
 
 	/// <summary>
-	/// The resting colour of a tile. Three layers, all from the index alone so a reset can
-	/// restore any tile without storing its colour:
-	///   * the floor's identity colour,
-	///   * concentric square bands every three tiles out from the centre, so a player can judge
-	///     how near the edge they are without looking for it,
-	///   * a faint checker inside each band, so individual tiles still read when running,
-	/// and a dark outermost ring as the edge warning.
+	/// Paints every surface of the arena — the one expensive step of the build, so it is timed and
+	/// logged once (budget: 4 s in the editor's unoptimised build, well under that published).
+	///
+	/// Each surface is an independent job (its own canvas, its own seeded streams), so they paint side
+	/// by side on worker threads and come out identical whatever order they finish in; the main thread
+	/// waits — the arena must be whole before anyone can stand on it — and then uploads them, since
+	/// textures and materials are engine resources made on the main thread only. A fixed set of
+	/// <see cref="BakeWorkers"/> workers takes the jobs in turn, biggest first.
+	/// </summary>
+	void PaintThemes()
+	{
+		var clock = System.Diagnostics.Stopwatch.StartNew();
+
+		_themes = new ArenaTheme[Arena.FloorCount];
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+			_themes[floor] = ArenaTheme.Create( floor );
+
+		var bakes = new List<Func<PaintedSurface>>();
+		var uploads = new List<Action<PaintedSurface>>();
+		void Job( Func<PaintedSurface> bake, Action<PaintedSurface> upload ) { bakes.Add( bake ); uploads.Add( upload ); }
+
+		// The biggest surfaces first — the walls, then the floors — so no worker is left starting one at
+		// the end; the walls from the bottom floor up, since the forge's and the dungeon's are the slowest.
+		foreach ( var surface in new[] { ThemeSurface.Wall, ThemeSurface.Floor, ThemeSurface.Ceiling, ThemeSurface.Trim, ThemeSurface.Glow } )
+			foreach ( var theme in surface == ThemeSurface.Wall ? Enumerable.Reverse( _themes ) : _themes )
+				for ( var variant = 0; variant < (surface == ThemeSurface.Wall ? theme.WallCount : 1); variant++ )
+				{
+					var v = variant;
+					Job( () => theme.Bake( surface, v ), baked => theme.Apply( surface, baked, v ) );
+				}
+
+		Job( TowerBuilder.PaintFacade, baked => _facade = baked.Upload() );
+		Job( TowerBuilder.PaintFacadeDetail, baked => _facadeDetail = baked.Upload() );
+		Job( TowerBuilder.PaintPanes, baked => _roofPanes = baked.Upload() );
+
+		var painted = new PaintedSurface[bakes.Count];
+		var next = -1;
+		Sandbox.Utility.Parallel.For( 0, Math.Min( bakes.Count, BakeWorkers ), _ =>
+		{
+			for ( var i = Interlocked.Increment( ref next ); i < bakes.Count; i = Interlocked.Increment( ref next ) )
+				painted[i] = bakes[i]();
+		} );
+
+		var surfaces = 0;
+		for ( var i = 0; i < painted.Length; i++ )
+		{
+			uploads[i]( painted[i] );
+			if ( painted[i] is not null ) surfaces++;
+		}
+
+		Log.Info( $"Arena textures: {surfaces} surfaces in {clock.ElapsedMilliseconds} ms" );
+	}
+
+	/// <summary>
+	/// One generated slab, 56 x 56 x 12, chamfered on its top edges only, in two materials:
+	///   * top and chamfers: the floor surface, one atlas cell unfolded over both — the top face
+	///     takes the cell's middle, each chamfer the strip along the cell's edge on its side at true
+	///     slant length (<see cref="ArenaTheme.UnfoldedSpan"/>), so the surface runs on over the arris
+	///     and the cell's edge, where the joint is painted, lands at the chamfer's foot. UVs are
+	///     turned by <paramref name="turn"/> quarter-turns with the tangent following them, so the
+	///     normal map stays lit from the right side; each chamfer's UV trapezoid has the shape of the
+	///     chamfer itself, so its two triangles share one mapping and nothing kinks.
+	///   * sides: a sliver from the middle of the same strip, the stone at its arris, stretched down
+	///     the side — no decal from the middle of the tile can land on them, and the joint colour
+	///     stays on the chamfer's foot, where it reads from above.
+	///   * underside: the ceiling of the room below, full size and unchamfered, so neighbouring
+	///     undersides meet edge to edge and read as one ceiling; the cell with the same index as the
+	///     top, unturned, so boards and stripes keep one direction across the room — or turned with the
+	///     top where the ceiling has no direction (<see cref="ArenaTheme.CeilingTurns"/>).
+	/// Built from quads rather than MeshKit.BevelBox: a bevel box chamfers the bottom edges too, and
+	/// those strips framed every ceiling panel in the floor's colour.
+	/// </summary>
+	static Model BuildTileModel( ArenaTheme self, ArenaTheme below, int cell, int turn )
+	{
+		var kit = new MeshKit();
+		var half = Arena.TileSize * 0.5f;
+		var inner = half - TileBevel;
+		var top = Arena.TileThickness * 0.5f;
+		var shoulder = top - TileBevel;
+		var unfolded = ArenaTheme.UnfoldedSpan * 0.5f;
+		var region = ArenaTheme.Cell( cell % 2, cell / 2, 2 );
+		var surface = self.FloorSurface;
+
+		// A point on the unfolded top (units from the tile centre) to its place in the cell:
+		// texture right is +X and texture up is +Y before the turn.
+		Vector2 Uv( float x, float y )
+		{
+			for ( var k = 0; k < turn; k++ ) (x, y) = (-y, x);
+			return new Vector2( region.Left + region.Width * (x + unfolded) / (unfolded * 2f), region.Top + region.Height * (unfolded - y) / (unfolded * 2f) );
+		}
+
+		kit.Quad( surface,
+			new Vector3( -inner, -inner, top ), new Vector3( inner, -inner, top ), new Vector3( inner, inner, top ), new Vector3( -inner, inner, top ),
+			Uv( -inner, -inner ), Uv( inner, -inner ), Uv( inner, inner ), Uv( -inner, inner ) );
+
+		// The +X side, then the same quarter-turned three times; geometry and unfolded UV points are
+		// turned by the same rotation, so every side samples its own edge of the cell.
+		// A side is seen only at grazing angles, a pixel or less wide at the far end of a seam, where
+		// it alternates with the chamfer above it pixel by pixel: in the dark joint colour it drew the
+		// far seams as dashed lines (on the dungeon and forge floors most). It takes the middle of the
+		// chamfer's strip instead — the stone's own colour at its arris, which the Rim rule keeps free
+		// of decals — and is lit as if it faced up, like the top: facing the camera it caught the lamps
+		// behind it and drew the seams as bright dashes instead. Whichever a pixel lands on, it is the
+		// same stone in the same light. (In a hole the sides read as evenly lit stone, which they are.)
+		var sideOuter = inner + (unfolded - inner) * 0.55f;
+		var sideInner = inner + (unfolded - inner) * 0.35f;
+		for ( var side = 0; side < 4; side++ )
+		{
+			var rotation = Rotation.FromYaw( side * 90f );
+			Vector3 P( float x, float y, float z ) => rotation * new Vector3( x, y, z );
+			Vector2 T( float x, float y ) { var p = rotation * new Vector3( x, y, 0f ); return Uv( p.x, p.y ); }
+
+			kit.Quad( surface,
+				P( half, -half, shoulder ), P( half, half, shoulder ), P( inner, inner, top ), P( inner, -inner, top ),
+				T( unfolded, -half ), T( unfolded, half ), T( inner, inner ), T( inner, -inner ) );
+			// The side's bottom edge (a, b) takes the outer UVs and its top edge (c, d) the inner ones,
+			// as on the chamfer above, where going up the face also moves inward on the unfolded cell.
+			// For the +X face that gives +U pointing down the face and +V along −Y: U × V = −X, the
+			// same sign against the outward normal as the top face (U × V = −Z) and the chamfer. The
+			// other way round the tangent frame is mirrored and the normal map's slopes flip.
+			kit.Quad( surface,
+				P( half, -half, -top ), P( half, half, -top ), P( half, half, shoulder ), P( half, -half, shoulder ),
+				T( sideOuter, -half ), T( sideOuter, half ), T( sideInner, half ), T( sideInner, -half ), Vector3.Up );
+		}
+
+		// Anticlockwise seen from below. A ceiling with no direction turns with the top (CeilingTurns):
+		// the cell's corners, as the unturned quad maps them, quarter-turned about the cell's middle.
+		var under = new[] { new Vector3( -half, half, -top ), new Vector3( half, half, -top ), new Vector3( half, -half, -top ), new Vector3( -half, -half, -top ) };
+		if ( !below.CeilingTurns )
+			kit.Quad( new Skin( below.Ceiling, region ), under[0], under[1], under[2], under[3] );
+		else
+		{
+			Vector2 Under( float u, float v )
+			{
+				var (x, y) = (u - 0.5f, v - 0.5f);
+				for ( var k = 0; k < turn; k++ ) (x, y) = (-y, x);
+				return new Vector2( region.Left + (x + 0.5f) * region.Width, region.Top + (y + 0.5f) * region.Height );
+			}
+			kit.Quad( below.Ceiling, under[0], under[1], under[2], under[3], Under( 0f, 1f ), Under( 1f, 1f ), Under( 1f, 0f ), Under( 0f, 0f ) );
+		}
+
+		return kit.Build( $"arena_tile_{self.Floor}_{cell}_{turn}" );
+	}
+
+	/// <summary>
+	/// Per-tile hash. The spatial hash alone repeats every four tiles in its low bits (x times an
+	/// odd number keeps x's low bits), which is exactly where the look is read from — a visible
+	/// lattice. One avalanche round (murmur's finaliser) spreads every input bit over the output.
+	/// </summary>
+	static uint TileHash( int floor, int x, int y )
+	{
+		var h = (uint)(x * 73856093) ^ (uint)(y * 19349663) ^ (uint)(floor * 83492791);
+		h ^= h >> 16; h *= 0x7feb352du;
+		h ^= h >> 15; h *= 0x846ca68bu;
+		h ^= h >> 16;
+		return h;
+	}
+
+	/// <summary>Which of the floor's sixteen slabs a tile wears: atlas cell from bits 0–1, UV turn from bits 2–3.</summary>
+	static int TileLook( int floor, int x, int y )
+	{
+		var h = TileHash( floor, x, y );
+		return (int)(h & 3) * 4 + (int)((h >> 2) & 3);
+	}
+
+	/// <summary>
+	/// The resting tint of a tile, from its index alone so a reset can restore any tile without
+	/// storing it: value within ±3 % of 0.97 and a slight warm/cool and green/magenta lean, so no
+	/// two neighbours match exactly. The colour itself lives in the floor's textures; every channel
+	/// stays at or below 1 because ModelRenderer.Tint wraps above it.
 	/// </summary>
 	public static Color TileColor( int floor, int x, int y )
 	{
-		if ( IsEdge( x, y ) )
-			return EdgeColor.Darken( floor * 0.03f );
+		var h = TileHash( floor, x, y ) >> 4;
+		var value = 0.94f + (h & 0xFF) / 255f * 0.06f;
+		var warmth = ((h >> 8) & 0xFF) / 255f * 2f - 1f;
+		var lean = ((h >> 16) & 0xFF) / 255f * 2f - 1f;
 
-		// Chebyshev distance from the centre, in tiles. GridSize is even, so the centre is a
-		// four-tile junction and the innermost band is the 2x2 around it.
-		var half = Arena.GridSize / 2;
-		var dx = x < half ? half - 1 - x : x - half;
-		var dy = y < half ? half - 1 - y : y - half;
-		var ring = dx > dy ? dx : dy;
-
-		var band = (ring / 3) % 2 == 0;
-		var check = (x + y) % 2 == 0;
-
-		// Pastel needs a lighter hand than the old palette: deep darkening turned butter into mud.
-		var shade = (band ? 0f : 0.10f) + (check ? 0f : 0.04f);
-		return FloorColor( floor ).Darken( shade );
+		var r = 1f + warmth * TileHueJitter;
+		var g = 1f + lean * TileHueJitter * 0.5f;
+		var b = 1f - warmth * TileHueJitter;
+		var scale = value / MathF.Max( r, MathF.Max( g, b ) );
+		return new Color( r * scale, g * scale, b * scale );
 	}
 
 	/// <summary>
@@ -265,22 +441,23 @@ public sealed class ArenaGenerator : Component
 		var renderer = _renderers?[floor, x, y];
 		if ( renderer is null ) return;
 
-		renderer.MaterialOverride = _glowMaterial;
+		renderer.MaterialOverride = _warnMaterial;
 
 		// Orange on every floor from the first frame — blending from the floor's own colour made a
 		// teal tile go beige, which reads as nothing. Dim ember to full glow over the delay.
 		var eased = t * t;
-		renderer.Tint = Color.Lerp( WarnColor.Darken( 0.6f ), WarnColor, eased );
+		var glow = WarnEmber + (WarnGlow - WarnEmber) * eased;
+		renderer.Tint = new Color( glow, glow, glow );
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y ) + Vector3.Down * (6f * eased);
 	}
 
-	/// <summary>Undo <see cref="SetTileWarning"/>: resting material, colour and height.</summary>
+	/// <summary>Undo <see cref="SetTileWarning"/>: the slab's own materials, resting colour and height.</summary>
 	public void RestoreTile( int floor, int x, int y )
 	{
 		var renderer = _renderers?[floor, x, y];
 		if ( renderer is null ) return;
 
-		renderer.MaterialOverride = TileMaterial( floor, x, y );
+		renderer.MaterialOverride = null;
 		renderer.Tint = TileColor( floor, x, y );
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y );
 	}
@@ -311,10 +488,11 @@ public sealed class ArenaGenerator : Component
 
 		// Haze that thickens with depth below floor 0, so the lower floors and the lava sit in a
 		// soft lilac haze instead of hard-edged void. Height is measured from this object's origin.
+		// Inside the rooms it only takes the edge off the far wall; outside it softens the tower against the sky.
 		var fog = GameObject.AddComponent<GradientFog>();
-		fog.Color = FogColor;
-		fog.StartDistance = 4500f;
-		fog.EndDistance = 20000f;
+		fog.Color = Palette.Haze;
+		fog.StartDistance = 2500f;
+		fog.EndDistance = 9000f;
 		fog.FalloffExponent = 2f;
 		fog.Height = 400f;
 		fog.VerticalFalloffExponent = 1f;
@@ -322,7 +500,7 @@ public sealed class ArenaGenerator : Component
 
 	/// <summary>
 	/// Post-processing on the scene's one camera. Bloom is what makes the emissive lava and the
-	/// pillar caps glow; ambient occlusion darkens the seams between tiles, which is where the
+	/// roof glass glow; ambient occlusion darkens the seams between tiles, which is where the
 	/// grid's readability lives.
 	/// </summary>
 	void ConfigureCamera()
@@ -331,7 +509,7 @@ public sealed class ArenaGenerator : Component
 		if ( !camera.IsValid() ) return;
 
 		camera.FieldOfView = 75f;
-		camera.BackgroundColor = SkyColor;
+		camera.BackgroundColor = Palette.Sky;
 
 		var bloom = camera.GameObject.GetOrAddComponent<Bloom>();
 		bloom.Strength = 0.35f;
@@ -350,83 +528,12 @@ public sealed class ArenaGenerator : Component
 		tonemap.ExposureCompensation = ExposureCompensation;
 	}
 
-	/// <summary>
-	/// The boundary treatment: a cream beam around each floor's perimeter and a post at every
-	/// corner running from above the top floor down into the lava. All of it sits outside the
-	/// grid and below tile tops, and none of it has a collider — CLAUDE.md keeps the play grid's
-	/// collision untouched, so this is something you see, never something you stand on.
-	/// </summary>
-	void CreateFrame( Model boxModel, float span )
-	{
-		var frameMaterial = TileTextures.CreateFromFile( "tnt_frame", TileTextures.FrameTexturePath, FrameMaterialPath )
-			?? TileTextures.CreatePlate( FrameMaterialPath );
-		var glowMaterial = Material.Load( GlowMaterialPath );
-
-		var frame = new GameObject( GameObject, true, "Frame" );
-		MakeLocalOnly( frame );
-
-		var outer = span * 0.5f + FrameWidth * 0.5f;
-		var beamLength = span + FrameWidth * 2f;
-
-		for ( int floor = 0; floor < Arena.FloorCount; floor++ )
-		{
-			// Top of the beam flush with the tile's underside, so the floor appears to rest on it.
-			var z = -floor * Arena.FloorGap - Arena.TileThickness * 0.5f - FrameDepth * 0.5f;
-
-			AddBox( frame, boxModel, frameMaterial, FrameColor, new Vector3( 0f, outer, z ), new Vector3( beamLength, FrameWidth, FrameDepth ) );
-			AddBox( frame, boxModel, frameMaterial, FrameColor, new Vector3( 0f, -outer, z ), new Vector3( beamLength, FrameWidth, FrameDepth ) );
-			AddBox( frame, boxModel, frameMaterial, FrameColor, new Vector3( outer, 0f, z ), new Vector3( FrameWidth, beamLength, FrameDepth ) );
-			AddBox( frame, boxModel, frameMaterial, FrameColor, new Vector3( -outer, 0f, z ), new Vector3( FrameWidth, beamLength, FrameDepth ) );
-
-			// A thin strip in the floor's identity colour along the beam's outer face — the same
-			// colour as the HUD's ladder rung, so you can count floors from outside the arena.
-			// Tint is stored 8 bits per channel and WRAPS above 1.0 — a 1.6x "brighter" teal came
-			// out red. The emissive material plus bloom supplies the brightness; tint stays <= 1.
-			var stripColor = FloorColor( floor );
-			var stripZ = z - FrameDepth * 0.25f;
-			var stripOuter = outer + FrameWidth * 0.5f + 1f;
-
-			AddBox( frame, boxModel, glowMaterial, stripColor, new Vector3( 0f, stripOuter, stripZ ), new Vector3( beamLength, 2f, 5f ) );
-			AddBox( frame, boxModel, glowMaterial, stripColor, new Vector3( 0f, -stripOuter, stripZ ), new Vector3( beamLength, 2f, 5f ) );
-			AddBox( frame, boxModel, glowMaterial, stripColor, new Vector3( stripOuter, 0f, stripZ ), new Vector3( 2f, beamLength, 5f ) );
-			AddBox( frame, boxModel, glowMaterial, stripColor, new Vector3( -stripOuter, 0f, stripZ ), new Vector3( 2f, beamLength, 5f ) );
-		}
-
-		// Corner posts: from PillarRise above floor 0 down to just inside the lava.
-		var top = PillarRise;
-		var bottom = LavaCenterZ;
-		var height = top - bottom;
-		var corner = span * 0.5f + PillarSize * 0.5f;
-
-		for ( int i = 0; i < 4; i++ )
-		{
-			var cx = (i & 1) == 0 ? corner : -corner;
-			var cy = (i & 2) == 0 ? corner : -corner;
-
-			AddBox( frame, boxModel, frameMaterial, FrameColor, new Vector3( cx, cy, bottom + height * 0.5f ), new Vector3( PillarSize, PillarSize, height ) );
-			AddBox( frame, boxModel, glowMaterial, LavaColor, new Vector3( cx, cy, top + 3f ), new Vector3( PillarSize + 2f, PillarSize + 2f, 6f ) );
-		}
-	}
-
-	void AddBox( GameObject parent, Model model, Material material, Color tint, Vector3 localPosition, Vector3 size )
-	{
-		var box = new GameObject( parent, true, "Frame Piece" );
-		box.LocalPosition = localPosition;
-		box.LocalScale = size / BoxModelUnits;
-		MakeLocalOnly( box );
-
-		var renderer = box.AddComponent<ModelRenderer>();
-		renderer.Model = model;
-		renderer.MaterialOverride = material;
-		renderer.Tint = tint;
-	}
-
 	void CreateLava( Model boxModel, float span )
 	{
 		var z = LavaCenterZ;
 
-		// Wider than the grid, so the posts and anything falling past the edge both land in it.
-		var lavaSpan = span + PillarSize * 4f;
+		// Exactly the grid: it fills the shaft between the last floor's walls, whose faces stand on the grid edge.
+		var lavaSpan = span;
 
 		var lava = new GameObject( GameObject, true, "Lava" );
 		lava.LocalPosition = new Vector3( 0f, 0f, z );
@@ -436,7 +543,7 @@ public sealed class ArenaGenerator : Component
 
 		_lavaRenderer = lava.AddComponent<ModelRenderer>();
 		_lavaRenderer.Model = boxModel;
-		_lavaRenderer.MaterialOverride = TileTextures.CreateLava( GlowMaterialPath );
+		_lavaRenderer.MaterialOverride = CreateLavaMaterial( GlowMaterialPath );
 		_lavaRenderer.Tint = LavaColor;
 
 		// Trigger volume matches the rendered slab exactly — both scale off `lavaSpan`, so a
@@ -448,17 +555,135 @@ public sealed class ArenaGenerator : Component
 
 		lava.AddComponent<LavaZone>();
 
-		CreateLavaGlow( z, span );
+		CreateLavaGlow( z );
+	}
+
+	/// <summary>The lava's surface: the user's Kenney blob pattern from the project.</summary>
+	const string LavaTexturePath = "textures/kenney/lava_blobs.png";
+
+	/// <summary>Logical pixels per side of the generated crust the lava falls back to.</summary>
+	const int CrustArtSize = 16;
+
+	/// <summary>Texture pixels per logical crust pixel. Upscaling in code keeps the pixels crisp.</summary>
+	const int CrustUpscale = 8;
+
+	const int CrustSize = CrustArtSize * CrustUpscale;
+
+	/// <summary>
+	/// Cracked crust for the lava, on a copy of the emissive material: bright seams between dark
+	/// plates, so the slab glows through its cracks instead of as one flat orange sheet. Greyscale,
+	/// so <see cref="LavaColor"/> in the tint carries the colour and its pulse. Built once per arena
+	/// and held by the renderer — never cached in a static, which would outlive a hotload.
+	/// </summary>
+	static Material CreateLavaMaterial( string baseMaterial )
+	{
+		// The Kenney blob pattern when it loads; the generated crust otherwise. Both tile seamlessly.
+		var material = LoadLavaTexture( baseMaterial ) ?? CreateCrustMaterial( LavaPixels( 4242 ), baseMaterial );
+
+		// The slab is one box ~1900 units across; repeat the 16-pixel crust so a crack is a crack,
+		// not a 200-unit stripe. LavaPixels wraps, so the repeats meet without seams.
+		material.Set( "g_vTexCoordScale", new Vector2( 10f, 10f ) );
+		return material;
 	}
 
 	/// <summary>
-	/// One point light over the lava so the bottom floor is lit from below and the drop reads as
-	/// dangerous rather than as an unlit void.
-	///
-	/// Parented to the arena, not to the lava: the lava slab carries a large non-uniform
-	/// LocalScale, and a child would inherit it — both its offset and the light's radius would
-	/// come out stretched.
+	/// A copy of <paramref name="baseMaterial"/> wearing the lava texture file, or null if it didn't
+	/// load — the caller falls back to the generated crust, so a missing file degrades the look
+	/// rather than painting the lava in the engine's error checkerboard.
 	/// </summary>
+	static Material LoadLavaTexture( string baseMaterial )
+	{
+		var texture = Texture.LoadFromFileSystem( LavaTexturePath, FileSystem.Mounted, true );
+		if ( texture is null || texture.IsError )
+		{
+			Log.Warning( $"ArenaGenerator: couldn't load {LavaTexturePath}, using the generated crust instead" );
+			return null;
+		}
+
+		var material = Material.Load( baseMaterial ).CreateCopy( "tnt_lava" );
+		material.Set( "Color", texture );
+		material.Set( "g_flModelTintAmount", 1f );
+		return material;
+	}
+
+	/// <summary>The generated crust as a material: each logical pixel upscaled to a crisp block.</summary>
+	static Material CreateCrustMaterial( float[,] art, string baseMaterial )
+	{
+		var data = new byte[CrustSize * CrustSize * 4];
+
+		for ( var y = 0; y < CrustSize; y++ )
+		{
+			for ( var x = 0; x < CrustSize; x++ )
+			{
+				var v = (byte)(art[x / CrustUpscale, y / CrustUpscale].Clamp( 0f, 1f ) * 255f);
+				var i = (y * CrustSize + x) * 4;
+
+				data[i + 0] = v;
+				data[i + 1] = v;
+				data[i + 2] = v;
+				data[i + 3] = 255;
+			}
+		}
+
+		var texture = Texture.Create( CrustSize, CrustSize, ImageFormat.RGBA8888 )
+			.WithName( "tnt_lava" )
+			.WithData( data )
+			.Finish();
+
+		// A copy of the emissive dev surface rather than a bare Material.Create: the copy keeps every
+		// parameter that already works and only the colour texture changes. Full model tint, so the
+		// lava colour isn't washed toward grey.
+		var material = Material.Load( baseMaterial ).CreateCopy( "tnt_lava" );
+		material.Set( "Color", texture );
+		material.Set( "g_flModelTintAmount", 1f );
+		return material;
+	}
+
+	/// <summary>
+	/// Lava crust: scattered cell centres, and each pixel's brightness rises as it nears the border
+	/// between its two closest cells — a cheap Voronoi crack pattern. Wraps at the edges so the
+	/// slab can tile without seams.
+	/// </summary>
+	static float[,] LavaPixels( int seed )
+	{
+		var random = new System.Random( seed );
+		var cells = new Vector2[10];
+
+		for ( var i = 0; i < cells.Length; i++ )
+			cells[i] = new Vector2( (float)random.NextDouble() * CrustArtSize, (float)random.NextDouble() * CrustArtSize );
+
+		var art = new float[CrustArtSize, CrustArtSize];
+
+		for ( var y = 0; y < CrustArtSize; y++ )
+		{
+			for ( var x = 0; x < CrustArtSize; x++ )
+			{
+				var nearest = float.MaxValue;
+				var second = float.MaxValue;
+
+				foreach ( var cell in cells )
+				{
+					// Toroidal distance, so the pattern wraps.
+					var dx = MathX.Clamp( x + 0.5f - cell.x, -CrustArtSize, CrustArtSize );
+					var dy = MathX.Clamp( y + 0.5f - cell.y, -CrustArtSize, CrustArtSize );
+					if ( dx > CrustArtSize * 0.5f ) dx -= CrustArtSize;
+					if ( dx < -CrustArtSize * 0.5f ) dx += CrustArtSize;
+					if ( dy > CrustArtSize * 0.5f ) dy -= CrustArtSize;
+					if ( dy < -CrustArtSize * 0.5f ) dy += CrustArtSize;
+
+					var d = dx * dx + dy * dy;
+					if ( d < nearest ) { second = nearest; nearest = d; }
+					else if ( d < second ) second = d;
+				}
+
+				var edge = MathF.Sqrt( second ) - MathF.Sqrt( nearest );
+				art[x, y] = edge < 1.1f ? 1.0f : 0.38f + (float)random.NextDouble() * 0.08f;
+			}
+		}
+
+		return art;
+	}
+
 	/// <summary>
 	/// Puffy toy clouds drifting in a wide ring around the tower, so the flat pastel sky has depth
 	/// and the menu orbit has something passing by. Clusters of matte spheres — no models of our
@@ -513,51 +738,57 @@ public sealed class ArenaGenerator : Component
 	GameObject _clouds;
 
 	/// <summary>
-	/// Signage in the world: a floor-number disc (floor colour + that floor's Kenney motif) on every
-	/// corner post of every floor, so you can read your depth looking across the shaft, and the
-	/// trophy over the tower — Kenney's gold medal and the one rule — for the menu orbit and for
-	/// anyone looking up. Billboards, so they read from any side; no colliders.
+	/// Signage in the world: a plaque with the floor's number centred on every wall of every room,
+	/// hung on the wall's middle pier facing into the room, so you can read your depth wherever you
+	/// look; and the trophy over the tower — Kenney's gold medal and the one rule — for the menu orbit
+	/// and for anyone looking up. No colliders.
 	/// </summary>
-	void CreateSigns( float span )
+	void CreateSigns()
 	{
 		var signs = new GameObject( GameObject, true, "Signs" );
 		MakeLocalOnly( signs );
 
-		var corner = span * 0.5f + PillarSize * 0.5f;
-		var outward = 34f;
-
 		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 		{
-			for ( var i = 0; i < 4; i++ )
+			var tileTop = -floor * Arena.FloorGap + Arena.TileThickness * 0.5f;
+			for ( var side = 0; side < 4; side++ )
 			{
-				var cx = (i & 1) == 0 ? 1f : -1f;
-				var cy = (i & 2) == 0 ? 1f : -1f;
-				var position = new Vector3( cx * (corner + outward), cy * (corner + outward), -floor * Arena.FloorGap + 72f );
-
-				AddSign( signs, position, new Vector2( 640f, 640f ), 1f, floor );
+				// One unit in front of the pier, which stands flush with the collider plane on the grid edge.
+				var into = FloorContext.Out( side );
+				var position = into * (FloorContext.HalfSpan - 1f) + Vector3.Up * (tileTop + PlaqueHeight);
+				AddSign( signs, position, Rotation.LookAt( -into, Vector3.Up ), new Vector2( 420f, 420f ), 2.4f, floor, false );
 			}
 		}
 
-		AddSign( signs, Vector3.Up * (PillarRise + 420f), new Vector2( 1500f, 1300f ), 4f, -1 );
+		AddSign( signs, Vector3.Up * TrophyHeight, Rotation.Identity, new Vector2( 1500f, 1300f ), 4f, -1, true );
 	}
 
-	void AddSign( GameObject parent, Vector3 localPosition, Vector2 panelSize, float scale, int floor )
+	void AddSign( GameObject parent, Vector3 localPosition, Rotation localRotation, Vector2 panelSize, float scale, int floor, bool lookAtCamera )
 	{
 		var sign = new GameObject( parent, true, floor < 0 ? "Trophy" : $"Floor Sign {floor + 1}" );
 		sign.LocalPosition = localPosition;
+		sign.LocalRotation = localRotation;
 		sign.LocalScale = new Vector3( scale );
 		MakeLocalOnly( sign );
 
 		var world = sign.AddComponent<WorldPanel>();
 		world.PanelSize = panelSize;
-		world.LookAtCamera = true;
+		world.LookAtCamera = lookAtCamera;
 
 		sign.AddComponent<ArenaSign>().Floor = floor;
 	}
 
 	static readonly Color CloudColor = new Color( 0.60f, 0.60f, 0.64f );
 
-	void CreateLavaGlow( float lavaZ, float span )
+	/// <summary>
+	/// One point light over the lava so the bottom floor is lit from below and the drop reads as
+	/// dangerous rather than as an unlit void.
+	///
+	/// Parented to the arena, not to the lava: the lava slab carries a large non-uniform
+	/// LocalScale, and a child would inherit it — both its offset and the light's radius would
+	/// come out stretched.
+	/// </summary>
+	void CreateLavaGlow( float lavaZ )
 	{
 		var glow = new GameObject( GameObject, true, "Lava Glow" );
 		glow.LocalPosition = new Vector3( 0f, 0f, lavaZ + LavaGlowHeight );
@@ -565,7 +796,7 @@ public sealed class ArenaGenerator : Component
 
 		_lavaLight = glow.AddComponent<PointLight>();
 		_lavaLight.LightColor = LavaGlowColor;
-		_lavaLight.Radius = span * 0.8f;
+		_lavaLight.Radius = LavaGlowRadius;
 
 		// Thousands of tiles between this light and the camera. Shadow-casting it would be the single
 		// most expensive thing in the scene, and it lights an area nobody stands in.
@@ -576,7 +807,7 @@ public sealed class ArenaGenerator : Component
 	/// Generated geometry is never serialised into the scene and never enters a network
 	/// snapshot. Tile state travels as batched collapse indices instead (CLAUDE.md, decision 3).
 	/// </summary>
-	static void MakeLocalOnly( GameObject go )
+	public static void MakeLocalOnly( GameObject go )
 	{
 		go.Flags |= GameObjectFlags.NotSaved;
 		go.NetworkMode = NetworkMode.Never;

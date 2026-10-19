@@ -22,7 +22,7 @@ public sealed class PlayerProfile
 /// organisation. Lives on the Arena object, created by RoundManager like everything else.
 ///
 /// A component instance rather than a static: s&box hotload keeps statics alive across code
-/// changes (see memory note on TileTextures), and a stale profile would be worse than a stale texture.
+/// changes (the arena's generated textures hit this first), and a stale profile would be worse than a stale texture.
 /// </summary>
 public sealed class ProfileStore : Component
 {
