@@ -168,6 +168,13 @@ Surfaces are full colour (no longer greyscale + tint). Resolution 1024² for the
 main wall surfaces, 512² for ceilings and trims; total texture memory ≤ 200 MB and total texture
 generation at startup ≤ 4 s on the user's machine (measured, logged once).
 
+**Amended 2026-10-19 (load-perf pass, user: "ładnie i szybko się ładuje").** Walls went to 1280²
+during dressing; the measured total is ~408 MiB of uncompressed RGBA8 with mips, accepted in favour
+of the look (runtime DXT compression cost ~260 ms per wall on the main thread, which load time can't
+afford). The bake no longer blocks: the arena is playable in ~0.2 s and the surfaces stream in on
+worker threads (every floor dressed ~2 s after start in a release build, 4.3 s of total CPU). Tiles
+are drawn in 10×10 chunks (`TileChunk`), ~550 draw calls inside a room instead of ~5,100.
+
 The current `TileTextures.cs` pixel-art painters and the Kenney floor PNGs in
 `Assets/textures/kenney/` become unused and are deleted.
 

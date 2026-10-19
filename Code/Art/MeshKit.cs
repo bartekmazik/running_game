@@ -48,6 +48,16 @@ public sealed class MeshKit
 
 	public bool IsEmpty => _batches.Count == 0;
 
+	/// <summary>The geometry so far, one batch per material — for copying it into a bigger mesh (<see cref="TileChunk"/>).</summary>
+	public IEnumerable<(Material Material, List<Vertex> Vertices, List<int> Indices)> Batches
+	{
+		get
+		{
+			foreach ( var (material, batch) in _batches )
+				yield return (material, batch.Vertices, batch.Indices);
+		}
+	}
+
 	/// <summary>Triangles in every batch so far: what the model will cost to draw.</summary>
 	public int Triangles
 	{
