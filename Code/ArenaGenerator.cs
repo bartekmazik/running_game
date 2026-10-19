@@ -543,7 +543,7 @@ public sealed class ArenaGenerator : Component
 
 		_lavaRenderer = lava.AddComponent<ModelRenderer>();
 		_lavaRenderer.Model = boxModel;
-		_lavaRenderer.MaterialOverride = TileTextures.CreateLava( GlowMaterialPath );
+		_lavaRenderer.MaterialOverride = CreateLavaMaterial( GlowMaterialPath );
 		_lavaRenderer.Tint = LavaColor;
 
 		// Trigger volume matches the rendered slab exactly — both scale off `lavaSpan`, so a
@@ -556,6 +556,132 @@ public sealed class ArenaGenerator : Component
 		lava.AddComponent<LavaZone>();
 
 		CreateLavaGlow( z );
+	}
+
+	/// <summary>The lava's surface: the user's Kenney blob pattern from the project.</summary>
+	const string LavaTexturePath = "textures/kenney/lava_blobs.png";
+
+	/// <summary>Logical pixels per side of the generated crust the lava falls back to.</summary>
+	const int CrustArtSize = 16;
+
+	/// <summary>Texture pixels per logical crust pixel. Upscaling in code keeps the pixels crisp.</summary>
+	const int CrustUpscale = 8;
+
+	const int CrustSize = CrustArtSize * CrustUpscale;
+
+	/// <summary>
+	/// Cracked crust for the lava, on a copy of the emissive material: bright seams between dark
+	/// plates, so the slab glows through its cracks instead of as one flat orange sheet. Greyscale,
+	/// so <see cref="LavaColor"/> in the tint carries the colour and its pulse. Built once per arena
+	/// and held by the renderer — never cached in a static, which would outlive a hotload.
+	/// </summary>
+	static Material CreateLavaMaterial( string baseMaterial )
+	{
+		// The Kenney blob pattern when it loads; the generated crust otherwise. Both tile seamlessly.
+		var material = LoadLavaTexture( baseMaterial ) ?? CreateCrustMaterial( LavaPixels( 4242 ), baseMaterial );
+
+		// The slab is one box ~1900 units across; repeat the 16-pixel crust so a crack is a crack,
+		// not a 200-unit stripe. LavaPixels wraps, so the repeats meet without seams.
+		material.Set( "g_vTexCoordScale", new Vector2( 10f, 10f ) );
+		return material;
+	}
+
+	/// <summary>
+	/// A copy of <paramref name="baseMaterial"/> wearing the lava texture file, or null if it didn't
+	/// load — the caller falls back to the generated crust, so a missing file degrades the look
+	/// rather than painting the lava in the engine's error checkerboard.
+	/// </summary>
+	static Material LoadLavaTexture( string baseMaterial )
+	{
+		var texture = Texture.LoadFromFileSystem( LavaTexturePath, FileSystem.Mounted, true );
+		if ( texture is null || texture.IsError )
+		{
+			Log.Warning( $"ArenaGenerator: couldn't load {LavaTexturePath}, using the generated crust instead" );
+			return null;
+		}
+
+		var material = Material.Load( baseMaterial ).CreateCopy( "tnt_lava" );
+		material.Set( "Color", texture );
+		material.Set( "g_flModelTintAmount", 1f );
+		return material;
+	}
+
+	/// <summary>The generated crust as a material: each logical pixel upscaled to a crisp block.</summary>
+	static Material CreateCrustMaterial( float[,] art, string baseMaterial )
+	{
+		var data = new byte[CrustSize * CrustSize * 4];
+
+		for ( var y = 0; y < CrustSize; y++ )
+		{
+			for ( var x = 0; x < CrustSize; x++ )
+			{
+				var v = (byte)(art[x / CrustUpscale, y / CrustUpscale].Clamp( 0f, 1f ) * 255f);
+				var i = (y * CrustSize + x) * 4;
+
+				data[i + 0] = v;
+				data[i + 1] = v;
+				data[i + 2] = v;
+				data[i + 3] = 255;
+			}
+		}
+
+		var texture = Texture.Create( CrustSize, CrustSize, ImageFormat.RGBA8888 )
+			.WithName( "tnt_lava" )
+			.WithData( data )
+			.Finish();
+
+		// A copy of the emissive dev surface rather than a bare Material.Create: the copy keeps every
+		// parameter that already works and only the colour texture changes. Full model tint, so the
+		// lava colour isn't washed toward grey.
+		var material = Material.Load( baseMaterial ).CreateCopy( "tnt_lava" );
+		material.Set( "Color", texture );
+		material.Set( "g_flModelTintAmount", 1f );
+		return material;
+	}
+
+	/// <summary>
+	/// Lava crust: scattered cell centres, and each pixel's brightness rises as it nears the border
+	/// between its two closest cells — a cheap Voronoi crack pattern. Wraps at the edges so the
+	/// slab can tile without seams.
+	/// </summary>
+	static float[,] LavaPixels( int seed )
+	{
+		var random = new System.Random( seed );
+		var cells = new Vector2[10];
+
+		for ( var i = 0; i < cells.Length; i++ )
+			cells[i] = new Vector2( (float)random.NextDouble() * CrustArtSize, (float)random.NextDouble() * CrustArtSize );
+
+		var art = new float[CrustArtSize, CrustArtSize];
+
+		for ( var y = 0; y < CrustArtSize; y++ )
+		{
+			for ( var x = 0; x < CrustArtSize; x++ )
+			{
+				var nearest = float.MaxValue;
+				var second = float.MaxValue;
+
+				foreach ( var cell in cells )
+				{
+					// Toroidal distance, so the pattern wraps.
+					var dx = MathX.Clamp( x + 0.5f - cell.x, -CrustArtSize, CrustArtSize );
+					var dy = MathX.Clamp( y + 0.5f - cell.y, -CrustArtSize, CrustArtSize );
+					if ( dx > CrustArtSize * 0.5f ) dx -= CrustArtSize;
+					if ( dx < -CrustArtSize * 0.5f ) dx += CrustArtSize;
+					if ( dy > CrustArtSize * 0.5f ) dy -= CrustArtSize;
+					if ( dy < -CrustArtSize * 0.5f ) dy += CrustArtSize;
+
+					var d = dx * dx + dy * dy;
+					if ( d < nearest ) { second = nearest; nearest = d; }
+					else if ( d < second ) second = d;
+				}
+
+				var edge = MathF.Sqrt( second ) - MathF.Sqrt( nearest );
+				art[x, y] = edge < 1.1f ? 1.0f : 0.38f + (float)random.NextDouble() * 0.08f;
+			}
+		}
+
+		return art;
 	}
 
 	/// <summary>
