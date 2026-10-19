@@ -1,11 +1,16 @@
 using System;
+using System.Collections.Generic;
 
 /// <summary>
 /// Builds the tower around the tiles: per floor a wall segment on all four sides — wall face, slab
-/// edge, the theme's structural front layer, the outer facade — and on top the greenhouse's glass
-/// roof; then four static box colliders that run the whole height of the shaft. Each floor is one
-/// model (one draw call per material) on its own GameObject; everything is local presentation,
-/// rebuilt identically on every machine from constants.
+/// edge, the theme's structural front layer — and on top the greenhouse's glass roof; the outer
+/// facade of every floor as one model; and four static box colliders that run the whole height of
+/// the shaft. Each floor is one model (one draw call per material) on its own GameObject; everything
+/// is local presentation, rebuilt identically on every machine from constants.
+///
+/// The pieces are built separately because the arena streams in (<see cref="ArenaGenerator"/>): the
+/// colliders at once, the facade — all the menu sees — as soon as its three surfaces are painted, and
+/// each room once its theme's surfaces are.
 ///
 /// The segments stack: a floor's wall runs from its tile underside (the lava top, for the last floor)
 /// up to the next floor's underside, so looking down a hole by a wall shows the room below, never sky.
@@ -58,56 +63,91 @@ public sealed class TowerBuilder
 	readonly Material _detail;
 	readonly Material _panes;
 
-	public TowerBuilder( GameObject arena, ArenaTheme[] themes, Material facade, Material detail, Material panes )
+	/// <summary>Heights local to the arena; the lava top is where the last floor's wall ends.</summary>
+	readonly float _lavaTopZ;
+	readonly float _lavaBottomZ;
+
+	/// <summary>Each floor's share of the facade model, counted into its room's triangle budget (R39).</summary>
+	readonly int[] _facadeTriangles = new int[Arena.FloorCount];
+
+	/// <summary>Each room's reflection probe, made disabled; see <see cref="EnableReflections"/>.</summary>
+	readonly List<GameObject> _reflections = new();
+
+	public TowerBuilder( GameObject arena, ArenaTheme[] themes, Material facade, Material detail, Material panes, float lavaTopZ, float lavaBottomZ )
 	{
 		_arena = arena;
 		_themes = themes;
 		_facade = facade;
 		_detail = detail;
 		_panes = panes;
+		_lavaTopZ = lavaTopZ;
+		_lavaBottomZ = lavaBottomZ;
 	}
 
-	/// <summary>Builds every floor. Heights are local to the arena; the lava top is where the last floor's wall ends.</summary>
-	public void Build( float lavaTopZ, float lavaBottomZ )
+	FloorContext Room( int floor, MeshKit kit, GameObject root )
 	{
-		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
-			BuildFloor( floor, lavaTopZ, lavaBottomZ );
-
-		AddColliders( lavaTopZ, Arena.TileThickness * 0.5f + FloorContext.ClearHeight );
-	}
-
-	void BuildFloor( int floor, float lavaTopZ, float lavaBottomZ )
-	{
-		var last = floor == Arena.FloorCount - 1;
 		var tileTop = -floor * Arena.FloorGap + Arena.TileThickness * 0.5f;
-
-		var root = new GameObject( _arena, true, $"Floor {floor} Shell" );
-		ArenaGenerator.MakeLocalOnly( root );
-
-		var room = new FloorContext
+		return new FloorContext
 		{
 			Floor = floor,
 			TileTopZ = tileTop,
 			CeilingZ = tileTop + FloorContext.ClearHeight,
-			BottomZ = last ? lavaTopZ : tileTop - Arena.TileThickness,
-			Kit = new MeshKit(),
+			BottomZ = floor == Arena.FloorCount - 1 ? _lavaTopZ : tileTop - Arena.TileThickness,
+			Kit = kit,
 			Theme = _themes[floor],
 			Root = root,
 		};
+	}
+
+	/// <summary>
+	/// The outside of every floor, a model per floor: it needs only the tower's own three surfaces.
+	/// Per floor rather than one for the tower, so each casts its shadow as it did when it was part of
+	/// its room's model — one tower-sized caster shadowed the greenhouse differently.
+	/// </summary>
+	public void BuildFacades()
+	{
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+		{
+			var root = new GameObject( _arena, true, $"Floor {floor} Facade" );
+			ArenaGenerator.MakeLocalOnly( root );
+
+			var kit = new MeshKit();
+			BuildFacade( Room( floor, kit, root ), _lavaTopZ, _lavaBottomZ );
+			_facadeTriangles[floor] = kit.Triangles;
+			root.AddComponent<ModelRenderer>().Model = kit.Build( $"tower_facade{floor}" );
+		}
+	}
+
+	/// <summary>One room: its shell, its theme's dressing and lamps, the roof on floor 0, its reflections.</summary>
+	public void BuildFloor( int floor )
+	{
+		var root = new GameObject( _arena, true, $"Floor {floor} Shell" );
+		ArenaGenerator.MakeLocalOnly( root );
+
+		var room = Room( floor, new MeshKit(), root );
 
 		BuildShell( room );
-		BuildFacade( room, lavaTopZ, lavaBottomZ );
 		room.Theme.Dress( room );
 		if ( floor == 0 ) BuildRoof( room );
 
-		var triangles = room.Kit.Triangles;
+		var triangles = room.Kit.Triangles + _facadeTriangles[floor];
 		if ( triangles > FloorContext.MaxTriangles )
 			Log.Warning( $"Floor {floor}: {triangles} triangles, over the budget of {FloorContext.MaxTriangles}" );
 
 		var renderer = root.AddComponent<ModelRenderer>();
 		renderer.Model = room.Kit.Build( $"tower_floor{floor}" );
 
-		AddReflections( room );
+		_reflections.Add( AddReflections( room ) );
+	}
+
+	/// <summary>
+	/// Switches every room's reflection probe on, once all rooms stand: each renders its room once when
+	/// enabled, and one rendered while the arena was still streaming in lit the greenhouse's leaves white.
+	/// </summary>
+	public void EnableReflections()
+	{
+		foreach ( var holder in _reflections )
+			holder.Enabled = true;
 	}
 
 	/// <summary>
@@ -116,7 +156,7 @@ public sealed class TowerBuilder
 	/// it metal had nothing to reflect but the scene's default cubemap and rendered black) and glossy
 	/// surfaces pick up the room's colour rather than the sky's.
 	/// </summary>
-	static void AddReflections( FloorContext room )
+	static GameObject AddReflections( FloorContext room )
 	{
 		// Made disabled and switched on once set up: the probe builds its cubemap from its settings
 		// when it is enabled, and one enabled on creation kept the defaults.
@@ -144,7 +184,7 @@ public sealed class TowerBuilder
 		// A few extra renders at load, so metal seen in the probe already shows its own reflection
 		// (on the first render every metal surface in the room is still black).
 		probe.MultiBounce = true;
-		holder.Enabled = true;
+		return holder;
 	}
 
 	/// <summary>
@@ -406,9 +446,10 @@ public sealed class TowerBuilder
 	/// a box face. A lid over the roof too, so a launch can't carry anyone over the wall tops and the
 	/// camera boom pulls in under the glass.
 	/// </summary>
-	void AddColliders( float bottomZ, float topZ )
+	public static void AddColliders( GameObject arena, float bottomZ )
 	{
-		var holder = new GameObject( _arena, true, "Tower Walls" );
+		var topZ = Arena.TileThickness * 0.5f + FloorContext.ClearHeight;
+		var holder = new GameObject( arena, true, "Tower Walls" );
 		ArenaGenerator.MakeLocalOnly( holder );
 
 		const float Thick = FloorContext.WallThickness;

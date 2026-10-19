@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 /// <summary>
 /// Builds the whole arena at runtime: <see cref="Arena.FloorCount"/> stacked grids of tiles, the
@@ -192,6 +193,8 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	protected override void OnUpdate()
 	{
+		if ( _bakes is not null ) PumpBuild();
+
 		if ( !_lavaRenderer.IsValid() ) return;
 
 		var t = Time.Now;
@@ -205,13 +208,26 @@ public sealed class ArenaGenerator : Component
 			_clouds.LocalRotation = Rotation.FromYaw( t * 0.6f );
 	}
 
+	/// <summary>
+	/// Builds the arena in two halves. Everything a player can touch is made here, at once: every tile
+	/// with its collider, the tower's colliders, the lava, the light. Everything that is only seen
+	/// streams in after (<see cref="PumpBuild"/>): the surfaces paint on worker threads while the game
+	/// runs, and each part of the tower is built as soon as the surfaces it wears are in — the facade
+	/// first, since the menu sees nothing else, then the rooms from the top down, where players spawn.
+	/// Painting every surface used to hold the first frame for three to five seconds; now nothing waits
+	/// on it.
+	/// </summary>
 	void Generate()
 	{
+		_buildClock = System.Diagnostics.Stopwatch.StartNew();
+
 		_tiles = new GameObject[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
 		_renderers = new ModelRenderer[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
 		_warning = new bool[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
 		_chunks = new TileChunk[Arena.FloorCount, ChunksPerSide, ChunksPerSide];
 		_chunkDirty = new bool[Arena.FloorCount, ChunksPerSide, ChunksPerSide];
+		_tileSlabs = new MeshKit[Arena.FloorCount, TileLooks];
+		_tileModels = new Model[Arena.FloorCount, TileLooks];
 
 		var span = Arena.GridSize * Arena.TileSize;
 
@@ -219,27 +235,12 @@ public sealed class ArenaGenerator : Component
 		_glowMaterial = Material.Load( GlowMaterialPath );
 		_warnMaterial = new Painter( 16, WarnColor, 1f ).Bake( "arena_tile_warning", GlowMaterialPath, 1f ).Upload();
 
-		PaintThemes();
-
-		_tileSlabs = new MeshKit[Arena.FloorCount, TileLooks];
-		_tileModels = new Model[Arena.FloorCount, TileLooks];
-		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
-		{
-			// The underside of a floor is the ceiling of the room below it; the bottom floor's
-			// undersides face the lava shaft and wear the forge's own rock.
-			var below = _themes[Math.Min( floor + 1, Arena.FloorCount - 1 )];
-			for ( var look = 0; look < TileLooks; look++ )
-				_tileSlabs[floor, look] = BuildTileSlab( _themes[floor], below, look / 4, look % 4 );
-		}
+		StartPainting();
 
 		var tileSize = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness );
 
 		for ( int floor = 0; floor < Arena.FloorCount; floor++ )
 		{
-			for ( var cx = 0; cx < ChunksPerSide; cx++ )
-				for ( var cy = 0; cy < ChunksPerSide; cy++ )
-					_chunks[floor, cx, cy] = new TileChunk( ChunkTiles * ChunkTiles );
-
 			for ( int x = 0; x < Arena.GridSize; x++ )
 			{
 				for ( int y = 0; y < Arena.GridSize; y++ )
@@ -253,88 +254,225 @@ public sealed class ArenaGenerator : Component
 					collider.Static = true;
 
 					_tiles[floor, x, y] = tile;
-
-					var tint = TileTintIndex( floor, x, y );
-					ChunkOf( floor, x, y ).Add( ChunkSlot( x, y ), _tileSlabs[floor, TileLook( floor, x, y )], tile.LocalPosition, surface => Tinted( surface, tint ) );
 				}
 			}
-
-			for ( var cx = 0; cx < ChunksPerSide; cx++ )
-				for ( var cy = 0; cy < ChunksPerSide; cy++ )
-					_chunks[floor, cx, cy].Build( GameObject, $"Tiles {floor} {cx} {cy}" );
 		}
 
-		new TowerBuilder( GameObject, _themes, _facade, _facadeDetail, _roofPanes )
-			.Build( LavaCenterZ + LavaThickness * 0.5f, LavaCenterZ - LavaThickness * 0.5f );
+		TowerBuilder.AddColliders( GameObject, LavaTopLocalZ );
 		CreateLava( boxModel, span );
 		CreateClouds();
 		CreateSigns();
 		ConfigureLighting();
 		ConfigureCamera();
 
-		Log.Info( $"Arena: {Arena.FloorCount} floors x {Arena.GridSize}x{Arena.GridSize} = {Arena.FloorCount * Arena.GridSize * Arena.GridSize} tiles" );
+		Log.Info( $"Arena: {Arena.FloorCount} floors x {Arena.GridSize}x{Arena.GridSize} = {Arena.FloorCount * Arena.GridSize * Arena.GridSize} tiles, playable in {_buildClock.ElapsedMilliseconds} ms" );
 	}
 
-	/// <summary>
-	/// How many surfaces paint at once. One parallel loop over all of them let the thread pool run
-	/// some thirty-five side by side, each holding its canvases (tens of megabytes), and the build
-	/// swung between 2.5 and 4.7 s from one start to the next; twelve workers taking jobs in turn ran
-	/// it in 2.3 s every time on the twelve-thread machine it is tuned on (fix round 1 of Task 6b).
-	/// </summary>
-	const int BakeWorkers = 12;
+	static float LavaTopLocalZ => LavaCenterZ + LavaThickness * 0.5f;
 
 	/// <summary>
-	/// Paints every surface of the arena — the one expensive step of the build, so it is timed and
-	/// logged once (budget: 4 s in the editor's unoptimised build, well under that published).
-	///
-	/// Each surface is an independent job (its own canvas, its own seeded streams), so they paint side
-	/// by side on worker threads and come out identical whatever order they finish in; the main thread
-	/// waits — the arena must be whole before anyone can stand on it — and then uploads them, since
-	/// textures and materials are engine resources made on the main thread only. A fixed set of
-	/// <see cref="BakeWorkers"/> workers takes the jobs in turn, biggest first.
+	/// Most surfaces painting at once: one worker per hardware thread but one, so the main thread keeps
+	/// its own and the game runs smoothly meanwhile, and no more than twelve — on the twelve-thread
+	/// machine the arena is tuned on, more workers only held more canvases (tens of megabytes each) and
+	/// made the bake slower and less even (fix round 1 of Task 6b).
 	/// </summary>
-	void PaintThemes()
+	static int BakeWorkers => Math.Clamp( (int)Sandbox.Engine.SystemInfo.ProcessorCount - 1, 1, 12 );
+
+	/// <summary>How long a frame may spend uploading painted surfaces; at least one goes up every frame.</summary>
+	const double UploadBudgetMs = 4.0;
+
+	/// <summary>The streaming build: one job per surface, which part of the arena waits for it, and how far each has got.</summary>
+	List<Func<PaintedSurface>> _bakes;
+	List<Action<PaintedSurface>> _uploads;
+	List<int> _gates;
+	PaintedSurface[] _painted;
+	int[] _paintedDone;
+	bool[] _uploaded;
+	int _nextJob = -1;
+	int _surfaces;
+	Task _painting;
+
+	/// <summary>Set to 1 when the arena goes away mid-build, so the workers stop taking jobs.</summary>
+	int _abandoned;
+
+	/// <summary>
+	/// Jobs still to upload per part: <see cref="FacadeGate"/> for the tower's own surfaces, then one per
+	/// floor (gate 1 + floor). A floor waits for its theme's surfaces and for the ceiling of the room
+	/// below it, which its tiles' undersides wear.
+	/// </summary>
+	int[] _gateLeft;
+	const int FacadeGate = 0;
+
+	TowerBuilder _tower;
+
+	/// <summary>The next floor to dress; floors are built in order, one per frame.</summary>
+	int _nextFloor;
+
+	System.Diagnostics.Stopwatch _buildClock;
+
+	/// <summary>
+	/// Lists every surface of the arena as a job and sets workers painting them. Each surface is an
+	/// independent job (its own canvas, its own seeded streams), so they paint side by side and come out
+	/// identical whatever order they finish in. The jobs run in the order the arena needs them: the
+	/// tower's own surfaces, then floor by floor from the top.
+	/// </summary>
+	void StartPainting()
 	{
-		var clock = System.Diagnostics.Stopwatch.StartNew();
-
 		_themes = new ArenaTheme[Arena.FloorCount];
 		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 			_themes[floor] = ArenaTheme.Create( floor );
 
-		var bakes = new List<Func<PaintedSurface>>();
-		var uploads = new List<Action<PaintedSurface>>();
-		void Job( Func<PaintedSurface> bake, Action<PaintedSurface> upload ) { bakes.Add( bake ); uploads.Add( upload ); }
-
-		// The biggest surfaces first — the walls, then the floors — so no worker is left starting one at
-		// the end; the walls from the bottom floor up, since the forge's and the dungeon's are the slowest.
-		foreach ( var surface in new[] { ThemeSurface.Wall, ThemeSurface.Floor, ThemeSurface.Ceiling, ThemeSurface.Trim, ThemeSurface.Glow } )
-			foreach ( var theme in surface == ThemeSurface.Wall ? Enumerable.Reverse( _themes ) : _themes )
-				for ( var variant = 0; variant < (surface == ThemeSurface.Wall ? theme.WallCount : 1); variant++ )
-				{
-					var v = variant;
-					Job( () => theme.Bake( surface, v ), baked => theme.Apply( surface, baked, v ) );
-				}
-
-		Job( TowerBuilder.PaintFacade, baked => _facade = baked.Upload() );
-		Job( TowerBuilder.PaintFacadeDetail, baked => _facadeDetail = baked.Upload() );
-		Job( TowerBuilder.PaintPanes, baked => _roofPanes = baked.Upload() );
-
-		var painted = new PaintedSurface[bakes.Count];
-		var next = -1;
-		Sandbox.Utility.Parallel.For( 0, Math.Min( bakes.Count, BakeWorkers ), _ =>
+		_bakes = new List<Func<PaintedSurface>>();
+		_uploads = new List<Action<PaintedSurface>>();
+		_gates = new List<int>();
+		_gateLeft = new int[1 + Arena.FloorCount];
+		void Job( int gate, Func<PaintedSurface> bake, Action<PaintedSurface> upload )
 		{
-			for ( var i = Interlocked.Increment( ref next ); i < bakes.Count; i = Interlocked.Increment( ref next ) )
-				painted[i] = bakes[i]();
-		} );
-
-		var surfaces = 0;
-		for ( var i = 0; i < painted.Length; i++ )
-		{
-			uploads[i]( painted[i] );
-			if ( painted[i] is not null ) surfaces++;
+			_bakes.Add( bake );
+			_uploads.Add( upload );
+			_gates.Add( gate );
+			_gateLeft[gate]++;
 		}
 
-		Log.Info( $"Arena textures: {surfaces} surfaces in {clock.ElapsedMilliseconds} ms" );
+		Job( FacadeGate, TowerBuilder.PaintFacade, baked => _facade = baked.Upload() );
+		Job( FacadeGate, TowerBuilder.PaintFacadeDetail, baked => _facadeDetail = baked.Upload() );
+		Job( FacadeGate, TowerBuilder.PaintPanes, baked => _roofPanes = baked.Upload() );
+
+		foreach ( var theme in _themes )
+		{
+			// A room's ceiling is the undersides of the tiles above it, so it is the floor above that
+			// waits for it; the greenhouse paints none, and the forge's is also the bottom floor's own.
+			var ceilingGate = 1 + Math.Max( theme.Floor - 1, 0 );
+			Job( ceilingGate, () => theme.Bake( ThemeSurface.Ceiling ), baked => theme.Apply( ThemeSurface.Ceiling, baked ) );
+
+			var gate = 1 + theme.Floor;
+			for ( var variant = 0; variant < theme.WallCount; variant++ )
+			{
+				var v = variant;
+				Job( gate, () => theme.Bake( ThemeSurface.Wall, v ), baked => theme.Apply( ThemeSurface.Wall, baked, v ) );
+			}
+			foreach ( var surface in new[] { ThemeSurface.Floor, ThemeSurface.Trim, ThemeSurface.Glow } )
+				Job( gate, () => theme.Bake( surface ), baked => theme.Apply( surface, baked ) );
+		}
+
+		_painted = new PaintedSurface[_bakes.Count];
+		_paintedDone = new int[_bakes.Count];
+		_uploaded = new bool[_bakes.Count];
+
+		// Parallel's own workers rather than game tasks: a game task that runs for over a second without
+		// yielding is reported as stuck, and one surface alone can take that long.
+		_painting = Sandbox.Utility.Parallel.ForAsync( 0, Math.Min( _bakes.Count, BakeWorkers ), default, ( _, _ ) =>
+		{
+			PaintJobs();
+			return ValueTask.CompletedTask;
+		} );
+	}
+
+	/// <summary>A worker: takes the next unpainted job until none are left. Touches no engine resource.</summary>
+	void PaintJobs()
+	{
+		var bakes = _bakes;
+		var painted = _painted;
+		var done = _paintedDone;
+		for ( var i = Interlocked.Increment( ref _nextJob ); i < bakes.Count && Interlocked.CompareExchange( ref _abandoned, 0, 0 ) == 0; i = Interlocked.Increment( ref _nextJob ) )
+		{
+			painted[i] = bakes[i]();
+			Interlocked.Exchange( ref done[i], 1 );
+		}
+	}
+
+	/// <summary>
+	/// Once a frame on the main thread while the arena streams in: uploads what the workers have
+	/// painted (textures and materials are engine resources, made on the main thread only) within
+	/// <see cref="UploadBudgetMs"/>, then builds at most one part whose surfaces are all in.
+	/// </summary>
+	void PumpBuild()
+	{
+		var started = System.Diagnostics.Stopwatch.GetTimestamp();
+		for ( var i = 0; i < _bakes.Count; i++ )
+		{
+			if ( _uploaded[i] || Interlocked.CompareExchange( ref _paintedDone[i], 0, 0 ) == 0 ) continue;
+
+			if ( _painted[i] is not null ) _surfaces++;
+			_uploads[i]( _painted[i] );
+			_painted[i] = null;
+			_uploaded[i] = true;
+			_gateLeft[_gates[i]]--;
+
+			if ( System.Diagnostics.Stopwatch.GetElapsedTime( started ).TotalMilliseconds > UploadBudgetMs ) break;
+		}
+
+		if ( _painting.IsFaulted )
+		{
+			Log.Error( _painting.Exception );
+			EndBuild();
+			return;
+		}
+
+		if ( _tower is null )
+		{
+			if ( _gateLeft[FacadeGate] > 0 ) return;
+			_tower = new TowerBuilder( GameObject, _themes, _facade, _facadeDetail, _roofPanes, LavaTopLocalZ, LavaCenterZ - LavaThickness * 0.5f );
+			_tower.BuildFacades();
+			return;
+		}
+
+		if ( _gateLeft[1 + _nextFloor] > 0 ) return;
+		DressFloor( _nextFloor++ );
+
+		if ( _nextFloor < Arena.FloorCount ) return;
+		_tower.EnableReflections();
+		Log.Info( $"Arena: {_surfaces} surfaces painted and every floor dressed {_buildClock.ElapsedMilliseconds} ms after the build started" );
+		EndBuild();
+	}
+
+	/// <summary>Drops the job lists: their closures would otherwise outlive the build (and trip the editor's hotload).</summary>
+	void EndBuild()
+	{
+		_bakes = null;
+		_uploads = null;
+		_gates = null;
+		_painted = null;
+		_painting = null;
+	}
+
+	/// <summary>
+	/// A floor's visible half: its sixteen tile slabs, the chunks that draw its tiles (starting from
+	/// whatever has already collapsed or is warning), and its room.
+	/// </summary>
+	void DressFloor( int floor )
+	{
+		// The underside of a floor is the ceiling of the room below it; the bottom floor's
+		// undersides face the lava shaft and wear the forge's own rock.
+		var below = _themes[Math.Min( floor + 1, Arena.FloorCount - 1 )];
+		for ( var look = 0; look < TileLooks; look++ )
+			_tileSlabs[floor, look] = BuildTileSlab( _themes[floor], below, look / 4, look % 4 );
+
+		for ( var cx = 0; cx < ChunksPerSide; cx++ )
+			for ( var cy = 0; cy < ChunksPerSide; cy++ )
+				_chunks[floor, cx, cy] = new TileChunk( ChunkTiles * ChunkTiles );
+
+		for ( var x = 0; x < Arena.GridSize; x++ )
+		{
+			for ( var y = 0; y < Arena.GridSize; y++ )
+			{
+				var tint = TileTintIndex( floor, x, y );
+				var chunk = ChunkOf( floor, x, y );
+				chunk.Add( ChunkSlot( x, y ), _tileSlabs[floor, TileLook( floor, x, y )], TileLocalPosition( floor, x, y ), surface => Tinted( surface, tint ) );
+				chunk.SetShown( ChunkSlot( x, y ), _tiles[floor, x, y].Enabled && !_warning[floor, x, y] );
+			}
+		}
+
+		for ( var cx = 0; cx < ChunksPerSide; cx++ )
+			for ( var cy = 0; cy < ChunksPerSide; cy++ )
+				_chunks[floor, cx, cy].Build( GameObject, $"Tiles {floor} {cx} {cy}" );
+
+		_tower.BuildFloor( floor );
+	}
+
+	protected override void OnDestroy()
+	{
+		Interlocked.Exchange( ref _abandoned, 1 );
 	}
 
 	/// <summary>
@@ -457,6 +595,9 @@ public sealed class ArenaGenerator : Component
 		if ( _chunks is null ) return;
 
 		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+		{
+			if ( _chunks[floor, 0, 0] is null ) continue;
+
 			for ( var x = 0; x < Arena.GridSize; x++ )
 				for ( var y = 0; y < Arena.GridSize; y++ )
 				{
@@ -464,6 +605,7 @@ public sealed class ArenaGenerator : Component
 					if ( ChunkOf( floor, x, y ).SetShown( ChunkSlot( x, y ), shown ) )
 						_chunkDirty[floor, x / ChunkTiles, y / ChunkTiles] = true;
 				}
+		}
 
 		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 			for ( var cx = 0; cx < ChunksPerSide; cx++ )
@@ -527,10 +669,13 @@ public sealed class ArenaGenerator : Component
 	{
 		if ( _tiles is null ) return;
 
+		// Not dressed yet: the floor's tiles are still waiting for their surfaces.
+		var look = TileLook( floor, x, y );
+		if ( _tileSlabs[floor, look] is null ) return;
+
 		var renderer = _renderers[floor, x, y];
 		if ( renderer is null )
 		{
-			var look = TileLook( floor, x, y );
 			renderer = _renderers[floor, x, y] = _tiles[floor, x, y].AddComponent<ModelRenderer>();
 			renderer.Model = _tileModels[floor, look] ??= _tileSlabs[floor, look].Build( $"arena_tile_{floor}_{look}" );
 			renderer.MaterialOverride = _warnMaterial;
