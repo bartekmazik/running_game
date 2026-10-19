@@ -272,12 +272,12 @@ public sealed class ArenaGenerator : Component
 	static float LavaTopLocalZ => LavaCenterZ + LavaThickness * 0.5f;
 
 	/// <summary>
-	/// Most surfaces painting at once: one worker per hardware thread but one, so the main thread keeps
-	/// its own and the game runs smoothly meanwhile, and no more than twelve — on the twelve-thread
-	/// machine the arena is tuned on, more workers only held more canvases (tens of megabytes each) and
-	/// made the bake slower and less even (fix round 1 of Task 6b).
+	/// Most surfaces painting at once: half the hardware threads. With all but one painting, the main
+	/// thread (and the engine's own) were starved — uploads waited 400 ms for a frame, the menu stuttered
+	/// and the arena took longer to dress (3.0 s against 2.0 s on the twelve-thread machine it is tuned
+	/// on); more than twelve only held more canvases, tens of megabytes each (fix round 1 of Task 6b).
 	/// </summary>
-	static int BakeWorkers => Math.Clamp( (int)Sandbox.Engine.SystemInfo.ProcessorCount - 1, 1, 12 );
+	static int BakeWorkers => Math.Clamp( (int)Sandbox.Engine.SystemInfo.ProcessorCount / 2, 1, 12 );
 
 	/// <summary>How long a frame may spend uploading painted surfaces; at least one goes up every frame.</summary>
 	const double UploadBudgetMs = 4.0;
