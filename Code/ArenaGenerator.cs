@@ -103,13 +103,42 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	const float TileHueJitter = 0.02f;
 
+	/// <summary>
+	/// Resting tints a tile can wear. Each is a tinted copy of the floor's surfaces in every chunk, so
+	/// each costs a draw call per chunk: four keep neighbours from matching without multiplying the
+	/// draws (a chunk is one model, so the tint can't be the renderer's).
+	/// </summary>
+	const int TintCount = 4;
+
+	/// <summary>Tiles per side of a <see cref="TileChunk"/>: nine chunks per floor.</summary>
+	const int ChunkTiles = 10;
+	const int ChunksPerSide = Arena.GridSize / ChunkTiles;
+
 	GameObject[,,] _tiles;
+
+	/// <summary>
+	/// A tile's own renderer, made the first time it warns: while it glows and sags it is drawn on its
+	/// own and hidden in its chunk. Null for a tile that never warned.
+	/// </summary>
 	ModelRenderer[,,] _renderers;
+
+	/// <summary>True while a tile is drawn by its own renderer rather than its chunk.</summary>
+	bool[,,] _warning;
+
+	/// <summary>[floor, chunk x, chunk y]: what draws the tiles.</summary>
+	TileChunk[,,] _chunks;
+	bool[,,] _chunkDirty;
+
+	/// <summary>The floor's surfaces in each resting tint, by surface and tint index.</summary>
+	readonly Dictionary<(Material, int), Material> _tinted = new();
 
 	/// <summary>One theme per floor, top to bottom; each holds the surfaces it painted for this build.</summary>
 	ArenaTheme[] _themes;
 
-	/// <summary>[floor, look]: every tile shares one of its floor's sixteen generated slabs.</summary>
+	/// <summary>[floor, look]: every tile wears one of its floor's sixteen generated slabs, copied into its chunk.</summary>
+	MeshKit[,] _tileSlabs;
+
+	/// <summary>[floor, look]: the same slabs as models, made on first use for a warning tile's own renderer.</summary>
 	Model[,] _tileModels;
 
 	/// <summary>The tower's own surfaces (outside stone, window parts, roof glass), painted with the themes.</summary>
@@ -180,6 +209,9 @@ public sealed class ArenaGenerator : Component
 	{
 		_tiles = new GameObject[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
 		_renderers = new ModelRenderer[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
+		_warning = new bool[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
+		_chunks = new TileChunk[Arena.FloorCount, ChunksPerSide, ChunksPerSide];
+		_chunkDirty = new bool[Arena.FloorCount, ChunksPerSide, ChunksPerSide];
 
 		var span = Arena.GridSize * Arena.TileSize;
 
@@ -189,6 +221,7 @@ public sealed class ArenaGenerator : Component
 
 		PaintThemes();
 
+		_tileSlabs = new MeshKit[Arena.FloorCount, TileLooks];
 		_tileModels = new Model[Arena.FloorCount, TileLooks];
 		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 		{
@@ -196,13 +229,17 @@ public sealed class ArenaGenerator : Component
 			// undersides face the lava shaft and wear the forge's own rock.
 			var below = _themes[Math.Min( floor + 1, Arena.FloorCount - 1 )];
 			for ( var look = 0; look < TileLooks; look++ )
-				_tileModels[floor, look] = BuildTileModel( _themes[floor], below, look / 4, look % 4 );
+				_tileSlabs[floor, look] = BuildTileSlab( _themes[floor], below, look / 4, look % 4 );
 		}
 
 		var tileSize = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness );
 
 		for ( int floor = 0; floor < Arena.FloorCount; floor++ )
 		{
+			for ( var cx = 0; cx < ChunksPerSide; cx++ )
+				for ( var cy = 0; cy < ChunksPerSide; cy++ )
+					_chunks[floor, cx, cy] = new TileChunk( ChunkTiles * ChunkTiles );
+
 			for ( int x = 0; x < Arena.GridSize; x++ )
 			{
 				for ( int y = 0; y < Arena.GridSize; y++ )
@@ -211,18 +248,20 @@ public sealed class ArenaGenerator : Component
 					tile.LocalPosition = TileLocalPosition( floor, x, y );
 					MakeLocalOnly( tile );
 
-					var renderer = tile.AddComponent<ModelRenderer>();
-					renderer.Model = _tileModels[floor, TileLook( floor, x, y )];
-					renderer.Tint = TileColor( floor, x, y );
-
 					var collider = tile.AddComponent<BoxCollider>();
 					collider.Scale = tileSize;
 					collider.Static = true;
 
 					_tiles[floor, x, y] = tile;
-					_renderers[floor, x, y] = renderer;
+
+					var tint = TileTintIndex( floor, x, y );
+					ChunkOf( floor, x, y ).Add( ChunkSlot( x, y ), _tileSlabs[floor, TileLook( floor, x, y )], tile.LocalPosition, surface => Tinted( surface, tint ) );
 				}
 			}
+
+			for ( var cx = 0; cx < ChunksPerSide; cx++ )
+				for ( var cy = 0; cy < ChunksPerSide; cy++ )
+					_chunks[floor, cx, cy].Build( GameObject, $"Tiles {floor} {cx} {cy}" );
 		}
 
 		new TowerBuilder( GameObject, _themes, _facade, _facadeDetail, _roofPanes )
@@ -317,7 +356,7 @@ public sealed class ArenaGenerator : Component
 	/// Built from quads rather than MeshKit.BevelBox: a bevel box chamfers the bottom edges too, and
 	/// those strips framed every ceiling panel in the floor's colour.
 	/// </summary>
-	static Model BuildTileModel( ArenaTheme self, ArenaTheme below, int cell, int turn )
+	static MeshKit BuildTileSlab( ArenaTheme self, ArenaTheme below, int cell, int turn )
 	{
 		var kit = new MeshKit();
 		var half = Arena.TileSize * 0.5f;
@@ -386,7 +425,54 @@ public sealed class ArenaGenerator : Component
 			kit.Quad( below.Ceiling, under[0], under[1], under[2], under[3], Under( 0f, 1f ), Under( 1f, 1f ), Under( 1f, 0f ), Under( 0f, 0f ) );
 		}
 
-		return kit.Build( $"arena_tile_{self.Floor}_{cell}_{turn}" );
+		return kit;
+	}
+
+	TileChunk ChunkOf( int floor, int x, int y ) => _chunks[floor, x / ChunkTiles, y / ChunkTiles];
+
+	static int ChunkSlot( int x, int y ) => (x % ChunkTiles) * ChunkTiles + y % ChunkTiles;
+
+	/// <summary>
+	/// A copy of one of the floor's surfaces in resting tint <paramref name="tint"/>, through the
+	/// material's own colour tint: the copy shares the surface's textures, so it costs no memory.
+	/// </summary>
+	Material Tinted( Material surface, int tint )
+	{
+		if ( _tinted.TryGetValue( (surface, tint), out var material ) ) return material;
+
+		material = surface.CreateCopy( $"{surface.Name}_tint{tint}" );
+		material.Set( "g_vColorTint", TileTint( tint ) );
+		_tinted[(surface, tint)] = material;
+		return material;
+	}
+
+	/// <summary>
+	/// Keeps the chunks in step with the tiles once a frame, before anything is drawn: a tile is drawn
+	/// by its chunk while it stands and isn't warning. Reading the flags back rather than being told
+	/// keeps every way a tile goes down or comes back (decay, abilities, snapshots, resets) on the one
+	/// rule of CLAUDE.md — a collapsed tile is a disabled GameObject.
+	/// </summary>
+	protected override void OnPreRender()
+	{
+		if ( _chunks is null ) return;
+
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+			for ( var x = 0; x < Arena.GridSize; x++ )
+				for ( var y = 0; y < Arena.GridSize; y++ )
+				{
+					var shown = _tiles[floor, x, y].Enabled && !_warning[floor, x, y];
+					if ( ChunkOf( floor, x, y ).SetShown( ChunkSlot( x, y ), shown ) )
+						_chunkDirty[floor, x / ChunkTiles, y / ChunkTiles] = true;
+				}
+
+		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+			for ( var cx = 0; cx < ChunksPerSide; cx++ )
+				for ( var cy = 0; cy < ChunksPerSide; cy++ )
+				{
+					if ( !_chunkDirty[floor, cx, cy] ) continue;
+					_chunkDirty[floor, cx, cy] = false;
+					_chunks[floor, cx, cy].Upload();
+				}
 	}
 
 	/// <summary>
@@ -410,18 +496,19 @@ public sealed class ArenaGenerator : Component
 		return (int)(h & 3) * 4 + (int)((h >> 2) & 3);
 	}
 
+	/// <summary>Which of the <see cref="TintCount"/> resting tints a tile wears, from bits 4–5 of its hash (the look takes 0–3).</summary>
+	static int TileTintIndex( int floor, int x, int y ) => (int)((TileHash( floor, x, y ) >> 4) & (TintCount - 1));
+
 	/// <summary>
-	/// The resting tint of a tile, from its index alone so a reset can restore any tile without
-	/// storing it: value within ±3 % of 0.97 and a slight warm/cool and green/magenta lean, so no
-	/// two neighbours match exactly. The colour itself lives in the floor's textures; every channel
-	/// stays at or below 1 because ModelRenderer.Tint wraps above it.
+	/// Resting tint <paramref name="tint"/>: lighter or darker (value 0.955 or 0.985), warm or cool,
+	/// with a slight green/magenta lean, so neighbours rarely match. The colour itself lives in the
+	/// floor's textures; every channel stays at or below 1.
 	/// </summary>
-	public static Color TileColor( int floor, int x, int y )
+	static Color TileTint( int tint )
 	{
-		var h = TileHash( floor, x, y ) >> 4;
-		var value = 0.94f + (h & 0xFF) / 255f * 0.06f;
-		var warmth = ((h >> 8) & 0xFF) / 255f * 2f - 1f;
-		var lean = ((h >> 16) & 0xFF) / 255f * 2f - 1f;
+		var value = 0.94f + ((tint & 1) == 0 ? 0.25f : 0.75f) * 0.06f;
+		var warmth = (tint & 2) == 0 ? -0.6f : 0.6f;
+		var lean = ((tint ^ (tint >> 1)) & 1) == 0 ? -0.5f : 0.5f;
 
 		var r = 1f + warmth * TileHueJitter;
 		var g = 1f + lean * TileHueJitter * 0.5f;
@@ -438,10 +525,19 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	public void SetTileWarning( int floor, int x, int y, float t )
 	{
-		var renderer = _renderers?[floor, x, y];
-		if ( renderer is null ) return;
+		if ( _tiles is null ) return;
 
-		renderer.MaterialOverride = _warnMaterial;
+		var renderer = _renderers[floor, x, y];
+		if ( renderer is null )
+		{
+			var look = TileLook( floor, x, y );
+			renderer = _renderers[floor, x, y] = _tiles[floor, x, y].AddComponent<ModelRenderer>();
+			renderer.Model = _tileModels[floor, look] ??= _tileSlabs[floor, look].Build( $"arena_tile_{floor}_{look}" );
+			renderer.MaterialOverride = _warnMaterial;
+		}
+
+		_warning[floor, x, y] = true;
+		renderer.Enabled = true;
 
 		// Orange on every floor from the first frame — blending from the floor's own colour made a
 		// teal tile go beige, which reads as nothing. Dim ember to full glow over the delay.
@@ -451,15 +547,14 @@ public sealed class ArenaGenerator : Component
 		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y ) + Vector3.Down * (6f * eased);
 	}
 
-	/// <summary>Undo <see cref="SetTileWarning"/>: the slab's own materials, resting colour and height.</summary>
+	/// <summary>Undo <see cref="SetTileWarning"/>: back in its chunk, at its resting height.</summary>
 	public void RestoreTile( int floor, int x, int y )
 	{
-		var renderer = _renderers?[floor, x, y];
-		if ( renderer is null ) return;
+		if ( _tiles is null || !_warning[floor, x, y] ) return;
 
-		renderer.MaterialOverride = null;
-		renderer.Tint = TileColor( floor, x, y );
-		renderer.GameObject.LocalPosition = TileLocalPosition( floor, x, y );
+		_warning[floor, x, y] = false;
+		_renderers[floor, x, y].Enabled = false;
+		_tiles[floor, x, y].LocalPosition = TileLocalPosition( floor, x, y );
 	}
 
 	/// <summary>
