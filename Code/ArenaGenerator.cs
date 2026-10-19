@@ -235,8 +235,6 @@ public sealed class ArenaGenerator : Component
 		_glowMaterial = Material.Load( GlowMaterialPath );
 		_warnMaterial = new Painter( 16, WarnColor, 1f ).Bake( "arena_tile_warning", GlowMaterialPath, 1f ).Upload();
 
-		StartPainting();
-
 		var tileSize = new Vector3( Arena.TileSize, Arena.TileSize, Arena.TileThickness );
 
 		for ( int floor = 0; floor < Arena.FloorCount; floor++ )
@@ -264,6 +262,9 @@ public sealed class ArenaGenerator : Component
 		CreateSigns();
 		ConfigureLighting();
 		ConfigureCamera();
+
+		// Last: eleven workers painting at full tilt slowed the tile loop above threefold.
+		StartPainting();
 
 		Log.Info( $"Arena: {Arena.FloorCount} floors x {Arena.GridSize}x{Arena.GridSize} = {Arena.FloorCount * Arena.GridSize * Arena.GridSize} tiles, playable in {_buildClock.ElapsedMilliseconds} ms" );
 	}
