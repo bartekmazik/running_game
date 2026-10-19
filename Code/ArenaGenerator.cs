@@ -128,7 +128,6 @@ public sealed class ArenaGenerator : Component
 
 	/// <summary>[floor, chunk x, chunk y]: what draws the tiles.</summary>
 	TileChunk[,,] _chunks;
-	bool[,,] _chunkDirty;
 
 	/// <summary>The floor's surfaces in each resting tint, by surface and tint index.</summary>
 	readonly Dictionary<(Material, int), Material> _tinted = new();
@@ -225,7 +224,6 @@ public sealed class ArenaGenerator : Component
 		_renderers = new ModelRenderer[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
 		_warning = new bool[Arena.FloorCount, Arena.GridSize, Arena.GridSize];
 		_chunks = new TileChunk[Arena.FloorCount, ChunksPerSide, ChunksPerSide];
-		_chunkDirty = new bool[Arena.FloorCount, ChunksPerSide, ChunksPerSide];
 		_tileSlabs = new MeshKit[Arena.FloorCount, TileLooks];
 		_tileModels = new Model[Arena.FloorCount, TileLooks];
 
@@ -599,24 +597,20 @@ public sealed class ArenaGenerator : Component
 		{
 			if ( _chunks[floor, 0, 0] is null ) continue;
 
-			for ( var x = 0; x < Arena.GridSize; x++ )
-				for ( var y = 0; y < Arena.GridSize; y++ )
-				{
-					var shown = _tiles[floor, x, y].Enabled && !_warning[floor, x, y];
-					if ( ChunkOf( floor, x, y ).SetShown( ChunkSlot( x, y ), shown ) )
-						_chunkDirty[floor, x / ChunkTiles, y / ChunkTiles] = true;
-				}
-		}
-
-		for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 			for ( var cx = 0; cx < ChunksPerSide; cx++ )
 				for ( var cy = 0; cy < ChunksPerSide; cy++ )
 				{
-					if ( !_chunkDirty[floor, cx, cy] ) continue;
-					_chunkDirty[floor, cx, cy] = false;
-					_chunks[floor, cx, cy].Upload();
+					var chunk = _chunks[floor, cx, cy];
+					var changed = false;
+					for ( var x = cx * ChunkTiles; x < (cx + 1) * ChunkTiles; x++ )
+						for ( var y = cy * ChunkTiles; y < (cy + 1) * ChunkTiles; y++ )
+							changed |= chunk.SetShown( ChunkSlot( x, y ), _tiles[floor, x, y].Enabled && !_warning[floor, x, y] );
+
+					if ( changed ) chunk.Upload();
 				}
+		}
 	}
+
 
 	/// <summary>
 	/// Per-tile hash. The spatial hash alone repeats every four tiles in its low bits (x times an

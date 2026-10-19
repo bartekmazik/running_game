@@ -274,6 +274,22 @@ still wears `textures/kenney/lava_blobs.png`, loaded in `ArenaGenerator`.
 - Since engine 26.10.13a the editor bridge is `sbox-cli.exe` (named pipe). The old HTTP port is
   gone.
 
+**Status after the 2026-10-19 load-perf pass** (branch `load-perf`; notes in
+`.superpowers/sdd/2026-10-19-load-perf/`). The user asked for a map that loads fast without losing
+the look; every change was checked against fixed screenshots.
+
+- **The arena streams in.** `ArenaGenerator.Generate` builds only what play needs: tiles with their
+  colliders, the tower colliders, lava, light. That takes ~0.2 s. The surfaces then paint on worker
+  threads (half the hardware threads), and `PumpBuild` uploads a few per frame. It builds the facade
+  first (all the menu sees), then each room top-down as its surfaces arrive. Reflection probes switch
+  on last. Every floor is dressed ~2 s after start in a release build.
+- **Tiles are drawn by `TileChunk`.** Each chunk is one model per 10×10 tiles, keeping all 16 looks;
+  resting tints are 4 tinted material copies. A tile still collapses by disabling its GameObject.
+  `OnPreRender` mirrors that into the chunk's index buffer. A tile gets its own renderer only while it
+  warns. Inside a room this is ~550 draw calls instead of ~5,100.
+- Texture memory is ~408 MiB, accepted (spec amended). Published games compile in release mode, so
+  the bake costs 4.3 s of CPU there against 11 s in the editor's debug build.
+
 ## Working style
 
 - **One component per turn.** Write it, explain what to test, stop.
