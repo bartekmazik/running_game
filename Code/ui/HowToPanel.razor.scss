@@ -12,8 +12,8 @@ HowToPanel {
 }
 
 .sheet {
-	width: 1180px;
-	padding: $s6 $s7;
+	width: 1080px;
+	padding: $s5 $s6;
 	animation: card-in 0.25s ease-out both;
 }
 
@@ -38,40 +38,42 @@ HowToPanel {
 	align-items: center;
 
 	.icon {
-		width: 92px;
-		height: 92px;
-		border-radius: 28px;
+		width: 72px;
+		height: 72px;
+		border-radius: 18px;
 		align-items: center;
 		justify-content: center;
 		margin-bottom: $s3;
 
 		.glyph {
-			width: 62px;
-			height: 62px;
+			width: 38px;
+			height: 38px;
+			background-image-tint: $cream;
 		}
 
 		.rank {
-			width: 84px;
-			height: 84px;
+			width: 60px;
+			height: 60px;
 		}
 
-		&.butter { background-color: $butter; border-bottom: 7px solid $butter-deep; }
-		&.sky { background-color: $sky; border-bottom: 7px solid $sky-deep; }
-		&.coral { background-color: $coral; border-bottom: 7px solid $coral-deep; }
-		&.mint { background-color: $mint; border-bottom: 7px solid $mint-deep; }
-		&.lilac { background-color: $lilac; border-bottom: 7px solid $lilac-deep; }
+		&.butter { background-color: $mustard; }
+		&.sky { background-color: $dusty; }
+		&.coral { background-color: $terra; }
+		&.mint { background-color: $sage; }
+		&.lilac { background-color: $paper-deep; }
 	}
 
 	.name {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 22px;
+		font-weight: 700;
+		font-size: 13px;
+		letter-spacing: $caps-spacing;
 		color: $ink;
 		margin-bottom: $s1;
 	}
 
 	.text {
-		font-size: 15px;
+		font-size: 13px;
 		line-height: 1.35;
 		color: $ink-soft;
 		text-align: center;
@@ -81,9 +83,9 @@ HowToPanel {
 .controls {
 	flex-direction: row;
 	justify-content: center;
-	padding: $s4;
-	border-radius: 22px;
-	background-color: $night;
+	padding: $s3;
+	border-radius: 14px;
+	background-color: $paper-deep;
 }
 
 .control {
@@ -92,22 +94,23 @@ HowToPanel {
 	margin: 0px $s5;
 
 	.prompt {
-		width: 52px;
-		height: 52px;
-		margin-right: 4px;
+		width: 38px;
+		height: 38px;
+		margin-right: 3px;
 		background-size: contain;
 		background-repeat: no-repeat;
 		background-position: center;
 
-		&.wide { width: 92px; }
+		&.wide { width: 70px; }
 	}
 
 	label {
 		margin-left: $s2;
 		font-family: $font-title;
 		font-weight: 700;
-		font-size: 18px;
-		color: $paper;
+		font-size: 12px;
+		letter-spacing: $caps-spacing;
+		color: $ink-soft;
 	}
 }
 
@@ -124,15 +127,15 @@ HowToPanel {
 
 .back {
 	position: absolute;
-	left: 28px;
-	top: 28px;
-	width: 60px;
-	height: 60px;
+	left: 24px;
+	top: 24px;
+	width: 48px;
+	height: 48px;
 	padding: 0px;
 
 	.glyph {
-		width: 38px;
-		height: 38px;
+		width: 24px;
+		height: 24px;
 		margin: 0px;
 	}
 }

@@ -7,6 +7,7 @@ CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 BG = {
     "mint": "#7ADB94", "coral": "#FF7A85", "night": "#2B2142", "paper": "#FFF7E8",
     "sky": "#75B8FA", "butter": "#FFCC61", "photo": "linear-gradient(135deg,#BFD8E8,#8a6a4a)",
+    "sage": "#7FA77A", "terra": "#D9845A", "slate": "#3E4A47", "mustard": "#E3B04F", "dusty": "#7EA3C0", "cream": "#F3EAD7",
 }
 
 args = sys.argv[1:]

@@ -23,11 +23,11 @@ BrowserPanel {
 	margin-bottom: $s4;
 
 	.brick.square {
-		width: 56px;
-		height: 56px;
+		width: 44px;
+		height: 44px;
 		padding: 0px;
 
-		.glyph { margin: 0px; width: 38px; height: 38px; }
+		.glyph { margin: 0px; width: 22px; height: 22px; }
 	}
 
 	.titles {
@@ -38,13 +38,14 @@ BrowserPanel {
 
 	.title {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 30px;
+		font-weight: 700;
+		font-size: 18px;
+		letter-spacing: 3px;
 		color: $ink;
 	}
 
 	.status {
-		font-size: 14px;
+		font-size: 12px;
 		color: $ink-soft;
 
 		&.error { color: $coral-deep; }
@@ -61,21 +62,22 @@ BrowserPanel {
 	flex-direction: column;
 	align-items: center;
 	padding: $s6 $s4;
-	border-radius: 20px;
+	border-radius: 14px;
 	background-color: $paper-deep;
 
 	.glyph {
-		width: 64px;
-		height: 64px;
+		width: 36px;
+		height: 36px;
 		margin-bottom: $s2;
-		opacity: 0.7;
+		background-image-tint: $ink-faint;
 	}
 
 	.headline {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 22px;
-		color: $ink;
+		font-weight: 700;
+		font-size: 13px;
+		letter-spacing: $caps-spacing;
+		color: $ink-soft;
 	}
 
 	.detail {
@@ -90,17 +92,17 @@ BrowserPanel {
 	align-items: center;
 	padding: $s3 $s4;
 	margin-bottom: $s2;
-	border-radius: 18px;
+	border-radius: 12px;
 	background-color: $paper-deep;
-	border-bottom: 5px solid $paper-edge;
+	border: 2px solid $paper-deep;
 	cursor: pointer;
 	transition: all 0.08s ease-out;
 
 	&:hover {
-		transform: translateY(-2px);
-		background-color: #FFFDF6;
+		background-color: #FBF5E8;
+		border-color: $mustard;
 
-		.join { background-color: $mint; border-bottom-color: $mint-deep; }
+		.join { background-color: $sage; .glyph { background-image-tint: $cream; } }
 	}
 
 	&:active { transform: translateY(2px); }
@@ -119,8 +121,8 @@ BrowserPanel {
 
 	.primary {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 19px;
+		font-weight: 700;
+		font-size: 16px;
 		color: $ink;
 	}
 
@@ -136,23 +138,22 @@ BrowserPanel {
 
 	.players {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 18px;
+		font-weight: 700;
+		font-size: 16px;
 		color: $ink;
 	}
 
 	.join {
-		width: 44px;
-		height: 44px;
-		border-radius: 14px;
+		width: 36px;
+		height: 36px;
+		border-radius: 10px;
 		align-items: center;
 		justify-content: center;
 		background-color: $paper;
-		border-bottom: 4px solid $paper-edge;
 
 		.glyph {
-			width: 32px;
-			height: 32px;
+			width: 18px;
+			height: 18px;
 		}
 	}
 }

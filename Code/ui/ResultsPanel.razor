@@ -8,8 +8,7 @@
 @*
 	The end of a round, over the HUD while it's Ended: who won, the podium with its medals, everyone's
 	points, what this round did to your rank — and, when it happened, the rank-up moment: a few seconds
-	of the new emblem on spinning rays with paper confetti, modelled on the "Level up!" card in the
-	user's reference screenshots, which then settles into a pill on top of the card.
+	of the reference's "Level up!" card, which then settles into a pill on top of the results card.
 *@
 
 <root>
@@ -18,18 +17,16 @@
 		{
 			<div class="rankup">
 				<div class="emblem art" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div>
-				<div class="text">
-					<label class="title">Rank up!</label>
-					<label class="to">@RankUpName</label>
-				</div>
+				<label class="to">@RankUpName</label>
 			</div>
 		}
 
 		<div class="title-row">
 			<div class="swirl left"></div>
-			<label class="title verdict">@Verdict</label>
+			<label class="title">ROUND OVER</label>
 			<div class="swirl right"></div>
 		</div>
+		<label class="verdict">@Verdict</label>
 		<div class="meta">
 			<div class="glyph g-clock"></div>
 			<label>@DurationText</label>
@@ -42,10 +39,6 @@
 				{
 					var row = Rows[place - 1];
 					<div class="step p@(place) @MineClass( row.Name )" @key=@place>
-						@if ( place == 1 )
-						{
-							<div class="sunburst"></div>
-						}
 						<div class="medal">
 							<div class="art" style="background-image: url(@Ranks.Medal( place ))"></div>
 						</div>
@@ -54,7 +47,7 @@
 							<label class="name">@row.Name</label>
 						</div>
 						<label class="pts">@PointsText( row )</label>
-						<div class="block"><label>@PlaceText( place )</label></div>
+						<div class="block"></div>
 					</div>
 				}
 			}
@@ -70,7 +63,7 @@
 						<label class="place">@PlaceText( i + 1 )</label>
 						<div class="emblem art" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
 						<label class="name">@row.Name</label>
-						<label class="kd">@KnockdownText( row )</label>
+						<div class="kd"><div class="glyph g-impact"></div><label>@row.Knockdowns</label></div>
 						<label class="pts">@PointsText( row )</label>
 					</div>
 				}
@@ -82,7 +75,7 @@
 			<div class="you">
 				<div class="emblem art" style="background-image: url(@Ranks.Emblem( Rp ))"></div>
 				<div class="mid">
-					<label class="rank">@Ranks.Name( Rp )</label>
+					<label class="rank">@Ranks.Name( Rp ).ToUpperInvariant()</label>
 					<div class="bar"><div class="fill" style="width: @(Ranks.Progress( Rp ) * 100f)%; background-color: @Ranks.TierHex( Ranks.Tier( Rp ) )"></div></div>
 				</div>
 				<label class="delta @DeltaClass">@DeltaText</label>
@@ -95,13 +88,13 @@
 				<label>@NextText</label>
 			</div>
 
-			<div class="brick mint" onclick=@OpenLoadout>
+			<div class="brick paper" onclick=@OpenLoadout>
 				<div class="glyph g-bolt"></div>
-				<label>Abilities</label>
+				<label>ABILITIES</label>
 			</div>
 			<div class="brick coral" onclick=@Leave>
 				<div class="glyph g-door"></div>
-				<label>Leave</label>
+				<label>LEAVE</label>
 			</div>
 		</div>
 	</div>
@@ -109,21 +102,17 @@
 	@if ( Celebrating )
 	{
 		<div class="celebrate" onclick=@EndCelebration>
-			@for ( var i = 0; i < ConfettiCount; i++ )
-			{
-				<div class="bit art @ConfettiKind( i )" @key=@i></div>
-			}
-
-			<div class="burst">
-				<div class="sunburst"></div>
-				<div class="stamp">
-					<div class="emblem art" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div>
+			<div class="levelup">
+				<div class="badge">
+					<div class="art" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div>
 				</div>
+				<div class="title-row">
+					<div class="swirl left"></div>
+					<label class="title">RANK UP!</label>
+					<div class="swirl right"></div>
+				</div>
+				<label class="to">@RankUpName</label>
 			</div>
-			<div class="ribbon">
-				<label class="title">Rank up!</label>
-			</div>
-			<label class="to">@RankUpName</label>
 		</div>
 	}
 </root>
@@ -147,7 +136,7 @@
 
 	bool RankedUp => Store is not null && Store.RankUpToStep >= 0;
 
-	string RankUpName => $"You're now {Ranks.NameOfStep( Store.RankUpToStep )}";
+	string RankUpName => Ranks.NameOfStep( Store.RankUpToStep );
 
 	bool ShowRank => Round.LastRoundRanked && Store is not null && Store.HasLastDelta;
 
@@ -156,8 +145,8 @@
 	string DeltaClass => Store.LastDelta >= 0 ? "up" : "down";
 
 	string Verdict => string.IsNullOrEmpty( Round.LastWinner )
-		? "Nobody made it"
-		: Round.LastWinner == LocalName ? "You win!" : $"{Round.LastWinner} wins";
+		? "NOBODY MADE IT"
+		: Round.LastWinner == LocalName ? "YOU WIN" : $"{Round.LastWinner.ToUpperInvariant()} WINS";
 
 	string DurationText => FormatTime( Round.LastRoundDuration );
 
@@ -167,9 +156,8 @@
 
 	static string PlaceText( int place ) => $"#{place}";
 
-	static string PointsText( RoundManager.ResultRow row ) => $"{row.Points} pts";
+	static string PointsText( RoundManager.ResultRow row ) => $"{row.Points} PTS";
 
-	static string KnockdownText( RoundManager.ResultRow row ) => row.Knockdowns == 1 ? "1 knockdown" : $"{row.Knockdowns} knockdowns";
 
 	void OpenLoadout()
 	{
@@ -196,8 +184,6 @@
 	/// <summary>How long the full-screen rank-up holds before it settles into the pill on the card.</summary>
 	const float CelebrationTime = 4.5f;
 
-	const int ConfettiCount = 28;
-
 	bool _playedRankUp;
 
 	bool _celebrationDismissed;
@@ -212,13 +198,6 @@
 		Sfx.Ui( Sfx.Click, 0.5f );
 		StateHasChanged();
 	}
-
-	/// <summary>
-	/// Picture (a/b/c), timing lane (k0..k6) and column/size slot (p0..p27), all classes in the
-	/// stylesheet: an inline style is re-applied on every rebuild, and re-applying it restarts the
-	/// element's animation.
-	/// </summary>
-	static string ConfettiKind( int i ) => (i % 3) switch { 0 => "a", 1 => "b", _ => "c" } + $" k{i % 7} p{i}";
 
 	public override void Tick()
 	{

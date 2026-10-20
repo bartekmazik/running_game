@@ -5,7 +5,7 @@
 @inherits PanelComponent
 
 @*
-	The tag over another player's head: rank emblem, name, and a Kenney emote for whatever is
+	The tag over another player's head: rank emblem, name, and an emote for whatever is
 	happening to them. A world-space PanelComponent on its own GameObject — PanelComponents can't
 	nest, but each WorldPanel is a root of its own, so one per player is the shipped pattern.
 
@@ -18,7 +18,7 @@
 		<div class="tag">
 			@if ( !string.IsNullOrEmpty( Emote ) )
 			{
-				<div class="emote" style="background-image: url(@Emote)"></div>
+				<div class="bubble"><div class="emote" style="background-image: url(@Emote)"></div></div>
 			}
 			@if ( !IsLocal )
 			{
@@ -50,7 +50,7 @@
 		get
 		{
 			var tier = Player.RankTier;
-			if ( tier < RankTier.Silver ) return "#FFFFFF";
+			if ( tier < RankTier.Silver ) return "#FFF8EC";
 			return Ranks.TierHex( tier );
 		}
 	}
@@ -61,14 +61,14 @@
 		get
 		{
 			var status = Player.Status;
-			if ( Player.IsRagdolled ) return "/ui/kenney/emotes/stars.svg";
-			if ( status.Has( StatusKind.Stunned ) ) return "/ui/kenney/emotes/swirl.svg";
-			if ( status.Has( StatusKind.Confused ) ) return "/ui/kenney/emotes/question.svg";
-			if ( status.Has( StatusKind.Blackout ) ) return "/ui/kenney/emotes/sleeps.svg";
-			if ( status.Has( StatusKind.HeavyBoots ) ) return "/ui/kenney/emotes/anger.svg";
-			if ( status.Has( StatusKind.Glue ) ) return "/ui/kenney/emotes/drops.svg";
-			if ( status.Has( StatusKind.Vortex ) ) return "/ui/kenney/emotes/exclamations.svg";
-			if ( status.Has( StatusKind.Ice ) ) return "/ui/kenney/emotes/exclamation.svg";
+			if ( Player.IsRagdolled ) return "/ui/icons/emotes/dizzy.svg";
+			if ( status.Has( StatusKind.Stunned ) ) return "/ui/icons/emotes/swirl.svg";
+			if ( status.Has( StatusKind.Confused ) ) return "/ui/icons/emotes/question.svg";
+			if ( status.Has( StatusKind.Blackout ) ) return "/ui/icons/emotes/sleep.svg";
+			if ( status.Has( StatusKind.HeavyBoots ) ) return "/ui/icons/emotes/anger.svg";
+			if ( status.Has( StatusKind.Glue ) ) return "/ui/icons/emotes/drops.svg";
+			if ( status.Has( StatusKind.Vortex ) ) return "/ui/icons/emotes/alert.svg";
+			if ( status.Has( StatusKind.Ice ) ) return "/ui/icons/emotes/chill.svg";
 			return null;
 		}
 	}

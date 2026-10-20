@@ -68,9 +68,6 @@ public sealed class ArenaGenerator : Component
 	/// <summary>The room's name ("Beach"), for the HUD. The themes exist once painting has started.</summary>
 	public string FloorName( int floor ) => _themes?[floor].Name ?? $"Floor {floor + 1}";
 
-	/// <summary>The room's sticker icon, from Assets/ui/icons/floors.</summary>
-	public static string FloorIcon( int floor ) => $"/ui/icons/floors/floor{floor}.svg";
-
 	/// <summary>What a stepped-on tile heats towards during its <see cref="Arena.DecayDelay"/>.</summary>
 	public static Color WarnColor => Palette.Warn;
 

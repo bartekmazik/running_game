@@ -1,7 +1,3 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128">
-  <g transform="translate(0,5)" opacity="0.28" fill="#2B2142" stroke="#2B2142" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"><polygon points="44,24 104,64 44,104"/></g>
-  <polygon points="44,24 104,64 44,104" fill="#FFF7E8"/>
-  <polygon points="44,64 100,64 44,104" fill="#F7E8CC"/>
-  <polygon points="44,24 104,64 44,104" fill="none" stroke="#3D2E5C" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M55 42 L55 54" fill="none" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="5" stroke-linecap="round"/>
+<path d="M44 26 Q36 22 36 32 V96 Q36 106 44 102 L100 70 Q108 64 100 58 Z" fill="#FFFFFF"/>
 </svg>
