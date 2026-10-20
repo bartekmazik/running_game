@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128">
+  <g transform="translate(0,5)" opacity="0.28" fill="#2B2142" stroke="#2B2142" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"><path d="M42 58 V44 Q42 20 64 20 Q86 20 86 44 V58" fill="none" stroke="#2B2142" stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/><rect x="24" y="54" width="80" height="58" rx="16"/></g>
+  <path d="M42 58 V44 Q42 20 64 20 Q86 20 86 44 V58" fill="none" stroke="#3D2E5C" stroke-width="22" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M42 58 V44 Q42 20 64 20 Q86 20 86 44 V58" fill="none" stroke="#F7E8CC" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+  <rect x="24" y="54" width="80" height="58" rx="16" fill="#FFF7E8"/>
+  <path d="M104 76 V96 Q104 112 88 112 H50 Q96 106 104 76 Z" fill="#F7E8CC"/>
+  <rect x="24" y="54" width="80" height="58" rx="16" fill="none" stroke="#3D2E5C" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="64" cy="80" r="8" fill="#3D2E5C"/>
+  <path d="M64 82 V96" fill="none" stroke="#3D2E5C" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M34 70 V76" fill="none" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="5" stroke-linecap="round"/>
+</svg>

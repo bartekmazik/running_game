@@ -65,6 +65,12 @@ public sealed class ArenaGenerator : Component
 	/// </summary>
 	public static Color FloorColor( int floor ) => Palette.FloorHue( floor );
 
+	/// <summary>The room's name ("Beach"), for the HUD. The themes exist once painting has started.</summary>
+	public string FloorName( int floor ) => _themes?[floor].Name ?? $"Floor {floor + 1}";
+
+	/// <summary>The room's sticker icon, from Assets/ui/icons/floors.</summary>
+	public static string FloorIcon( int floor ) => $"/ui/icons/floors/floor{floor}.svg";
+
 	/// <summary>What a stepped-on tile heats towards during its <see cref="Arena.DecayDelay"/>.</summary>
 	public static Color WarnColor => Palette.Warn;
 
@@ -975,7 +981,7 @@ public sealed class ArenaGenerator : Component
 	/// <summary>
 	/// Signage in the world: a plaque with the floor's number centred on every wall of every room,
 	/// hung on the wall's middle pier facing into the room, so you can read your depth wherever you
-	/// look; and the trophy over the tower — Kenney's gold medal and the one rule — for the menu orbit
+	/// look; and the trophy over the tower — the podium's gold medal and the one rule — for the menu orbit
 	/// and for anyone looking up. No colliders.
 	/// </summary>
 	void CreateSigns()

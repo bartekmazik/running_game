@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128">
+<g transform="translate(0,5)"><g  fill="#2B2142" fill-opacity="0.28" stroke="#2B2142" stroke-opacity="0.28" stroke-width="7" stroke-linejoin="round"><path d="M10 48 V100 Q38 92 64 106 Q90 92 118 100 V48 Z"/><path d="M18 34 Q42 30 64 42 V98 Q42 88 18 92 Z"/><path d="M110 34 Q86 30 64 42 V98 Q86 88 110 92 Z"/></g></g>
+<path d="M10 48 V100 Q38 92 64 106 Q90 92 118 100 V48 Z" fill="#C99BB0"/>
+<path d="M10 80 V100 Q38 92 64 106 Q90 92 118 100 V80 Q90 90 64 100 Q38 90 10 80Z" fill="#A87890"/>
+<path d="M10 48 V100 Q38 92 64 106 Q90 92 118 100 V48 Z" fill="none" stroke="#3D2E5C" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M18 34 Q42 30 64 42 V98 Q42 88 18 92 Z" fill="#FFF7E8"/>
+<path d="M64 42 V98 Q56 92 48 90 Q58 70 64 42 Z" fill="#F7E8CC"/>
+<path d="M18 34 Q42 30 64 42 V98 Q42 88 18 92 Z" fill="none" stroke="#3D2E5C" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M110 34 Q86 30 64 42 V98 Q86 88 110 92 Z" fill="#FFF7E8"/>
+<path d="M64 42 V98 Q72 92 80 90 Q70 70 64 42 Z" fill="#F7E8CC"/>
+<path d="M110 34 Q86 30 64 42 V98 Q86 88 110 92 Z" fill="none" stroke="#3D2E5C" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M26 52 Q38 48 50 53" stroke="#3D2E5C" stroke-width="4" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M102 52 Q90 48 78 53" stroke="#3D2E5C" stroke-width="4" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M26 64 Q38 60 50 65" stroke="#3D2E5C" stroke-width="4" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M102 64 Q90 60 78 65" stroke="#3D2E5C" stroke-width="4" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M26 76 Q38 72 50 77" stroke="#3D2E5C" stroke-width="4" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M102 76 Q90 72 78 77" stroke="#3D2E5C" stroke-width="4" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<path d="M64 42 V98" stroke="#3D2E5C" stroke-width="5" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

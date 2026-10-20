@@ -8,37 +8,37 @@
 
 <root>
 	<div class="card sheet">
-		<div class="head">
-			<i class="sparkle">auto_awesome</i>
+		<div class="title-row">
+			<div class="swirl left"></div>
 			<label class="title">How to play</label>
-			<i class="sparkle">auto_awesome</i>
+			<div class="swirl right"></div>
 		</div>
 
 		<div class="rules">
 			<div class="rule">
-				<div class="icon butter"><i>directions_run</i></div>
+				<div class="icon butter"><div class="glyph g-runner"></div></div>
 				<label class="name">Keep running</label>
-				<label class="text">Every tile you step on drops away a moment later. Stand still and you fall.</label>
+				<label class="text">Tiles drop as you step.</label>
 			</div>
 			<div class="rule">
-				<div class="icon sky"><i>layers</i></div>
+				<div class="icon sky"><div class="glyph g-layers"></div></div>
 				<label class="name">Eight floors</label>
-				<label class="text">Fall through a hole and you land on the floor below. Under the last one is the lava.</label>
+				<label class="text">Fall through. Lava below.</label>
 			</div>
 			<div class="rule">
-				<div class="icon coral"><i>sports_kabaddi</i></div>
+				<div class="icon coral"><div class="glyph g-impact"></div></div>
 				<label class="name">Shove</label>
-				<label class="text">Crash into someone. Whoever hit softer goes flying — sprint in, never get caught standing.</label>
+				<label class="text">The softer hit goes flying.</label>
 			</div>
 			<div class="rule">
-				<div class="icon mint"><i>bolt</i></div>
+				<div class="icon mint"><div class="glyph g-bolt"></div></div>
 				<label class="name">Two abilities</label>
-				<label class="text">Pick two of thirty before you play. Save yourself, or wreck someone else's floor.</label>
+				<label class="text">Pick two of thirty.</label>
 			</div>
 			<div class="rule">
-				<div class="icon lilac"><i>military_tech</i></div>
+				<div class="icon lilac"><div class="art rank" style="background-image: url(/ui/ranks/gold_3.svg)"></div></div>
 				<label class="name">Climb the ranks</label>
-				<label class="text">Last one standing wins. Points and placings earn rank, from Bronze to Master.</label>
+				<label class="text">Last one standing wins.</label>
 			</div>
 		</div>
 
@@ -65,11 +65,8 @@
 			</div>
 		</div>
 
-		<div class="foot">
-			<div class="brick paper" onclick=@Back>
-				<i>arrow_back</i>
-				<label>Back</label>
-			</div>
+		<div class="brick paper back" onclick=@Back>
+			<div class="glyph g-back"></div>
 		</div>
 	</div>
 </root>

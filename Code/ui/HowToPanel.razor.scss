@@ -22,19 +22,8 @@ HowToPanel {
 	to { opacity: 1; transform: translateY(0px) scale(1); }
 }
 
-.head {
-	flex-direction: row;
-	align-items: center;
-	justify-content: center;
+.title-row {
 	margin-bottom: $s5;
-
-	.title {
-		font-family: $font-title;
-		font-weight: 800;
-		font-size: 44px;
-		color: $ink;
-		margin: 0px $s3;
-	}
 }
 
 .rules {
@@ -56,10 +45,14 @@ HowToPanel {
 		justify-content: center;
 		margin-bottom: $s3;
 
-		i {
-			font-family: "Material Icons";
-			font-size: 54px;
-			color: $ink;
+		.glyph {
+			width: 62px;
+			height: 62px;
+		}
+
+		.rank {
+			width: 84px;
+			height: 84px;
 		}
 
 		&.butter { background-color: $butter; border-bottom: 7px solid $butter-deep; }
@@ -124,4 +117,22 @@ HowToPanel {
 	margin-top: $s5;
 
 	.brick { min-width: 170px; }
+}
+
+// A square back button in the card's corner, as on the rank page.
+.sheet { position: relative; }
+
+.back {
+	position: absolute;
+	left: 28px;
+	top: 28px;
+	width: 60px;
+	height: 60px;
+	padding: 0px;
+
+	.glyph {
+		width: 38px;
+		height: 38px;
+		margin: 0px;
+	}
 }

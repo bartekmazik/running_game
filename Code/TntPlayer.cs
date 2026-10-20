@@ -242,10 +242,13 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		var tag = new GameObject( GameObject, true, "Nameplate" );
 		tag.Flags |= GameObjectFlags.NotSaved;
 		tag.NetworkMode = NetworkMode.Never;
-		tag.LocalPosition = Vector3.Up * 96f;
+		tag.LocalPosition = Vector3.Up * 76f;
 
+		// Anchored at the bottom so the plate sits just over the head and the emote has room above it;
+		// wide enough for a long Steam name on one line.
 		var world = tag.AddComponent<WorldPanel>();
-		world.PanelSize = new Vector2( 900f, 260f );
+		world.VerticalAlign = WorldPanel.VAlignment.Bottom;
+		world.PanelSize = new Vector2( 1600f, 560f );
 		world.RenderScale = 1.5f;
 		world.LookAtCamera = true;
 

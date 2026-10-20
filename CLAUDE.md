@@ -290,6 +290,32 @@ the look; every change was checked against fixed screenshots.
 - Texture memory is ~408 MiB, accepted (spec amended). Published games compile in release mode, so
   the bake costs 4.3 s of CPU there against 11 s in the editor's debug build.
 
+**Status after the 2026-10-20 UI pass** (branch `ui-pass`; art guide, rank generator and the contact-sheet
+renderer in `tools/ui-art/`; screenshots in the ignored `.superpowers/sdd/2026-10-20-ui-pass/`). The user asked for "beautiful icons, graphics,
+effects and UI as one whole", with extra care on the rank art, and handed every decision to Claude.
+
+- **One art language: sticker SVGs** (plum `#3D2E5C` outline, flat pastel fills, baked drop shadow),
+  authored in code like the earlier SVG rule. Material Icons are gone from the UI.
+  - `Assets/ui/icons/abilities/<id>.svg` — 30 ability stickers; `AbilityInfo.Icon` is now the path,
+    derived from the id. Statuses reuse them via `PlayerStatus.Icon`.
+  - `Assets/ui/icons/glyphs/*.svg` — UI glyphs, used as `<div class="glyph g-name">` (`_kit.scss`).
+  - `Assets/ui/icons/floors/floor0..7.svg` — one per themed room (`ArenaGenerator.FloorIcon`).
+  - `Assets/ui/ranks/` — 16 rank emblems + 3 podium medals from `tools/ui-art/ranks.py`. Each tier has its own
+    silhouette (scalloped medallion, winged shield, laurelled crown shield, winged hexagon, winged
+    diamond, crowned Master crest with rays); ribbon pips count the division, III glows.
+    `Ranks.TierColor` matches the emblems' mid metal. Kenney ranks/medals were deleted.
+  - `Assets/ui/fx/` — sunburst, sparkle, swirls, ribbon, confetti; `Assets/ui/logo-mark.svg`.
+- Effects: rank-up is a full-screen moment (stamped emblem on spinning rays, ribbon, paper confetti made
+  of UI divs, click or 4.5 s to dismiss); a "Floor N / Room" toast when you drop a floor; the HUD ladder
+  shows room stickers; "Run!" flares out of a sunburst; abilities hop when ready; podium rises in order.
+- Copy cut to a minimum on request ("minimalizm, mało tekstu"): icons + numbers, one-word sublines,
+  perks only on hover. Verified in play with a second local client: menu pages, HUD, floor toast,
+  statuses, cooldowns, 2-player ranked results, rank-up for every tier, nameplate + status emote
+  (nameplate was clipped: now bottom-anchored `WorldPanel`, 1600×560). Not seen yet: "Out!" card and
+  the spectator bar — they need three players.
+- Confetti is UI animation of SVG divs, not a particle system — Claude's call against the
+  "no particle effects" rule; say so if that reads wrong.
+
 ## Working style
 
 - **One component per turn.** Write it, explain what to test, stop.

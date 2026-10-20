@@ -42,8 +42,16 @@ HudPanel {
 
 	.clock {
 		min-width: 170px;
-		padding: $s1 $s6;
+		padding: $s1 $s6 $s1 $s4;
+		flex-direction: row;
+		align-items: center;
 		justify-content: center;
+
+		.glyph {
+			width: 46px;
+			height: 46px;
+			margin-right: $s2;
+		}
 		border-radius: $radius-pill;
 		background-color: $paper;
 		border-bottom: 7px solid $paper-edge;
@@ -94,7 +102,10 @@ HudPanel {
 	}
 }
 
-.ended .roundstate .headline { font-size: 36px; }
+// The results card owns the screen once a round ends; the HUD steps back.
+.ended {
+	.roundstate, .alive, .feed, .ladder { display: none; }
+}
 
 @keyframes pulse {
 	from { transform: scale(1); }
@@ -115,11 +126,10 @@ HudPanel {
 	border-bottom: 6px solid $paper-edge;
 	box-shadow: $drop;
 
-	i {
-		font-family: "Material Icons";
-		font-size: 32px;
-		color: $ink;
-		margin-right: $s2;
+	.glyph {
+		width: 40px;
+		height: 40px;
+		margin: -4px $s2 -4px 0px;
 	}
 
 	.value {
@@ -130,10 +140,6 @@ HudPanel {
 		margin-right: $s2;
 	}
 
-	.unit {
-		font-size: 15px;
-		color: $ink-soft;
-	}
 }
 
 // --- Feed (top right) ----------------------------------------------------------------------
@@ -154,11 +160,14 @@ HudPanel {
 		background-color: rgba(43, 33, 66, 0.78);
 		animation: feed-in 0.25s ease-out both;
 
-		i {
-			font-family: "Material Icons";
-			font-size: 18px;
-			color: $coral;
-			margin: 0px $s2;
+		.glyph {
+			width: 26px;
+			height: 26px;
+			margin-right: $s2;
+		}
+
+		.by {
+			margin-right: $s2;
 		}
 	}
 
@@ -184,63 +193,78 @@ HudPanel {
 }
 
 // --- Depth ladder (right) ------------------------------------------------------------------
+//
+// The tower in miniature: one brick per room in its floor colour with the room's sticker on it,
+// lava at the bottom. Rooms above you fade out, yours pops out with the runner beside it.
 
 .ladder {
 	position: absolute;
-	right: 40px;
-	top: 34%;
-	width: 120px;
+	right: 36px;
+	top: 30%;
+	width: 132px;
 	flex-direction: column;
 	align-items: flex-end;
-	padding: $s3 $s3 $s3 $s3;
-	border-radius: 22px;
+	padding: $s3;
+	border-radius: 24px;
 	background-color: rgba(43, 33, 66, 0.55);
 
-	.cap {
-		align-self: center;
-		font-family: $font-title;
-		font-weight: 800;
-		font-size: 17px;
-		color: $paper;
-		margin-bottom: $s2;
-	}
-
 	.rung {
+		position: relative;
 		width: 100%;
-		height: 18px;
+		height: 30px;
 		flex-direction: row;
 		align-items: center;
 		justify-content: flex-end;
-		margin-bottom: 6px;
+		margin-bottom: 5px;
 
 		.bar {
-			height: 12px;
-			width: 64px;
-			border-radius: 6px;
-			opacity: 0.85;
+			width: 74px;
+			height: 26px;
+			border-radius: 9px;
+			border-bottom: 4px solid rgba(43, 33, 66, 0.35);
+			flex-direction: row;
+			align-items: center;
+			justify-content: center;
+			transition: all 0.2s ease-out;
+		}
+
+		.room {
+			width: 24px;
+			height: 24px;
+
+			.art {
+				width: 100%;
+				height: 100%;
+			}
 		}
 
 		&.passed .bar {
-			opacity: 0.2;
+			opacity: 0.22;
 		}
 
-		&.here .bar {
-			width: 96px;
-			height: 18px;
-			border-radius: 9px;
-			opacity: 1;
-			border-bottom: 4px solid rgba(43, 33, 66, 0.35);
+		&.here {
+			height: 40px;
+
+			.bar {
+				width: 104px;
+				height: 38px;
+				border-radius: 12px;
+				border-bottom-width: 5px;
+				box-shadow: 0px 0px 16px rgba(255, 247, 232, 0.55);
+			}
+
+			.room {
+				width: 34px;
+				height: 34px;
+				animation: bob 0.8s ease-in-out infinite alternate;
+			}
 		}
 
 		.you {
 			position: absolute;
-			left: -30px;
-
-			i {
-				font-family: "Material Icons";
-				font-size: 34px;
-				color: $butter;
-			}
+			left: -34px;
+			width: 36px;
+			height: 36px;
 		}
 
 		&.f0 .bar { background-color: $floor0; }
@@ -259,8 +283,12 @@ HudPanel {
 			.bar {
 				width: 100%;
 				background-color: $lava;
-				box-shadow: 0px 0px 12px rgba(235, 56, 97, 0.9);
-				opacity: 1;
+				box-shadow: 0px 0px 14px rgba(235, 56, 97, 0.9);
+			}
+
+			.glyph {
+				width: 24px;
+				height: 24px;
 			}
 		}
 	}
@@ -294,6 +322,12 @@ HudPanel {
 		&.bad {
 			background-color: $coral;
 			border-bottom-color: $coral-deep;
+		}
+
+		.art {
+			width: 34px;
+			height: 34px;
+			margin: -6px 6px -6px -8px;
 		}
 
 		.what {
@@ -335,11 +369,10 @@ HudPanel {
 	border-bottom: 6px solid $paper-edge;
 	box-shadow: $drop;
 
-	i {
-		font-family: "Material Icons";
-		font-size: 28px;
-		color: $butter-deep;
-		margin-right: $s2;
+	.glyph {
+		width: 38px;
+		height: 38px;
+		margin: -4px $s2 -4px 0px;
 	}
 
 	.value {
@@ -349,12 +382,14 @@ HudPanel {
 		color: $ink;
 	}
 
+	// Points float up beside the counter, clear of the status pills above the abilities.
 	.popups {
 		position: absolute;
-		bottom: 64px;
-		left: 0px;
+		bottom: 4px;
+		right: 100%;
+		margin-right: $s3;
 		flex-direction: column;
-		align-items: flex-start;
+		align-items: flex-end;
 	}
 
 	.popup {
@@ -396,10 +431,14 @@ HudPanel {
 		background-color: $help;
 		box-shadow: $drop;
 
-		i {
-			font-family: "Material Icons";
-			font-size: 60px;
-			color: $ink;
+		.pop {
+			width: 82px;
+			height: 82px;
+		}
+
+		.art {
+			width: 100%;
+			height: 100%;
 		}
 	}
 
@@ -426,38 +465,40 @@ HudPanel {
 		text-shadow: 0px 3px 0px rgba(43, 33, 66, 0.8);
 	}
 
-	.caption {
-		flex-direction: row;
-		align-items: center;
-		margin-top: $s2;
-		padding: 3px $s3 3px 3px;
-		border-radius: $radius-pill;
-		background-color: rgba(43, 33, 66, 0.78);
-	}
-
+	// The mouse button that casts it, as a small ink coin hanging off the brick.
 	.prompt {
-		width: 26px;
-		height: 26px;
-		margin-right: 6px;
-		background-size: contain;
+		width: 36px;
+		height: 36px;
+		margin-top: -14px;
+		border-radius: 18px;
+		background-color: $ink;
+		border: 3px solid $paper;
+		background-size: 70%;
 		background-repeat: no-repeat;
 		background-position: center;
 	}
 
-	.name {
-		font-family: $font-title;
-		font-weight: 800;
-		font-size: 15px;
-		color: $paper;
-	}
-
 	&.ready .face {
 		animation: ready-glow 1.6s ease-in-out infinite alternate;
+
+		// The sticker hops once when the slot comes back.
+		.pop { animation: ready-pop 0.4s ease-out both; }
+	}
+
+	&.cooling .face .pop {
+		opacity: 0.75;
+		transform: scale(0.9);
 	}
 
 	&.blocked .face {
 		opacity: 0.5;
 	}
+}
+
+@keyframes ready-pop {
+	0% { transform: scale(0.8); }
+	55% { transform: scale(1.18) rotate(-6deg); }
+	100% { transform: scale(1) rotate(0deg); }
 }
 
 @keyframes ready-glow {
@@ -469,19 +510,20 @@ HudPanel {
 
 .moment {
 	position: absolute;
-	top: 34%;
+	top: 30%;
 	left: 0px;
 	right: 0px;
 	flex-direction: column;
 	align-items: center;
 
-	label {
+	.word {
 		font-family: $font-title;
 		font-weight: 800;
 		font-size: 150px;
 		line-height: 1;
 		color: $butter;
 		text-shadow: 0px 12px 0px $night;
+		animation: stamp 0.35s ease-out both;
 	}
 
 	.sub {
@@ -491,19 +533,95 @@ HudPanel {
 		text-shadow: 0px 3px 0px $night;
 	}
 
-	&.go label:first-child {
-		animation: stamp 0.35s ease-out both;
+	// "Run!" stamps down on a turning sunburst.
+	&.go .sunburst {
+		top: -128px;
+		left: 50%;
+		margin-left: -240px;
+		width: 480px;
+		height: 480px;
+		opacity: 0.9;
+		animation: spin 5s linear infinite;
 	}
 
-	&.out label:first-child {
-		color: $coral;
-		animation: stamp 0.35s ease-out both;
+	&.out {
+		.word { color: $coral; }
+
+		.glyph {
+			width: 110px;
+			height: 110px;
+			margin-bottom: -20px;
+			animation: stamp 0.35s ease-out both;
+		}
 	}
 }
 
 @keyframes stamp {
 	from { opacity: 0; transform: scale(1.8); }
 	to { opacity: 1; transform: scale(1); }
+}
+
+// --- Floor toast -----------------------------------------------------------------------------
+//
+// "Floor 3 / Beach": drops in under the clock when you fall into a room, in that room's colour.
+
+.floor-toast {
+	position: absolute;
+	top: 170px;
+	left: 0px;
+	right: 0px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	animation: toast-life 2.2s ease-out both;
+
+	.badge {
+		width: 96px;
+		height: 96px;
+		padding: 10px;
+		border-radius: 28px;
+		border-bottom: 7px solid rgba(43, 33, 66, 0.35);
+		box-shadow: $drop;
+		margin-right: $s3;
+
+		.art { width: 100%; height: 100%; }
+	}
+
+	.text { flex-direction: column; }
+
+	.number {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 22px;
+		color: $paper;
+		text-shadow: 0px 3px 0px $night;
+	}
+
+	.room {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 48px;
+		line-height: 1;
+		color: $paper;
+		text-shadow: 0px 6px 0px $night;
+	}
+
+	&.f0 .badge { background-color: $floor0; }
+	&.f1 .badge { background-color: $floor1; }
+	&.f2 .badge { background-color: $floor2; }
+	&.f3 .badge { background-color: $floor3; }
+	&.f4 .badge { background-color: $floor4; }
+	&.f5 .badge { background-color: $floor5; }
+	&.f6 .badge { background-color: $floor6; }
+	&.f7 .badge { background-color: $floor7; }
+}
+
+@keyframes toast-life {
+	0% { opacity: 0; transform: translateY(-30px) scale(0.8); }
+	12% { opacity: 1; transform: translateY(0px) scale(1.05); }
+	20% { transform: translateY(0px) scale(1); }
+	80% { opacity: 1; transform: translateY(0px) scale(1); }
+	100% { opacity: 0; transform: translateY(-16px) scale(1); }
 }
 
 // --- Spectating ----------------------------------------------------------------------------
@@ -517,10 +635,9 @@ HudPanel {
 	align-items: center;
 	justify-content: center;
 
-	i {
-		font-family: "Material Icons";
-		font-size: 30px;
-		color: $paper;
+	.glyph {
+		width: 42px;
+		height: 42px;
 		margin-right: $s2;
 	}
 

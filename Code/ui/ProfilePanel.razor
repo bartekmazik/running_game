@@ -6,79 +6,62 @@
 @inherits Panel
 
 @*
-	Your rank, how close the next one is, your lifetime numbers, and what every tier unlocks.
-	Ranks only ever change how you look in the arena — the ladder says exactly what each one adds.
+	Your rank as one picture: the emblem on its rays, the name, how far to the next step, four
+	numbers, and the six tiers in a row. Ranks only ever change how you look in the arena; hovering a
+	tier says what it adds.
 *@
 
 <root>
 	<div class="card sheet">
-		<div class="head">
-			<i class="sparkle">auto_awesome</i>
-			<label class="title">Your rank</label>
-			<i class="sparkle">auto_awesome</i>
-		</div>
-
-		<div class="top">
-			<div class="current">
-				<div class="medallion" style="background-image: url(@Ranks.Emblem( Rp )); border-color: @Ranks.TierHex( Ranks.Tier( Rp ) )"></div>
-				<div class="detail">
-					<label class="rank">@Ranks.Name( Rp )</label>
-					<label class="rp">@RpText</label>
-					<div class="bar">
-						<div class="fill" style="width: @(ProgressPercent)%"></div>
-					</div>
-					<label class="next">@NextText</label>
+		<div class="hero">
+			<div class="medallion">
+				<div class="sunburst"></div>
+				<div class="twinkle t1"></div>
+				<div class="twinkle t2"></div>
+				<div class="emblem">
+					<div class="art" style="background-image: url(@Ranks.Emblem( Rp ))"></div>
 				</div>
 			</div>
 
-			<div class="stats">
-				<div class="stat-row">
-					<div class="stat">
-						<label class="value">@P.Rounds</label>
-						<label class="caption">Rounds</label>
-					</div>
-					<div class="stat">
-						<label class="value">@P.Wins</label>
-						<label class="caption">Wins</label>
-					</div>
-				</div>
-				<div class="stat-row">
-					<div class="stat">
-						<label class="value">@P.Knockdowns</label>
-						<label class="caption">Knockdowns</label>
-					</div>
-					<div class="stat">
-						<label class="value">@BestText</label>
-						<label class="caption">Best finish</label>
-					</div>
-				</div>
+			<div class="title-row">
+				<div class="swirl left"></div>
+				<label class="title">@Ranks.Name( Rp )</label>
+				<div class="swirl right"></div>
 			</div>
+
+			<div class="bar">
+				<div class="fill" style="width: @(ProgressPercent)%; background-color: @Ranks.TierHex( Ranks.Tier( Rp ) )"></div>
+			</div>
+			<label class="rp">@RpText</label>
 		</div>
 
-		<label class="ladder-title">What each rank adds</label>
+		<div class="stats">
+			<div class="stat"><div class="glyph g-runner"></div><label class="value">@P.Rounds</label></div>
+			<div class="stat"><div class="glyph g-trophy"></div><label class="value">@P.Wins</label></div>
+			<div class="stat"><div class="glyph g-impact"></div><label class="value">@P.Knockdowns</label></div>
+			<div class="stat"><div class="glyph g-medal"></div><label class="value">@BestText</label></div>
+		</div>
+
 		<div class="ladder">
 			@foreach ( var tier in Tiers )
 			{
 				var t = tier;
-				<div class="tier @TierClass( t )">
-					<div class="emblem" style="background-image: url(@Ranks.EmblemOfStep( FirstStep( t ) )); border-color: @Ranks.TierHex( t )"></div>
+				<div class="tier @TierClass( t )" @key=@t>
+					<div class="emblem">
+						<div class="art" style="background-image: url(@Ranks.EmblemOfStep( FirstStep( t ) ))"></div>
+					</div>
 					<label class="name">@t.ToString()</label>
 					<label class="perk">@Ranks.Perk( t )</label>
 					@if ( (int)t > (int)Ranks.Tier( Rp ) )
 					{
-						<i class="lock">lock</i>
+						<div class="glyph g-lock lock"></div>
 					}
 				</div>
 			}
 		</div>
 
-		<label class="howto">Win rounds and knock people down to climb. Placing low costs a little; Bronze never drops below zero.</label>
-
-		<div class="foot">
-			<div class="brick paper" onclick=@Back>
-				<i>arrow_back</i>
-				<label>Back</label>
-			</div>
+		<div class="brick paper back" onclick=@Back>
+			<div class="glyph g-back"></div>
 		</div>
 	</div>
 </root>
@@ -102,18 +85,16 @@
 		return (int)tier < (int)current ? "earned" : "locked";
 	}
 
-	string RpText => $"{Rp} RP";
-
 	float ProgressPercent => Ranks.Progress( Rp ) * 100f;
 
-	string NextText
+	/// <summary>"53 / 100 RP", or just the total at the top.</summary>
+	string RpText
 	{
 		get
 		{
 			var (_, next) = Ranks.Bounds( Rp );
-			var step = Ranks.Step( Rp );
-			if ( step >= Ranks.StepCount - 1 ) return "Top of the tower.";
-			return $"{next - Rp} RP to {Ranks.NameOfStep( step + 1 )}";
+			if ( Ranks.Step( Rp ) >= Ranks.StepCount - 1 ) return $"{Rp} RP";
+			return $"{Rp} / {next} RP";
 		}
 	}
 
