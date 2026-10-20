@@ -37,7 +37,7 @@ MenuPanel {
 	left: 112px;
 	top: 0px;
 	bottom: 0px;
-	width: 600px;
+	width: 700px;
 	flex-direction: column;
 	justify-content: center;
 }
@@ -49,47 +49,81 @@ MenuPanel {
 	margin-bottom: $s6;
 }
 
-.tower {
-	flex-direction: column;
-	margin-bottom: $s4;
+.lockup {
+	flex-direction: row;
+	align-items: center;
+	margin-left: -18px;
+}
 
-	.slab {
-		height: 12px;
-		border-radius: 6px;
-		margin-bottom: 5px;
-		border-bottom: 3px solid rgba(61, 46, 92, 0.22);
-		animation: slab-in 0.5s ease-out both;
+.mark {
+	position: relative;
+	width: 200px;
+	height: 200px;
+	margin-right: $s2;
+	animation: mark-in 0.6s ease-out both;
 
-		&.f0 { width: 320px; background-color: $floor0; animation-delay: 0.02s; }
-		&.f1 { width: 300px; margin-left: 10px; background-color: $floor1; animation-delay: 0.06s; }
-		&.f2 { width: 280px; margin-left: 20px; background-color: $floor2; animation-delay: 0.10s; }
-		&.f3 { width: 260px; margin-left: 30px; background-color: $floor3; animation-delay: 0.14s; }
-		&.f4 { width: 240px; margin-left: 40px; background-color: $floor4; animation-delay: 0.18s; }
-		&.f5 { width: 220px; margin-left: 50px; background-color: $floor5; animation-delay: 0.22s; }
-		&.f6 { width: 200px; margin-left: 60px; background-color: $floor6; animation-delay: 0.26s; }
-		&.f7 { width: 180px; margin-left: 70px; background-color: $floor7; animation-delay: 0.30s; }
+	.logo {
+		width: 100%;
+		height: 100%;
+		background-image: url("/ui/logo-mark.svg");
+		animation: bob 1.8s ease-in-out infinite alternate;
+	}
+
+	.twinkle.t1 { left: 4px; top: 18px; animation-delay: 0.4s; }
+	.twinkle.t2 { right: 0px; top: 70px; width: 24px; height: 24px; animation-delay: 1.3s; }
+}
+
+@keyframes mark-in {
+	0% { opacity: 0; transform: translateY(-60px) scale(0.6); }
+	70% { opacity: 1; transform: translateY(6px) scale(1.04); }
+	100% { opacity: 1; transform: translateY(0px) scale(1); }
+}
+
+// The tower's rooms in a row: each sticker on a chip of its floor colour, dropping in one by one.
+.rooms {
+	flex-direction: row;
+	align-items: center;
+	margin-top: $s3;
+
+	.room {
+		width: 46px;
+		height: 46px;
+		margin-right: 7px;
+		padding: 5px;
+		border-radius: 14px;
+		border-bottom: 5px solid rgba(43, 33, 66, 0.3);
+		animation: room-in 0.45s ease-out both;
+
+		.art { width: 100%; height: 100%; }
+		.glyph { width: 100%; height: 100%; }
+
+		&.f0 { background-color: $floor0; animation-delay: 0.10s; }
+		&.f1 { background-color: $floor1; animation-delay: 0.15s; }
+		&.f2 { background-color: $floor2; animation-delay: 0.20s; }
+		&.f3 { background-color: $floor3; animation-delay: 0.25s; }
+		&.f4 { background-color: $floor4; animation-delay: 0.30s; }
+		&.f5 { background-color: $floor5; animation-delay: 0.35s; }
+		&.f6 { background-color: $floor6; animation-delay: 0.40s; }
+		&.f7 { background-color: $floor7; animation-delay: 0.45s; }
 
 		&.lava {
-			width: 360px;
-			margin-left: -20px;
-			margin-top: 8px;
-			height: 14px;
 			background-color: $lava;
-			box-shadow: 0px 0px 24px rgba(235, 56, 97, 0.8);
-			animation-delay: 0.36s;
+			box-shadow: 0px 0px 22px rgba(235, 56, 97, 0.75);
+			animation-delay: 0.55s;
 		}
 	}
 }
 
-@keyframes slab-in {
-	from { opacity: 0; transform: translateX(-40px); }
-	to { opacity: 1; transform: translateX(0px); }
+@keyframes room-in {
+	0% { opacity: 0; transform: translateY(-24px); }
+	70% { opacity: 1; transform: translateY(3px); }
+	100% { opacity: 1; transform: translateY(0px); }
 }
 
 .wordmark {
 	font-family: $font-title;
 	font-weight: 800;
-	font-size: 136px;
+	font-size: 124px;
 	line-height: 1;
 	letter-spacing: -4px;
 	color: $paper;
@@ -117,8 +151,9 @@ MenuPanel {
 		margin-bottom: $s4;
 		border-radius: 22px;
 
-		i {
-			font-size: 40px;
+		.glyph {
+			width: 52px;
+			height: 52px;
 			margin-right: $s4;
 		}
 
@@ -169,16 +204,30 @@ MenuPanel {
 	box-shadow: $drop;
 	cursor: pointer;
 	pointer-events: all;
+	transition: all 0.1s ease-out;
+
+	&:hover {
+		transform: translateY(-2px) scale(1.02);
+	}
 
 	.emblem {
-		width: 64px;
-		height: 64px;
-		margin-right: $s3;
-		background-color: $night;
-		border-radius: 32px;
-		background-size: 80%;
-		background-repeat: no-repeat;
-		background-position: center;
+		width: 84px;
+		height: 84px;
+		margin: -14px $s2 -14px -6px;
+	}
+
+	.progress {
+		width: 150px;
+		height: 8px;
+		margin-top: 4px;
+		border-radius: 4px;
+		background-color: $paper-deep;
+		overflow: hidden;
+
+		.fill {
+			height: 100%;
+			border-radius: 4px;
+		}
 	}
 
 	.text { flex-direction: column; }

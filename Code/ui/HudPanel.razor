@@ -9,7 +9,7 @@
 	In-round HUD. Corners hold the slow-changing facts (who's left, the feed, your depth), the top
 	centre the one number that matters right now, and the bottom centre the two things your hands
 	do — your abilities — with your points beside them. Everything big and loud is a moment:
-	"Run!", "Out!", a status landing on you.
+	"Run!", "Out!", a status landing on you, the room you just dropped into.
 *@
 
 <root>
@@ -21,6 +21,7 @@
 
 		<div class="roundstate @UrgentClass">
 			<div class="clock">
+				<div class="glyph @StateGlyph"></div>
 				<label class="headline">@Headline</label>
 			</div>
 			@if ( !string.IsNullOrEmpty( Subline ) )
@@ -37,19 +38,22 @@
 		</div>
 
 		<div class="alive">
-			<i>groups</i>
+			<div class="glyph g-players"></div>
 			<label class="value">@AliveValue</label>
-			<label class="unit">@AliveUnit</label>
 		</div>
 
 		<div class="feed">
 			@foreach ( var entry in VisibleFeed )
 			{
-				<div class="line">
+				<div class="line" @key=@entry.Time>
 					@if ( !string.IsNullOrEmpty( entry.By ) )
 					{
 						<label class="who by">@entry.By</label>
-						<i>sports_kabaddi</i>
+						<div class="glyph g-impact"></div>
+					}
+					else
+					{
+						<div class="glyph g-flame"></div>
 					}
 					<label class="who">@entry.Name</label>
 					<label class="what">@FeedText( entry )</label>
@@ -58,19 +62,21 @@
 		</div>
 
 		<div class="ladder">
-			<label class="cap">@FloorLabel</label>
-
 			@foreach ( var index in FloorIndices )
 			{
-				<div class="rung f@(index) @FloorClass( index )">
-					<div class="bar"></div>
+				<div class="rung f@(index) @FloorClass( index )" @key=@index>
 					@if ( index == CurrentFloor )
 					{
-						<div class="you"><i>arrow_left</i></div>
+						<div class="you glyph g-runner"></div>
 					}
+					<div class="bar">
+						<div class="room">
+							<div class="art" style="background-image: url(@ArenaGenerator.FloorIcon( index ))"></div>
+						</div>
+					</div>
 				</div>
 			}
-			<div class="rung lava"><div class="bar"></div></div>
+			<div class="rung lava"><div class="bar"><div class="glyph g-flame"></div></div></div>
 		</div>
 
 		@if ( ShowAbilities )
@@ -79,7 +85,8 @@
 				<div class="statuses">
 					@foreach ( var status in Statuses )
 					{
-						<div class="status @( PlayerStatus.IsDebuff( status ) ? "bad" : "good" )">
+						<div class="status @( PlayerStatus.IsDebuff( status ) ? "bad" : "good" )" @key=@status>
+							<div class="art" style="background-image: url(@PlayerStatus.Icon( status ))"></div>
 							<label class="what">@PlayerStatus.Label( status )</label>
 							<label class="time">@StatusTime( status )</label>
 						</div>
@@ -88,12 +95,12 @@
 
 				<div class="bar-row">
 					<div class="points">
-						<i>star</i>
+						<div class="glyph g-star"></div>
 						<label class="value">@PointsValue</label>
 						<div class="popups">
 							@foreach ( var popup in VisiblePopups )
 							{
-								<label class="popup">@PopupText( popup )</label>
+								<label class="popup" @key=@popup.Time>@PopupText( popup )</label>
 							}
 						</div>
 					</div>
@@ -103,19 +110,18 @@
 						var s = slot;
 						var info = AbilityCatalog.Get( SlotAbility( s ) );
 
-						<div class="ability @( info.Kind == AbilityKind.Help ? "help" : "harm" ) @SlotState( s )">
+						<div class="ability @( info.Kind == AbilityKind.Help ? "help" : "harm" ) @SlotState( s )" @key=@s>
 							<div class="face">
-								<i>@info.Icon</i>
+								<div class="pop">
+									<div class="art" style="background-image: url(@info.Icon)"></div>
+								</div>
 								<div class="cooldown" style="height: @(CooldownPercent( s ))%"></div>
 								@if ( IsCooling( s ) )
 								{
 									<label class="seconds">@CooldownSeconds( s )</label>
 								}
 							</div>
-							<div class="caption">
-								<div class="prompt" style="background-image: url(@PromptPath( s ))"></div>
-								<label class="name">@info.Name</label>
-							</div>
+							<div class="prompt" style="background-image: url(@PromptPath( s ))"></div>
 						</div>
 					}
 				</div>
@@ -125,22 +131,37 @@
 		@if ( ShowGo )
 		{
 			<div class="moment go">
-				<label>Run!</label>
+				<div class="sunburst"></div>
+				<label class="word">Run!</label>
 			</div>
 		}
 
 		@if ( ShowEliminated )
 		{
 			<div class="moment out">
-				<label>Out!</label>
+				<div class="glyph g-flame"></div>
+				<label class="word">Out!</label>
 				<label class="sub">@OutLine</label>
+			</div>
+		}
+
+		@if ( ShowFloorToast )
+		{
+			<div class="floor-toast f@(_toastFloor)">
+				<div class="badge">
+					<div class="art" style="background-image: url(@ArenaGenerator.FloorIcon( _toastFloor ))"></div>
+				</div>
+				<div class="text">
+					<label class="number">@ToastNumber</label>
+					<label class="room">@ToastRoom</label>
+				</div>
 			</div>
 		}
 
 		@if ( IsSpectating )
 		{
 			<div class="spectate">
-				<i>visibility</i>
+				<div class="glyph g-eye"></div>
 				<label class="target">@SpectateName</label>
 				@if ( HasSpectateTarget )
 				{
@@ -223,8 +244,6 @@
 		}
 	}
 
-	string FloorLabel => CurrentFloor < 0 ? "Floor" : $"Floor {CurrentFloor + 1}";
-
 	string FloorClass( int index )
 	{
 		var floor = CurrentFloor;
@@ -302,17 +321,40 @@
 
 			return round.State switch
 			{
-				RoundManager.RoundState.Waiting when round.IsCountingDown => "Get ready. The floor holds until zero.",
-				RoundManager.RoundState.Waiting => "Warm-up. Lava just sends you back up for now.",
+				RoundManager.RoundState.Waiting when round.IsCountingDown => "Get ready",
+				RoundManager.RoundState.Waiting => "Warm-up",
 				RoundManager.RoundState.Playing => "",
 				_ => ""
 			};
 		}
 	}
 
-	string AliveValue => Round is null ? "-" : $"{Round.AliveCount}/{Round.PlayerCount}";
+	/// <summary>The clock pill's sticker: a stopwatch while the round runs, an hourglass before it.</summary>
+	string StateGlyph => Round?.State switch
+	{
+		RoundManager.RoundState.Playing => "g-clock",
+		RoundManager.RoundState.Ended => "g-trophy",
+		_ => "g-hourglass"
+	};
 
-	string AliveUnit => "standing";
+	// --- Floor toast -------------------------------------------------------------------------
+
+	/// <summary>How long "Floor 3 · Beach" stays after you drop into a room.</summary>
+	const float FloorToastTime = 2.2f;
+
+	int _toastFloor = -1;
+
+	int _lastFloor = -1;
+
+	TimeSince _sinceToast;
+
+	bool ShowFloorToast => _toastFloor >= 0 && _sinceToast < FloorToastTime && !IsEliminated;
+
+	string ToastNumber => $"Floor {_toastFloor + 1}";
+
+	string ToastRoom => Scene.Get<ArenaGenerator>()?.FloorName( _toastFloor ) ?? "";
+
+	string AliveValue => Round is null ? "-" : $"{Round.AliveCount}/{Round.PlayerCount}";
 
 	// --- Abilities ---------------------------------------------------------------------------
 
@@ -390,6 +432,16 @@
 		var floor = CurrentFloor;
 		if ( floor > _deepest ) _deepest = floor;
 
+		// Dropping a floor mid-round names the room you landed in. Respawns and new rounds start
+		// higher up again, which never counts as a drop.
+		if ( floor > _lastFloor && _lastFloor >= 0 && round.State == RoundManager.RoundState.Playing )
+		{
+			_toastFloor = floor;
+			_sinceToast = 0f;
+		}
+
+		if ( floor >= 0 ) _lastFloor = floor;
+
 		var alive = LocalPlayer?.IsAlive ?? true;
 		if ( _wasAlive && !alive ) _sinceDeath = 0f;
 		_wasAlive = alive;
@@ -406,7 +458,7 @@
 		return HashCode.Combine(
 			HashCode.Combine( Headline, Subline, AliveValue, CurrentFloor, VisibleFeedCount, Round?.FeedRevision ?? 0 ),
 			HashCode.Combine( StateClass, UrgentClass, (int)CountdownPercent, ShowAbilities, IsBlackedOut ),
-			HashCode.Combine( ShowGo, ShowEliminated, IsSpectating, SpectateName ),
+			HashCode.Combine( ShowGo, ShowEliminated, IsSpectating, SpectateName, ShowFloorToast, _toastFloor ),
 			HashCode.Combine( cooldown, statuses, PointsValue, VisiblePopups.Count(), Score?.Revision ?? 0 ) );
 	}
 }

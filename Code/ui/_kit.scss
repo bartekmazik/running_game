@@ -28,9 +28,9 @@
 	pointer-events: all;
 	transition: all 0.08s ease-out;
 
-	i {
-		font-family: "Material Icons";
-		font-size: 28px;
+	.glyph {
+		width: 34px;
+		height: 34px;
 		margin-right: $s2;
 	}
 
@@ -86,9 +86,119 @@
 	background-position: center;
 }
 
-// Twinkle stars flanking a card title, as in the reference book UI.
-.sparkle {
-	font-family: "Material Icons";
-	font-size: 26px;
-	color: $butter-deep;
+// --- Art --------------------------------------------------------------------------------
+//
+// Every picture in the UI is a sticker SVG from Assets/ui (see tools/ui-art/
+// art-guide.md): one plum outline weight, flat pastel fills, a drop shadow baked in. They are shown
+// as background images on sized boxes, never as font glyphs, so the whole UI shares one hand.
+
+// Any box showing one picture, sized by its context.
+.art {
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	flex-shrink: 0;
+}
+
+// UI glyphs: <div class="glyph g-play"></div>. Sized by whoever holds them.
+.glyph {
+	width: 32px;
+	height: 32px;
+	flex-shrink: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+
+	&.g-back { background-image: url("/ui/icons/glyphs/back.svg"); }
+	&.g-bolt { background-image: url("/ui/icons/glyphs/bolt.svg"); }
+	&.g-check { background-image: url("/ui/icons/glyphs/check.svg"); }
+	&.g-clock { background-image: url("/ui/icons/glyphs/clock.svg"); }
+	&.g-close { background-image: url("/ui/icons/glyphs/close.svg"); }
+	&.g-crown { background-image: url("/ui/icons/glyphs/crown.svg"); }
+	&.g-dice { background-image: url("/ui/icons/glyphs/dice.svg"); }
+	&.g-door { background-image: url("/ui/icons/glyphs/door.svg"); }
+	&.g-eye { background-image: url("/ui/icons/glyphs/eye.svg"); }
+	&.g-flame { background-image: url("/ui/icons/glyphs/flame.svg"); }
+	&.g-heart { background-image: url("/ui/icons/glyphs/heart.svg"); }
+	&.g-host { background-image: url("/ui/icons/glyphs/host.svg"); }
+	&.g-hourglass { background-image: url("/ui/icons/glyphs/hourglass.svg"); }
+	&.g-impact { background-image: url("/ui/icons/glyphs/impact.svg"); }
+	&.g-layers { background-image: url("/ui/icons/glyphs/layers.svg"); }
+	&.g-lock { background-image: url("/ui/icons/glyphs/lock.svg"); }
+	&.g-medal { background-image: url("/ui/icons/glyphs/medal.svg"); }
+	&.g-play { background-image: url("/ui/icons/glyphs/play.svg"); }
+	&.g-players { background-image: url("/ui/icons/glyphs/players.svg"); }
+	&.g-question { background-image: url("/ui/icons/glyphs/question.svg"); }
+	&.g-refresh { background-image: url("/ui/icons/glyphs/refresh.svg"); }
+	&.g-runner { background-image: url("/ui/icons/glyphs/runner.svg"); }
+	&.g-search { background-image: url("/ui/icons/glyphs/search.svg"); }
+	&.g-sparkle { background-image: url("/ui/icons/glyphs/sparkle.svg"); }
+	&.g-star { background-image: url("/ui/icons/glyphs/star.svg"); }
+	&.g-trophy { background-image: url("/ui/icons/glyphs/trophy.svg"); }
+}
+
+// A card title between two storybook flourishes, like the "~ Level up! ~" card in the reference.
+.title-row {
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+
+	.swirl {
+		width: 112px;
+		height: 28px;
+		background-size: contain;
+		background-repeat: no-repeat;
+		background-position: center;
+		flex-shrink: 0;
+
+		&.left { background-image: url("/ui/fx/swirl-left.svg"); }
+		&.right { background-image: url("/ui/fx/swirl-right.svg"); }
+	}
+
+	.title {
+		font-family: $font-title;
+		font-weight: 800;
+		font-size: 44px;
+		color: $ink;
+		margin: 0px $s4;
+	}
+}
+
+// Slow spinning rays behind whatever deserves a moment: your rank, the winner.
+.sunburst {
+	position: absolute;
+	background-image: url("/ui/fx/sunburst.svg");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	animation: spin 14s linear infinite;
+	pointer-events: none;
+}
+
+// A twinkling star that floats over a card edge.
+.twinkle {
+	position: absolute;
+	width: 34px;
+	height: 34px;
+	background-image: url("/ui/fx/sparkle.svg");
+	background-size: contain;
+	background-repeat: no-repeat;
+	animation: twinkle 2.4s ease-in-out infinite;
+	pointer-events: none;
+}
+
+@keyframes spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
+@keyframes twinkle {
+	0% { opacity: 0.2; transform: scale(0.6) rotate(0deg); }
+	50% { opacity: 1; transform: scale(1.1) rotate(20deg); }
+	100% { opacity: 0.2; transform: scale(0.6) rotate(0deg); }
+}
+
+@keyframes bob {
+	from { transform: translateY(0px); }
+	to { transform: translateY(-10px); }
 }

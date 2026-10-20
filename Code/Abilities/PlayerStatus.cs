@@ -163,6 +163,26 @@ public sealed class PlayerStatus : Component
 		_ => ""
 	};
 
+	/// <summary>The status shows the icon of the ability that causes it.</summary>
+	public static string Icon( StatusKind kind ) => AbilityCatalog.Get( kind switch
+	{
+		StatusKind.DoubleJump => AbilityId.DoubleJump,
+		StatusKind.FeatherFall => AbilityId.FeatherFall,
+		StatusKind.Ghost => AbilityId.GhostStep,
+		StatusKind.Turbo => AbilityId.Turbo,
+		StatusKind.Iron => AbilityId.IronBody,
+		StatusKind.Shield => AbilityId.BubbleShield,
+		StatusKind.Giant => AbilityId.Giant,
+		StatusKind.Glue => AbilityId.Glue,
+		StatusKind.Ice => AbilityId.Ice,
+		StatusKind.Confused => AbilityId.Confuse,
+		StatusKind.Blackout => AbilityId.Blackout,
+		StatusKind.HeavyBoots => AbilityId.HeavyBoots,
+		StatusKind.Stunned => AbilityId.Stun,
+		StatusKind.Vortex => AbilityId.Vortex,
+		_ => AbilityId.None
+	} ).Icon;
+
 	/// <summary>Debuffs read as bad news in the HUD; everything else is a buff.</summary>
 	public static bool IsDebuff( StatusKind kind ) => kind is StatusKind.Glue or StatusKind.Ice
 		or StatusKind.Confused or StatusKind.Blackout or StatusKind.HeavyBoots or StatusKind.Stunned

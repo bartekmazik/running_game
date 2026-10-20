@@ -6,9 +6,10 @@
 @namespace Sandbox
 
 @*
-	The end of a round, over the HUD while it's Ended: who won, the podium with Kenney's medals,
-	everyone's points, what this round did to your rank — and, when it happened, the rank-up card,
-	modelled on the "Level up!" card in the user's reference screenshots.
+	The end of a round, over the HUD while it's Ended: who won, the podium with its medals, everyone's
+	points, what this round did to your rank — and, when it happened, the rank-up moment: a few seconds
+	of the new emblem on spinning rays with paper confetti, modelled on the "Level up!" card in the
+	user's reference screenshots, which then settles into a pill on top of the card.
 *@
 
 <root>
@@ -16,7 +17,7 @@
 		@if ( RankedUp )
 		{
 			<div class="rankup">
-				<div class="star"><div class="emblem" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div></div>
+				<div class="emblem art" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div>
 				<div class="text">
 					<label class="title">Rank up!</label>
 					<label class="to">@RankUpName</label>
@@ -24,8 +25,15 @@
 			</div>
 		}
 
-		<label class="verdict">@Verdict</label>
-		<label class="duration">@DurationText</label>
+		<div class="title-row">
+			<div class="swirl left"></div>
+			<label class="title verdict">@Verdict</label>
+			<div class="swirl right"></div>
+		</div>
+		<div class="meta">
+			<div class="glyph g-clock"></div>
+			<label>@DurationText</label>
+		</div>
 
 		<div class="podium">
 			@foreach ( var place in PodiumOrder )
@@ -33,10 +41,18 @@
 				@if ( place <= Rows.Count )
 				{
 					var row = Rows[place - 1];
-					<div class="step p@(place) @MineClass( row.Name )">
-						<div class="medal" style="background-image: url(@MedalPath( place ))"></div>
-						<div class="emblem" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
-						<label class="name">@row.Name</label>
+					<div class="step p@(place) @MineClass( row.Name )" @key=@place>
+						@if ( place == 1 )
+						{
+							<div class="sunburst"></div>
+						}
+						<div class="medal">
+							<div class="art" style="background-image: url(@Ranks.Medal( place ))"></div>
+						</div>
+						<div class="who">
+							<div class="emblem art" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
+							<label class="name">@row.Name</label>
+						</div>
 						<label class="pts">@PointsText( row )</label>
 						<div class="block"><label>@PlaceText( place )</label></div>
 					</div>
@@ -50,9 +66,9 @@
 				@for ( var i = 3; i < Math.Min( Rows.Count, MaxRows ); i++ )
 				{
 					var row = Rows[i];
-					<div class="row @MineClass( row.Name )">
+					<div class="row @MineClass( row.Name )" @key=@i>
 						<label class="place">@PlaceText( i + 1 )</label>
-						<div class="emblem" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
+						<div class="emblem art" style="background-image: url(@Ranks.Emblem( row.RankPoints ))"></div>
 						<label class="name">@row.Name</label>
 						<label class="kd">@KnockdownText( row )</label>
 						<label class="pts">@PointsText( row )</label>
@@ -64,32 +80,52 @@
 		@if ( ShowRank )
 		{
 			<div class="you">
-				<div class="emblem" style="background-image: url(@Ranks.Emblem( Rp ))"></div>
+				<div class="emblem art" style="background-image: url(@Ranks.Emblem( Rp ))"></div>
 				<div class="mid">
 					<label class="rank">@Ranks.Name( Rp )</label>
-					<div class="bar"><div class="fill" style="width: @(Ranks.Progress( Rp ) * 100f)%"></div></div>
+					<div class="bar"><div class="fill" style="width: @(Ranks.Progress( Rp ) * 100f)%; background-color: @Ranks.TierHex( Ranks.Tier( Rp ) )"></div></div>
 				</div>
 				<label class="delta @DeltaClass">@DeltaText</label>
 			</div>
 		}
-		else if ( !Round.LastRoundRanked )
-		{
-			<label class="unranked">Solo rounds don't count towards rank.</label>
-		}
 
 		<div class="foot">
-			<label class="next">@NextText</label>
+			<div class="next">
+				<div class="glyph g-hourglass"></div>
+				<label>@NextText</label>
+			</div>
 
 			<div class="brick mint" onclick=@OpenLoadout>
-				<i>bolt</i>
+				<div class="glyph g-bolt"></div>
 				<label>Abilities</label>
 			</div>
 			<div class="brick coral" onclick=@Leave>
-				<i>logout</i>
+				<div class="glyph g-door"></div>
 				<label>Leave</label>
 			</div>
 		</div>
 	</div>
+
+	@if ( Celebrating )
+	{
+		<div class="celebrate" onclick=@EndCelebration>
+			@for ( var i = 0; i < ConfettiCount; i++ )
+			{
+				<div class="bit art @ConfettiKind( i )" @key=@i></div>
+			}
+
+			<div class="burst">
+				<div class="sunburst"></div>
+				<div class="stamp">
+					<div class="emblem art" style="background-image: url(@Ranks.EmblemOfStep( Store.RankUpToStep ))"></div>
+				</div>
+			</div>
+			<div class="ribbon">
+				<label class="title">Rank up!</label>
+			</div>
+			<label class="to">@RankUpName</label>
+		</div>
+	}
 </root>
 
 @code
@@ -123,18 +159,11 @@
 		? "Nobody made it"
 		: Round.LastWinner == LocalName ? "You win!" : $"{Round.LastWinner} wins";
 
-	string DurationText => $"Round lasted {FormatTime( Round.LastRoundDuration )}";
+	string DurationText => FormatTime( Round.LastRoundDuration );
 
-	string NextText => $"Next warm-up in {MathF.Ceiling( Round.RestartRemaining ).Clamp( 0f, 99f ):0}";
+	string NextText => $"{MathF.Ceiling( Round.RestartRemaining ).Clamp( 0f, 99f ):0}";
 
 	string MineClass( string name ) => name == LocalName ? "mine" : "";
-
-	static string MedalPath( int place ) => place switch
-	{
-		1 => "/ui/kenney/medals/medal_3.svg",
-		2 => "/ui/kenney/medals/medal_2.svg",
-		_ => "/ui/kenney/medals/medal_1.svg"
-	};
 
 	static string PlaceText( int place ) => $"#{place}";
 
@@ -162,17 +191,45 @@
 		return $"{total / 60:0}:{total % 60:00}";
 	}
 
+	// --- Rank-up moment ------------------------------------------------------------------------
+
+	/// <summary>How long the full-screen rank-up holds before it settles into the pill on the card.</summary>
+	const float CelebrationTime = 4.5f;
+
+	const int ConfettiCount = 28;
+
 	bool _playedRankUp;
+
+	bool _celebrationDismissed;
+
+	TimeSince _sinceRankUp;
+
+	bool Celebrating => RankedUp && !_celebrationDismissed && _sinceRankUp < CelebrationTime;
+
+	void EndCelebration()
+	{
+		_celebrationDismissed = true;
+		Sfx.Ui( Sfx.Click, 0.5f );
+		StateHasChanged();
+	}
+
+	/// <summary>
+	/// Picture (a/b/c), timing lane (k0..k6) and column/size slot (p0..p27), all classes in the
+	/// stylesheet: an inline style is re-applied on every rebuild, and re-applying it restarts the
+	/// element's animation.
+	/// </summary>
+	static string ConfettiKind( int i ) => (i % 3) switch { 0 => "a", 1 => "b", _ => "c" } + $" k{i % 7} p{i}";
 
 	public override void Tick()
 	{
 		if ( RankedUp && !_playedRankUp )
 		{
 			_playedRankUp = true;
+			_sinceRankUp = 0f;
 			Sfx.Ui( Sfx.RankUp, 0.8f );
 		}
 	}
 
 	protected override int BuildHash() => HashCode.Combine(
-		Rows.Count, Round?.LastWinner, (int)(Round?.RestartRemaining ?? 0f), Store?.Revision, Store?.RankUpToStep, Store?.HasLastDelta );
+		Rows.Count, Round?.LastWinner, (int)(Round?.RestartRemaining ?? 0f), Store?.Revision, Store?.RankUpToStep, Store?.HasLastDelta, Celebrating );
 }

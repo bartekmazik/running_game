@@ -18,12 +18,11 @@
 
 <root>
 	<div class="card picker">
-		<div class="head">
-			<i class="sparkle">auto_awesome</i>
+		<div class="title-row">
+			<div class="swirl left"></div>
 			<label class="title">Abilities</label>
-			<i class="sparkle">auto_awesome</i>
+			<div class="swirl right"></div>
 		</div>
-		<label class="lede">Take two into every match. Left click casts one, right click the other.</label>
 
 		<div class="slots">
 			@for ( var slot = 0; slot < 2; slot++ )
@@ -31,9 +30,9 @@
 				var s = slot;
 				var info = AbilityCatalog.Get( Chosen( s ) );
 
-				<div class="slot @SlotClass( s ) @KindClass( info )" onclick=@( () => PickSlot( s ) )>
+				<div class="slot @SlotClass( s ) @KindClass( info )" @key=@s onclick=@( () => PickSlot( s ) )>
 					<div class="prompt" style="background-image: url(@PromptPath( s ))"></div>
-					<div class="icon"><i>@info.Icon</i></div>
+					<div class="icon"><div class="art" style="background-image: url(@info.Icon)"></div></div>
 					<div class="text">
 						<label class="name">@info.Name</label>
 						<label class="desc">@info.Description</label>
@@ -44,38 +43,38 @@
 		</div>
 
 		<div class="shelf-title help">
-			<i>favorite</i>
-			<label>Help yourself</label>
+			<div class="glyph g-heart"></div>
+			<label>Help</label>
 		</div>
 		<div class="grid">
 			@foreach ( var id in HelpIds )
 			{
 				var a = id;
-				<div class="tile @TileClass( a )" onclick=@( () => Choose( a ) )>
-					<div class="icon"><i>@AbilityCatalog.Get( a ).Icon</i></div>
+				<div class="tile @TileClass( a )" @key=@a onclick=@( () => Choose( a ) )>
+					<div class="icon"><div class="art" style="background-image: url(@AbilityCatalog.Get( a ).Icon)"></div></div>
 					<label class="name">@AbilityCatalog.Get( a ).Name</label>
 					@if ( !string.IsNullOrEmpty( Badge( a ) ) )
 					{
-						<label class="badge">@Badge( a )</label>
+						<div class="badge"><div class="art" style="background-image: url(@Badge( a ))"></div></div>
 					}
 				</div>
 			}
 		</div>
 
 		<div class="shelf-title harm">
-			<i>bolt</i>
-			<label>Get in their way</label>
+			<div class="glyph g-impact"></div>
+			<label>Harm</label>
 		</div>
 		<div class="grid">
 			@foreach ( var id in HarmIds )
 			{
 				var a = id;
-				<div class="tile @TileClass( a )" onclick=@( () => Choose( a ) )>
-					<div class="icon"><i>@AbilityCatalog.Get( a ).Icon</i></div>
+				<div class="tile @TileClass( a )" @key=@a onclick=@( () => Choose( a ) )>
+					<div class="icon"><div class="art" style="background-image: url(@AbilityCatalog.Get( a ).Icon)"></div></div>
 					<label class="name">@AbilityCatalog.Get( a ).Name</label>
 					@if ( !string.IsNullOrEmpty( Badge( a ) ) )
 					{
-						<label class="badge">@Badge( a )</label>
+						<div class="badge"><div class="art" style="background-image: url(@Badge( a ))"></div></div>
 					}
 				</div>
 			}
@@ -83,11 +82,11 @@
 
 		<div class="foot">
 			<div class="brick paper" onclick=@Randomise>
-				<i>casino</i>
-				<label>Surprise me</label>
+				<div class="glyph g-dice"></div>
+				<label>Random</label>
 			</div>
 			<div class="brick mint" onclick=@Done>
-				<i>check</i>
+				<div class="glyph g-check"></div>
 				<label>Done</label>
 			</div>
 		</div>
@@ -124,11 +123,11 @@
 		return kind + picked;
 	}
 
-	/// <summary>Which mouse button a picked ability sits on.</summary>
+	/// <summary>The mouse button a picked ability sits on, as its prompt picture.</summary>
 	string Badge( AbilityId id )
 	{
-		if ( id == Profile.First ) return "Left";
-		if ( id == Profile.Second ) return "Right";
+		if ( id == Profile.First ) return PromptPath( 0 );
+		if ( id == Profile.Second ) return PromptPath( 1 );
 		return null;
 	}
 

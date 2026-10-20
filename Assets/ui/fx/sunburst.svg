@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">
+<defs><radialGradient id="sunburst-g" cx="128" cy="128" r="128" gradientUnits="userSpaceOnUse"><stop offset="0.1" stop-color="#FFCC61" stop-opacity="0.9"/><stop offset="0.5" stop-color="#FFCC61" stop-opacity="0.55"/><stop offset="1" stop-color="#FFCC61" stop-opacity="0"/></radialGradient></defs>
+<g fill="url(#sunburst-g)">
+<polygon points="153.7,124.2 254.0,128.0 153.7,131.8"/>
+<polygon points="153.2,134.4 244.4,176.2 150.3,141.3"/>
+<polygon points="148.9,143.5 217.1,217.1 143.5,148.9"/>
+<polygon points="141.3,150.3 176.2,244.4 134.4,153.2"/>
+<polygon points="131.8,153.7 128.0,254.0 124.2,153.7"/>
+<polygon points="121.6,153.2 79.8,244.4 114.7,150.3"/>
+<polygon points="112.5,148.9 38.9,217.1 107.1,143.5"/>
+<polygon points="105.7,141.3 11.6,176.2 102.8,134.4"/>
+<polygon points="102.3,131.8 2.0,128.0 102.3,124.2"/>
+<polygon points="102.8,121.6 11.6,79.8 105.7,114.7"/>
+<polygon points="107.1,112.5 38.9,38.9 112.5,107.1"/>
+<polygon points="114.7,105.7 79.8,11.6 121.6,102.8"/>
+<polygon points="124.2,102.3 128.0,2.0 131.8,102.3"/>
+<polygon points="134.4,102.8 176.2,11.6 141.3,105.7"/>
+<polygon points="143.5,107.1 217.1,38.9 148.9,112.5"/>
+<polygon points="150.3,114.7 244.4,79.8 153.2,121.6"/>
+</g>
+</svg>

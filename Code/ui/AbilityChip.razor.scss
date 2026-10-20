@@ -1,4 +1,5 @@
 @import "_ui.scss";
+@import "_kit.scss";
 
 AbilityChip {
 	flex-direction: row;
@@ -29,10 +30,9 @@ AbilityChip {
 		justify-content: center;
 		margin-right: 10px;
 
-		i {
-			font-family: "Material Icons";
-			font-size: 28px;
-			color: $ink;
+		.art {
+			width: 40px;
+			height: 40px;
 		}
 	}
 

@@ -10,14 +10,14 @@
 	<div class="card browser">
 		<div class="titlebar">
 			<div class="brick paper square" onclick=@Back>
-				<i>arrow_back</i>
+				<div class="glyph g-back"></div>
 			</div>
 			<div class="titles">
 				<label class="title">Find a game</label>
 				<label class="status @( Browser.JoinFailed ? "error" : "" )">@StatusText</label>
 			</div>
 			<div class="brick sky square @BusyClass" onclick=@Refresh>
-				<i>refresh</i>
+				<div class="glyph g-refresh"></div>
 			</div>
 		</div>
 
@@ -25,15 +25,14 @@
 			@if ( Browser.Lobbies.Count == 0 )
 			{
 				<div class="empty">
-					<i>@( Browser.IsQuerying ? "hourglass_empty" : "wifi_off" )</i>
+					<div class="glyph @( Browser.IsQuerying ? "g-hourglass spin" : "g-search" )"></div>
 					<label class="headline">@EmptyHeadline</label>
-					<label class="detail">@EmptyDetail</label>
 				</div>
 			}
 
 			@foreach ( var lobby in Browser.Lobbies )
 			{
-				<div class="row @FullClass( lobby )" onclick=@( () => Join( lobby ) )>
+				<div class="row @FullClass( lobby )" @key=@lobby.LobbyId onclick=@( () => Join( lobby ) )>
 					<div class="cell name">
 						<label class="primary">@lobby.Name</label>
 						<label class="secondary">@Subtitle( lobby )</label>
@@ -41,22 +40,17 @@
 					<label class="cell state">@StateLabel( lobby )</label>
 					<label class="cell players">@Headcount( lobby )</label>
 					<div class="join">
-						<i>@JoinIcon( lobby )</i>
+						<div class="glyph @JoinIcon( lobby )"></div>
 					</div>
 				</div>
 			}
 		</div>
-
-		<label class="footnote">Your own lobby never appears here. The list refreshes every few seconds.</label>
 	</div>
 </root>
 
 @code
 {
 	LobbyBrowser Browser => Scene.Get<LobbyBrowser>();
-
-	/// <summary>Whole seconds since the last result, so the readout ticks once a second.</summary>
-	int SecondsAgo => (int)Browser.SinceResult;
 
 	string BusyClass => Browser.IsQuerying ? "disabled" : "";
 
@@ -65,21 +59,14 @@
 		get
 		{
 			var browser = Browser;
-			if ( browser.JoinFailed ) return "Couldn't join that lobby. It may have closed or filled up.";
-			if ( browser.IsQuerying ) return "Searching…";
+			if ( browser.JoinFailed ) return "Couldn't join";
 
 			var count = browser.Lobbies.Count;
-			var age = SecondsAgo < 2 ? "just now" : $"{SecondsAgo}s ago";
-
-			return count == 0 ? $"Checked {age}" : $"{count} open · checked {age}";
+			return count == 0 || browser.IsQuerying ? "" : $"{count} open";
 		}
 	}
 
-	string EmptyHeadline => Browser.IsQuerying ? "Looking for lobbies" : "No open lobbies right now";
-
-	string EmptyDetail => Browser.IsQuerying
-		? "This usually takes a second or two."
-		: "Host one yourself from the previous screen, and others will see it here.";
+	string EmptyHeadline => Browser.IsQuerying ? "Searching" : "No open lobbies";
 
 	void Refresh()
 	{
@@ -106,10 +93,10 @@
 	}
 
 	/// <summary>
-	/// Host name and map. Host comes from Networking.SetData on the hosting machine, so it is
+	/// Who hosts it. That comes from Networking.SetData on the hosting machine, so it is
 	/// "?" whenever a lobby is up but has not published yet.
 	/// </summary>
-	string Subtitle( LobbyInformation lobby ) => $"Hosted by {lobby.Get( "host", "?" )}";
+	string Subtitle( LobbyInformation lobby ) => lobby.Get( "host", "?" );
 
 	string Headcount( LobbyInformation lobby ) => $"{lobby.Members}/{lobby.MaxMembers}";
 
@@ -117,22 +104,19 @@
 	string StateLabel( LobbyInformation lobby ) => lobby.Get( "state", "" ) switch
 	{
 		"Waiting" => "Warming up",
-		"Playing" => $"In round · {lobby.Get( "alive", "?" )} left",
+		"Playing" => $"Playing · {lobby.Get( "alive", "?" )} left",
 		"Ended" => "Results",
 		_ => "Starting"
 	};
 
 	string FullClass( LobbyInformation lobby ) => lobby.IsFull ? "full" : "";
 
-	/// <summary>
-	/// Core Material Icons only — `arrow_forward` and `block` both date from the original
-	/// 2014 set. A ligature that does not resolve renders as the literal word.
-	/// </summary>
-	string JoinIcon( LobbyInformation lobby ) => lobby.IsFull ? "block" : "arrow_forward";
+	/// <summary>A full lobby shows a padlock where the play button would be.</summary>
+	string JoinIcon( LobbyInformation lobby ) => lobby.IsFull ? "g-lock" : "g-play";
 
 	// Revision covers every content change — a lobby whose alive-count moved bumps it without
-	// the list length changing. SecondsAgo alone ticks the staleness readout.
+	// the list length changing.
 	protected override int BuildHash() => Browser is null
 		? 0
-		: System.HashCode.Combine( Browser.Revision, SecondsAgo );
+		: System.HashCode.Combine( Browser.Revision, Browser.IsQuerying, Browser.JoinFailed );
 }

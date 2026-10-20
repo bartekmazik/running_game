@@ -11,6 +11,8 @@
 //   * No clip-path, no transform: skew(), no var(--x). SCSS variables only.
 //   * `font-family` takes a single name. Proven here: Poppins (800 reachable), Roboto, Roboto Mono,
 //     Material Icons. Disproven: Roboto Condensed.
+//   * Pictures are sticker SVGs in Assets/ui (icons, ranks, fx), never icon-font ligatures — see
+//     the art section of _kit.scss.
 //   * A <label> that mixes literal text with an @expression drops the literal — one expression
 //     per label, build strings in C#.
 

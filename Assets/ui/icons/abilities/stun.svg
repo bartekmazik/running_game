@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 128 128">
+  <g transform="translate(0,5)" fill="#2B2142" fill-opacity="0.28" stroke="#2B2142" stroke-opacity="0.28" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="64" cy="74" r="30"/>
+    <ellipse cx="64" cy="40" rx="38" ry="12" fill="none" stroke-width="10"/>
+    <path d="M28.0 30.0 L30.6 36.4 L37.5 36.9 L32.3 41.4 L33.9 48.1 L28.0 44.5 L22.1 48.1 L23.7 41.4 L18.5 36.9 L25.4 36.4 Z"/><path d="M100.0 30.0 L102.6 36.4 L109.5 36.9 L104.3 41.4 L105.9 48.1 L100.0 44.5 L94.1 48.1 L95.7 41.4 L90.5 36.9 L97.4 36.4 Z"/><path d="M64.0 12.0 L66.6 18.4 L73.5 18.9 L68.3 23.4 L69.9 30.1 L64.0 26.5 L58.1 30.1 L59.7 23.4 L54.5 18.9 L61.4 18.4 Z"/>
+  </g>
+  <ellipse cx="64" cy="40" rx="38" ry="12" fill="none" stroke="#3D2E5C" stroke-width="11"/>
+  <ellipse cx="64" cy="40" rx="38" ry="12" fill="none" stroke="#D18AEB" stroke-width="5"/>
+  <circle cx="64" cy="74" r="30" fill="#FFF7E8"/>
+  <path d="M92 80 A30 30 0 0 1 40 96 Q70 100 92 80 Z" fill="#F7E8CC"/>
+  <circle cx="64" cy="74" r="30" fill="none" stroke="#3D2E5C" stroke-width="7"/>
+  <g stroke="#3D2E5C" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M48 64 L58 74 M58 64 L48 74"/>
+    <path d="M70 64 L80 74 M80 64 L70 74"/>
+    <path d="M52 90 Q58 84 64 90 Q70 96 76 90"/>
+  </g>
+  <path d="M44 60 Q46 54 52 50" fill="none" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="5" stroke-linecap="round"/>
+  <path d="M28.0 30.0 L30.6 36.4 L37.5 36.9 L32.3 41.4 L33.9 48.1 L28.0 44.5 L22.1 48.1 L23.7 41.4 L18.5 36.9 L25.4 36.4 Z" fill="#FFCC61" stroke="#3D2E5C" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M100.0 30.0 L102.6 36.4 L109.5 36.9 L104.3 41.4 L105.9 48.1 L100.0 44.5 L94.1 48.1 L95.7 41.4 L90.5 36.9 L97.4 36.4 Z" fill="#FFCC61" stroke="#3D2E5C" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M64.0 12.0 L66.6 18.4 L73.5 18.9 L68.3 23.4 L69.9 30.1 L64.0 26.5 L58.1 30.1 L59.7 23.4 L54.5 18.9 L61.4 18.4 Z" fill="#FFCC61" stroke="#3D2E5C" stroke-width="5" stroke-linejoin="round"/>
+</svg>

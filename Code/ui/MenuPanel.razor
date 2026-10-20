@@ -18,22 +18,28 @@
 		{
 			<div class="column">
 				<div class="brand">
-					@* The tower in miniature: eight floors stepping down into candy lava. Same colours as
-					   the tiles, so the logo is a diagram of the game, not decoration. *@
-					<div class="tower">
-						<div class="slab f0"></div>
-						<div class="slab f1"></div>
-						<div class="slab f2"></div>
-						<div class="slab f3"></div>
-						<div class="slab f4"></div>
-						<div class="slab f5"></div>
-						<div class="slab f6"></div>
-						<div class="slab f7"></div>
-						<div class="slab lava"></div>
+					<div class="lockup">
+						<div class="mark">
+							<div class="twinkle t1"></div>
+							<div class="twinkle t2"></div>
+							<div class="logo art"></div>
+						</div>
+						<label class="wordmark">TNT Run</label>
 					</div>
 
-					<label class="wordmark">TNT Run</label>
-					<label class="pitch">Every tile you touch falls away. Shove, trick and outlast everyone.</label>
+					@* The tower as a row of its eight rooms, top to bottom, ending in the lava — the
+					   menu's diagram of the game, in the same stickers the HUD ladder uses. *@
+					<div class="rooms">
+						@for ( var floor = 0; floor < Arena.FloorCount; floor++ )
+						{
+							<div class="room f@(floor)" @key=@floor>
+								<div class="art" style="background-image: url(@ArenaGenerator.FloorIcon( floor ))"></div>
+							</div>
+						}
+						<div class="room lava">
+							<div class="glyph g-flame"></div>
+						</div>
+					</div>
 				</div>
 
 				@if ( Ui.Page == GameUi.MenuPage.Browse )
@@ -44,33 +50,27 @@
 				{
 					<div class="actions">
 						<div class="brick big @HostClass" onclick=@Host>
-							<i>@( IsBusy ? "hourglass_empty" : "play_arrow" )</i>
-							<div class="text">
-								<label class="name">@HostLabel</label>
-								<label class="hint">@HostHint</label>
-							</div>
+							<div class="glyph @( IsBusy ? "g-hourglass" : "g-host" )"></div>
+							<label class="name">@HostLabel</label>
 						</div>
 
 						<div class="brick big sky @BusyClass" onclick=@Browse>
-							<i>travel_explore</i>
-							<div class="text">
-								<label class="name">Find a game</label>
-								<label class="hint">Join a lobby someone else is hosting</label>
-							</div>
+							<div class="glyph g-search"></div>
+							<label class="name">Find a game</label>
 						</div>
 
 						<div class="row">
 							<div class="brick mint" onclick=@( () => Go( GameUi.MenuPage.Loadout ) )>
-								<i>bolt</i>
+								<div class="glyph g-bolt"></div>
 								<label>Abilities</label>
 							</div>
 							<div class="brick lilac" onclick=@( () => Go( GameUi.MenuPage.Profile ) )>
-								<i>military_tech</i>
+								<div class="glyph g-trophy"></div>
 								<label>Rank</label>
 							</div>
 							<div class="brick paper" onclick=@( () => Go( GameUi.MenuPage.HowTo ) )>
-								<i>help</i>
-								<label>How to play</label>
+								<div class="glyph g-question"></div>
+								<label>Help</label>
 							</div>
 						</div>
 					</div>
@@ -78,10 +78,13 @@
 			</div>
 
 			<div class="rank-badge" onclick=@( () => Go( GameUi.MenuPage.Profile ) )>
-				<div class="emblem" style="background-image: url(@Ranks.Emblem( RankPoints ))"></div>
+				<div class="emblem art" style="background-image: url(@Ranks.Emblem( RankPoints ))"></div>
 				<div class="text">
 					<label class="who">@PlayerName</label>
 					<label class="rank">@RankLine</label>
+					<div class="progress">
+						<div class="fill" style="width: @(Ranks.Progress( RankPoints ) * 100f)%; background-color: @Ranks.TierHex( Ranks.Tier( RankPoints ) )"></div>
+					</div>
 				</div>
 			</div>
 
@@ -122,15 +125,13 @@
 
 	string HostClass => IsBusy ? "disabled" : "";
 
-	string HostLabel => Networking.IsConnecting ? "Joining…" : IsBusy ? "Starting lobby…" : "Host a game";
-
-	string HostHint => IsBusy ? "Hang tight, this takes a moment" : "Open a lobby and play with friends";
+	string HostLabel => Networking.IsConnecting ? "Joining…" : IsBusy ? "Starting…" : "Host a game";
 
 	string PlayerName => Connection.Local?.DisplayName ?? "";
 
 	int RankPoints => Profile?.Profile.RankPoints ?? 0;
 
-	string RankLine => $"{Ranks.Name( RankPoints )}  ·  {RankPoints} RP";
+	string RankLine => Ranks.Name( RankPoints );
 
 	void Host()
 	{

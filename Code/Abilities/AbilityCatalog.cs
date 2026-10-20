@@ -47,7 +47,7 @@ public enum AbilityKind
 	Harm
 }
 
-/// <summary>One row of the catalogue. Icon is a Material Icons ligature — the font is proven in this install.</summary>
+/// <summary>One row of the catalogue. The icon is a sticker SVG named after the id, in Assets/ui/icons/abilities.</summary>
 public readonly struct AbilityInfo
 {
 	public readonly AbilityId Id;
@@ -55,17 +55,20 @@ public readonly struct AbilityInfo
 	public readonly string Description;
 	public readonly AbilityKind Kind;
 	public readonly float Cooldown;
-	public readonly string Icon;
 
-	public AbilityInfo( AbilityId id, string name, AbilityKind kind, float cooldown, string icon, string description )
+	public AbilityInfo( AbilityId id, string name, AbilityKind kind, float cooldown, string description )
 	{
 		Id = id;
 		Name = name;
 		Kind = kind;
 		Cooldown = cooldown;
-		Icon = icon;
 		Description = description;
 	}
+
+	/// <summary>UI path of the ability's icon; an empty slot shows the cross glyph.</summary>
+	public string Icon => Id == AbilityId.None
+		? "/ui/icons/glyphs/close.svg"
+		: $"/ui/icons/abilities/{Id.ToString().ToLowerInvariant()}.svg";
 }
 
 /// <summary>
@@ -94,39 +97,39 @@ public static class AbilityCatalog
 
 	public static AbilityInfo Get( AbilityId id ) => id switch
 	{
-		AbilityId.Dash => new( id, "Dash", AbilityKind.Help, 7f, "fast_forward", "Burst forward along your view." ),
-		AbilityId.SuperJump => new( id, "Super Jump", AbilityKind.Help, 10f, "keyboard_double_arrow_up", "Leap twice as high as a normal jump." ),
-		AbilityId.DoubleJump => new( id, "Double Jump", AbilityKind.Help, 14f, "stairs", "For 6s you can jump once more in mid-air." ),
-		AbilityId.FeatherFall => new( id, "Feather Fall", AbilityKind.Help, 14f, "air", "For 4s you fall slowly and steer freely." ),
-		AbilityId.GhostStep => new( id, "Ghost Step", AbilityKind.Help, 18f, "blur_on", "For 2.5s the floor ignores your feet." ),
-		AbilityId.Turbo => new( id, "Turbo", AbilityKind.Help, 12f, "bolt", "Run 40% faster for 4s." ),
-		AbilityId.IronBody => new( id, "Iron Body", AbilityKind.Help, 16f, "shield", "For 5s nothing knocks you down and you hit three times as hard." ),
-		AbilityId.BubbleShield => new( id, "Bubble Shield", AbilityKind.Help, 15f, "bubble_chart", "Blocks the next enemy ability within 8s." ),
-		AbilityId.Patch => new( id, "Patch", AbilityKind.Help, 18f, "grid_on", "Rebuild a 3x3 patch of floor under you." ),
-		AbilityId.Bridge => new( id, "Bridge", AbilityKind.Help, 16f, "linear_scale", "Rebuild a six-tile path ahead of you." ),
-		AbilityId.Blink => new( id, "Blink", AbilityKind.Help, 12f, "flash_on", "Teleport five tiles forward." ),
-		AbilityId.Rewind => new( id, "Rewind", AbilityKind.Help, 20f, "history", "Snap back to where you stood 3s ago." ),
-		AbilityId.Updraft => new( id, "Updraft", AbilityKind.Help, 22f, "north", "A gust strong enough to reach the floor above." ),
-		AbilityId.Giant => new( id, "Giant", AbilityKind.Help, 20f, "open_in_full", "Grow for 5s: you hit twice as hard and run a little faster." ),
+		AbilityId.Dash => new( id, "Dash", AbilityKind.Help, 7f, "Burst forward along your view." ),
+		AbilityId.SuperJump => new( id, "Super Jump", AbilityKind.Help, 10f, "Leap twice as high as a normal jump." ),
+		AbilityId.DoubleJump => new( id, "Double Jump", AbilityKind.Help, 14f, "For 6s you can jump once more in mid-air." ),
+		AbilityId.FeatherFall => new( id, "Feather Fall", AbilityKind.Help, 14f, "For 4s you fall slowly and steer freely." ),
+		AbilityId.GhostStep => new( id, "Ghost Step", AbilityKind.Help, 18f, "For 2.5s the floor ignores your feet." ),
+		AbilityId.Turbo => new( id, "Turbo", AbilityKind.Help, 12f, "Run 40% faster for 4s." ),
+		AbilityId.IronBody => new( id, "Iron Body", AbilityKind.Help, 16f, "For 5s nothing knocks you down and you hit three times as hard." ),
+		AbilityId.BubbleShield => new( id, "Bubble Shield", AbilityKind.Help, 15f, "Blocks the next enemy ability within 8s." ),
+		AbilityId.Patch => new( id, "Patch", AbilityKind.Help, 18f, "Rebuild a 3x3 patch of floor under you." ),
+		AbilityId.Bridge => new( id, "Bridge", AbilityKind.Help, 16f, "Rebuild a six-tile path ahead of you." ),
+		AbilityId.Blink => new( id, "Blink", AbilityKind.Help, 12f, "Teleport five tiles forward." ),
+		AbilityId.Rewind => new( id, "Rewind", AbilityKind.Help, 20f, "Snap back to where you stood 3s ago." ),
+		AbilityId.Updraft => new( id, "Updraft", AbilityKind.Help, 22f, "A gust strong enough to reach the floor above." ),
+		AbilityId.Giant => new( id, "Giant", AbilityKind.Help, 20f, "Grow for 5s: you hit twice as hard and run a little faster." ),
 
-		AbilityId.Shockwave => new( id, "Shockwave", AbilityKind.Harm, 18f, "radio_button_checked", "Knock down everyone close around you." ),
-		AbilityId.Shove => new( id, "Shove", AbilityKind.Harm, 9f, "front_hand", "Knock down whoever is right in front of you." ),
-		AbilityId.Hook => new( id, "Hook", AbilityKind.Harm, 14f, "phishing", "Yank the nearest enemy you aim at towards you." ),
-		AbilityId.TntBomb => new( id, "TNT Bomb", AbilityKind.Harm, 16f, "local_fire_department", "Lob a block of TNT that blasts a 3x3 hole." ),
-		AbilityId.Sabotage => new( id, "Sabotage", AbilityKind.Harm, 18f, "dangerous", "The floor under the nearest enemy gives way." ),
-		AbilityId.Trench => new( id, "Trench", AbilityKind.Harm, 14f, "horizontal_rule", "Tear an eight-tile trench ahead of you." ),
-		AbilityId.Glue => new( id, "Glue", AbilityKind.Harm, 14f, "water_drop", "Enemies near you move at half speed for 3s." ),
-		AbilityId.Ice => new( id, "Ice", AbilityKind.Harm, 14f, "ac_unit", "Enemies near you slide on ice for 3s." ),
-		AbilityId.Confuse => new( id, "Confuse", AbilityKind.Harm, 16f, "help_center", "The nearest enemy's controls flip for 3s." ),
-		AbilityId.Blackout => new( id, "Blackout", AbilityKind.Harm, 16f, "visibility_off", "Enemies near you can barely see for 3s." ),
-		AbilityId.Swap => new( id, "Swap", AbilityKind.Harm, 20f, "swap_horiz", "Trade places with the nearest enemy." ),
-		AbilityId.HeavyBoots => new( id, "Heavy Boots", AbilityKind.Harm, 16f, "fitness_center", "The nearest enemy's tiles drop twice as fast for 4s." ),
-		AbilityId.Stun => new( id, "Stun", AbilityKind.Harm, 16f, "pause_circle", "Freeze the nearest enemy for 1.2s." ),
-		AbilityId.Catapult => new( id, "Catapult", AbilityKind.Harm, 18f, "rocket_launch", "Fling the nearest enemy into the air." ),
-		AbilityId.Vortex => new( id, "Vortex", AbilityKind.Harm, 20f, "cyclone", "A whirl ahead of you drags enemies in for 2s." ),
-		AbilityId.Mine => new( id, "Mine", AbilityKind.Harm, 14f, "adjust", "Plant a mine. The first enemy to touch it goes flying." ),
+		AbilityId.Shockwave => new( id, "Shockwave", AbilityKind.Harm, 18f, "Knock down everyone close around you." ),
+		AbilityId.Shove => new( id, "Shove", AbilityKind.Harm, 9f, "Knock down whoever is right in front of you." ),
+		AbilityId.Hook => new( id, "Hook", AbilityKind.Harm, 14f, "Yank the nearest enemy you aim at towards you." ),
+		AbilityId.TntBomb => new( id, "TNT Bomb", AbilityKind.Harm, 16f, "Lob a block of TNT that blasts a 3x3 hole." ),
+		AbilityId.Sabotage => new( id, "Sabotage", AbilityKind.Harm, 18f, "The floor under the nearest enemy gives way." ),
+		AbilityId.Trench => new( id, "Trench", AbilityKind.Harm, 14f, "Tear an eight-tile trench ahead of you." ),
+		AbilityId.Glue => new( id, "Glue", AbilityKind.Harm, 14f, "Enemies near you move at half speed for 3s." ),
+		AbilityId.Ice => new( id, "Ice", AbilityKind.Harm, 14f, "Enemies near you slide on ice for 3s." ),
+		AbilityId.Confuse => new( id, "Confuse", AbilityKind.Harm, 16f, "The nearest enemy's controls flip for 3s." ),
+		AbilityId.Blackout => new( id, "Blackout", AbilityKind.Harm, 16f, "Enemies near you can barely see for 3s." ),
+		AbilityId.Swap => new( id, "Swap", AbilityKind.Harm, 20f, "Trade places with the nearest enemy." ),
+		AbilityId.HeavyBoots => new( id, "Heavy Boots", AbilityKind.Harm, 16f, "The nearest enemy's tiles drop twice as fast for 4s." ),
+		AbilityId.Stun => new( id, "Stun", AbilityKind.Harm, 16f, "Freeze the nearest enemy for 1.2s." ),
+		AbilityId.Catapult => new( id, "Catapult", AbilityKind.Harm, 18f, "Fling the nearest enemy into the air." ),
+		AbilityId.Vortex => new( id, "Vortex", AbilityKind.Harm, 20f, "A whirl ahead of you drags enemies in for 2s." ),
+		AbilityId.Mine => new( id, "Mine", AbilityKind.Harm, 14f, "Plant a mine. The first enemy to touch it goes flying." ),
 
-		_ => new( AbilityId.None, "None", AbilityKind.Help, 0f, "block", "" ),
+		_ => new( AbilityId.None, "None", AbilityKind.Help, 0f, "" ),
 	};
 
 	/// <summary>Accent per kind, for HUD slots and loadout cards (8-bit safe, ≤ 1).</summary>
