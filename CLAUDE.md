@@ -313,6 +313,16 @@ effects and UI as one whole", with extra care on the rank art, and handed every 
   statuses, cooldowns, 2-player ranked results, rank-up for every tier, nameplate + status emote
   (nameplate was clipped: now bottom-anchored `WorldPanel`, 1600×560). Not seen yet: "Out!" card and
   the spectator bar — they need three players.
+- **Collision ragdoll pass (2026-10-20, after the UI merge).** Player-player knockdowns never fired:
+  two CharacterControllers stop 48 units apart but contact was 46, and the controller bleeds speed
+  sliding round the other capsule before contact. `PlayerImpacts` now remembers each close pair's
+  run-up (8 ticks within 140 units) and judges contact at 60. Verified with a second local client
+  and scripted running: sprint→standing, sprint→walker and walker→sprinter floor the slower side;
+  sprint vs sprint floors both; walking never floors. Ragdoll feel in `TntPlayer.Throw`: chest takes
+  the push and the feet lag, tumble about the hit axis, limb damping (the Citizen's bodies ship with
+  none); ~4–5 tiles of flight from a sprint. Down until the body settles (min/max clock), owner
+  broadcasts `StandUp`, proxies pull their copy toward the owner's. Floor thuds, dust on getting up,
+  winner loses most of its speed. Remote-screen look not seen — only the host's view.
 - Confetti is UI animation of SVG divs, not a particle system — Claude's call against the
   "no particle effects" rule; say so if that reads wrong.
 

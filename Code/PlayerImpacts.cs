@@ -18,9 +18,11 @@ public sealed class PlayerImpacts : Component
 {
 	/// <summary>
 	/// Centre-to-centre distance that counts as touching. Two radii plus enough slack to catch the
-	/// tick before contact, when the rammer is still at full speed.
+	/// tick before contact, when the rammer is still at full speed. Measured 2026-10-20: two
+	/// CharacterControllers stop 48 units apart (radii plus the controller's skin), so the old
+	/// +14 slack (46) was never reached and no collision ever floored anyone.
 	/// </summary>
-	const float ContactDistance = TntPlayer.BodyRadius * 2f + 14f;
+	const float ContactDistance = TntPlayer.BodyRadius * 2f + 28f;
 
 	const float ContactHeight = 48f;
 
@@ -39,12 +41,15 @@ public sealed class PlayerImpacts : Component
 	/// <summary>An even collision only floors both if each side was really moving.</summary>
 	const float MutualShare = 150f;
 
-	const float LaunchScale = 1.15f;
-	const float LaunchLift = 190f;
+	const float LaunchScale = 1.4f;
+	const float LaunchLift = 240f;
+
+	/// <summary>Speed the winner keeps going forward after a hit (on top of a third of their own).</summary>
+	const float WinnerCarry = 45f;
 
 	/// <summary>Ragdoll length grows with the hit: a nudge is a stumble, a full sprint a real tumble.</summary>
-	const float MinRagdoll = 1.0f;
-	const float MaxRagdoll = 2.1f;
+	const float MinRagdoll = 1.3f;
+	const float MaxRagdoll = 2.4f;
 
 	/// <summary>Grace after getting up, so a player can't be chain-stunned. Also the dizzy stars' life.</summary>
 	public const float Immunity = 1.2f;
@@ -54,13 +59,29 @@ public sealed class PlayerImpacts : Component
 	readonly List<TntPlayer> _candidates = new();
 
 	/// <summary>
-	/// Each player's MoveVelocity from the previous tick. The controller clips velocity against the
-	/// capsule it runs into, so on the tick two players touch, the rammer's speed already reads as
-	/// near zero — and on the tick before, they weren't touching yet. Judging with the stronger of
-	/// the two ticks catches the hit. Found by testing: a full-speed sprint into a standing player
-	/// never knocked anyone down.
+	/// Each close pair's run-up: every tick they are within <see cref="ApproachDistance"/>, each
+	/// player's speed along the line between them is written down. Measured 2026-10-20 with two real
+	/// clients: a controller starts sliding around the capsule ahead of it well before the centres
+	/// meet — a 280 sprint read as 155 "towards" at 59 units and 12 at 48, where the controllers stop.
+	/// Judging the contact by the strongest recent tick judges the run-up, which is what the brief
+	/// means by force; judging the contact tick alone floored nobody.
 	/// </summary>
-	readonly Dictionary<TntPlayer, Vector3> _previousVelocity = new();
+	readonly Dictionary<(TntPlayer, TntPlayer), Approach> _approaches = new();
+
+	sealed class Approach
+	{
+		public readonly float[] A = new float[RunUpTicks];
+		public readonly float[] B = new float[RunUpTicks];
+		public readonly int[] Tick = new int[RunUpTicks];
+	}
+
+	/// <summary>Within this centre distance a pair's run-up is recorded.</summary>
+	const float ApproachDistance = 140f;
+
+	/// <summary>Ticks of run-up that count — about 0.13 s at the default fixed rate.</summary>
+	const int RunUpTicks = 8;
+
+	int _tick;
 
 	MatchScore _score;
 
@@ -81,18 +102,26 @@ public sealed class PlayerImpacts : Component
 			_candidates.Add( player );
 		}
 
+		_tick++;
+
 		for ( var i = 0; i < _candidates.Count; i++ )
 		{
 			for ( var j = i + 1; j < _candidates.Count; j++ )
 			{
-				Judge( _candidates[i], _candidates[j] );
+				// A stable order, so a pair keeps one memory however GetAll happens to list them.
+				var a = _candidates[i];
+				var b = _candidates[j];
+				if ( a.GameObject.Id.CompareTo( b.GameObject.Id ) > 0 ) (a, b) = (b, a);
+
+				Judge( a, b );
 			}
 		}
 
-		_previousVelocity.Clear();
-		foreach ( var player in _candidates )
+		// Forget pairs that drifted apart or whose players left, now and then.
+		if ( _tick % 600 == 0 )
 		{
-			_previousVelocity[player] = player.MoveVelocity;
+			foreach ( var key in _approaches.Where( e => !e.Key.Item1.IsValid() || !e.Key.Item2.IsValid() || _tick - e.Value.Tick.Max() > 600 ).Select( e => e.Key ).ToList() )
+				_approaches.Remove( key );
 		}
 	}
 
@@ -122,14 +151,29 @@ public sealed class PlayerImpacts : Component
 		return true;
 	}
 
-	/// <summary>A player's speed towards <paramref name="direction"/>, the stronger of this tick and the last.</summary>
-	float ShareTowards( TntPlayer player, Vector3 direction )
+	/// <summary>Write down this tick's run-up for a pair, and return the pair's memory.</summary>
+	Approach Remember( TntPlayer a, TntPlayer b, float aShare, float bShare )
 	{
-		var now = player.MoveVelocity.WithZ( 0f ).Dot( direction );
-		if ( !_previousVelocity.TryGetValue( player, out var previous ) ) return now;
+		if ( !_approaches.TryGetValue( (a, b), out var memory ) )
+			_approaches[(a, b)] = memory = new Approach();
 
-		var before = previous.WithZ( 0f ).Dot( direction );
-		return before > now ? before : now;
+		var slot = _tick % RunUpTicks;
+		memory.A[slot] = aShare;
+		memory.B[slot] = bShare;
+		memory.Tick[slot] = _tick;
+		return memory;
+	}
+
+	/// <summary>The strongest share in the last <see cref="RunUpTicks"/> ticks.</summary>
+	float Strongest( float[] shares, int[] ticks )
+	{
+		var best = 0f;
+		for ( var i = 0; i < RunUpTicks; i++ )
+		{
+			if ( _tick - ticks[i] < RunUpTicks && shares[i] > best ) best = shares[i];
+		}
+
+		return best;
 	}
 
 	void Judge( TntPlayer a, TntPlayer b )
@@ -141,13 +185,19 @@ public sealed class PlayerImpacts : Component
 
 		var flat = offset.WithZ( 0f );
 		var distance = flat.Length;
-		if ( distance > ContactDistance || distance < 0.01f ) return;
+		if ( distance > ApproachDistance || distance < 0.01f ) return;
 
 		var aToB = flat / distance;
 
-		// Each player's own speed towards the other.
-		var aShare = MathF.Max( 0f, ShareTowards( a, aToB ) );
-		var bShare = MathF.Max( 0f, ShareTowards( b, -aToB ) );
+		// Each player's own speed towards the other, this tick — remembered through the run-up.
+		var memory = Remember( a, b,
+			MathF.Max( 0f, a.MoveVelocity.WithZ( 0f ).Dot( aToB ) ),
+			MathF.Max( 0f, b.MoveVelocity.WithZ( 0f ).Dot( -aToB ) ) );
+
+		if ( distance > ContactDistance ) return;
+
+		var aShare = Strongest( memory.A, memory.Tick );
+		var bShare = Strongest( memory.B, memory.Tick );
 
 		var closing = aShare + bShare;
 		if ( closing < ImpactSpeed ) return;
@@ -157,7 +207,7 @@ public sealed class PlayerImpacts : Component
 		var stronger = MathF.Max( aForce, bForce );
 
 		// How hard this was, 0..1 above the threshold — drives launch, ragdoll time and camera shake.
-		var severity = ((closing - ImpactSpeed) / 400f).Clamp( 0f, 1f );
+		var severity = ((closing - ImpactSpeed) / 300f).Clamp( 0f, 1f );
 		var duration = MathX.Lerp( MinRagdoll, MaxRagdoll, severity );
 		var launch = closing * LaunchScale;
 
@@ -170,22 +220,29 @@ public sealed class PlayerImpacts : Component
 		}
 
 		// The brief's rule: the smaller force goes down. A heavier winner throws them further.
-		if ( aForce >= bForce )
-		{
-			var ratio = MathF.Sqrt( a.Status.Mass / b.Status.Mass );
-			TryKnockDown( b, aToB * launch * ratio + Vector3.Up * LaunchLift, duration, a );
-			Protect( a, 0.4f );
-		}
-		else
-		{
-			var ratio = MathF.Sqrt( b.Status.Mass / a.Status.Mass );
-			TryKnockDown( a, -aToB * launch * ratio + Vector3.Up * LaunchLift, duration, b );
-			Protect( b, 0.4f );
-		}
+		if ( aForce >= bForce ) Floor( b, a, aToB, launch, duration );
+		else Floor( a, b, -aToB, launch, duration );
 	}
 
-	/// <summary>Brief cover for the winner, so the same contact can't flip and floor them next tick.</summary>
-	void Protect( TntPlayer player, float seconds )
+	/// <summary>
+	/// The winner of a collision throws the loser along <paramref name="direction"/> — further the
+	/// heavier the winner — and pays for it: the hit eats most of their own speed, so a ram is a
+	/// thump, not a free pass through.
+	/// </summary>
+	void Floor( TntPlayer loser, TntPlayer winner, Vector3 direction, float launch, float duration )
+	{
+		var ratio = MathF.Sqrt( winner.Status.Mass / loser.Status.Mass );
+		if ( !TryKnockDown( loser, direction * launch * ratio + Vector3.Up * LaunchLift, duration, winner ) ) return;
+
+		Protect( winner, 0.4f );
+		winner.Launch( direction * WinnerCarry );
+	}
+
+	/// <summary>
+	/// Host: make <paramref name="player"/> unfloorable for <paramref name="seconds"/> — brief cover for
+	/// a collision's winner, and the grace after getting up.
+	/// </summary>
+	public void Protect( TntPlayer player, float seconds )
 	{
 		if ( _immuneUntil.TryGetValue( player, out var until ) && until.Relative > seconds ) return;
 		_immuneUntil[player] = seconds;

@@ -151,7 +151,20 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 
 	GameObject _ragdoll;
 	SkinnedModelRenderer _ragdollRenderer;
-	TimeUntil _ragdollEnds;
+	ModelPhysics _ragdollPhysics;
+	Rigidbody _ragdollPelvis;
+
+	/// <summary>Ragdoll clock: down for at least the min, up once the body has settled, never past the max.</summary>
+	TimeSince _ragdollStarted;
+	float _ragdollMin;
+	float _ragdollMax;
+
+	/// <summary>How long the pelvis has been nearly still — the owner gets up once it has rested a moment.</summary>
+	TimeSince _ragdollStill;
+
+	/// <summary>Pelvis vertical speed last frame, to hear the body hit the floor.</summary>
+	float _ragdollFallSpeed;
+	TimeSince _sinceThud;
 
 	/// <summary>Distance walked since the last footstep sound.</summary>
 	float _strideDistance;
@@ -526,18 +539,18 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		physics.CopyBonesFrom( _body, true );
 		physics.MotionEnabled = true;
 
-		var velocity = launchVelocity + _renderVelocity.WithZ( 0f );
-
-		foreach ( var body in _ragdoll.GetComponentsInChildren<Rigidbody>( true, true ) )
-		{
-			body.Velocity = velocity;
-		}
+		_ragdollPhysics = physics;
+		Throw( physics, launchVelocity, _renderVelocity.WithZ( 0f ) );
 
 		// Our own capsule sits exactly where the ragdoll spawns; left solid it would launch the
 		// ragdoll off itself. Lava detection doesn't depend on it — RoundManager checks height.
 		_capsule.Enabled = false;
 
-		_ragdollEnds = duration;
+		_ragdollStarted = 0f;
+		_ragdollStill = 0f;
+		_ragdollMin = duration;
+		_ragdollMax = duration + RagdollOvertime;
+		_ragdollFallSpeed = 0f;
 
 		// Feel: the harder the hit, the louder and lower the thud, and the more nearby cameras shake.
 		var strength = (launchVelocity.Length / 700f).Clamp( 0.3f, 1.2f );
@@ -546,6 +559,53 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		AbilityFx.Burst( WorldPosition + Vector3.Up * 40f, AbilityFx.Butter, 6, 160f + 120f * strength, 7f );
 
 		ShakeNearby( WorldPosition, strength );
+	}
+
+	/// <summary>Seconds a tumbling body may stay down past its nominal time while it is still moving.</summary>
+	const float RagdollOvertime = 1.6f;
+
+	/// <summary>Pelvis speed under which the body counts as lying still.</summary>
+	const float SettledSpeed = 55f;
+
+	/// <summary>
+	/// Throw the fresh ragdoll the way a body is really hit: the push lands on the chest, so the upper
+	/// body takes most of it and the feet lag behind, and the whole body pitches over the hit
+	/// direction. Everyone gets the same lift, so the feet leave the floor too. The victim's own run
+	/// speed carries on underneath. Damping gives the limbs weight — the Citizen's bodies ship with
+	/// none, which made the old ragdoll float and spin like cloth.
+	/// </summary>
+	static void Throw( ModelPhysics physics, Vector3 launch, Vector3 carried )
+	{
+		var push = launch.WithZ( 0f );
+		var lift = Vector3.Up * launch.z;
+		var direction = push.IsNearZeroLength ? Vector3.Forward : push.Normal;
+
+		// Head along the push, feet behind it: spin about the horizontal axis across the hit.
+		var tumble = Vector3.Cross( Vector3.Up, direction ) * (push.Length / 90f).Clamp( 2.5f, 8f );
+
+		foreach ( var body in physics.Bodies )
+		{
+			var rigidbody = body.Component;
+			if ( !rigidbody.IsValid() ) continue;
+
+			rigidbody.LinearDamping = 0.25f;
+			rigidbody.AngularDamping = 2.5f;
+
+			rigidbody.Velocity = push * HitShare( rigidbody.GameObject.Name ) + lift + carried;
+			rigidbody.AngularVelocity = tumble;
+		}
+	}
+
+	/// <summary>How much of the push a bone takes: the chest is hit, the ankles are planted.</summary>
+	static float HitShare( string bone )
+	{
+		if ( bone.StartsWith( "head" ) ) return 1.35f;
+		if ( bone.StartsWith( "spine" ) ) return 1.25f;
+		if ( bone.StartsWith( "arm" ) || bone.StartsWith( "hand" ) ) return 1.2f;
+		if ( bone.StartsWith( "pelvis" ) ) return 0.9f;
+		if ( bone.StartsWith( "leg_upper" ) ) return 0.55f;
+		if ( bone.StartsWith( "leg_lower" ) ) return 0.35f;
+		return 0.25f;
 	}
 
 	/// <summary>
@@ -591,6 +651,8 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		_ragdoll.Destroy();
 		_ragdoll = null;
 		_ragdollRenderer = null;
+		_ragdollPhysics = null;
+		_ragdollPelvis = null;
 
 		_capsule.Enabled = IsAlive;
 
@@ -606,7 +668,28 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 		{
 			AbilityFx.Dizzy( GameObject, PlayerImpacts.Immunity, AbilityFx.Butter );
 			_recoveredAt = 0f;
+
+			// Back on your feet with a puff of dust and a scuff.
+			AbilityFx.Ring( WorldPosition + Vector3.Up * 2f, 46f, AbilityFx.Ink.WithAlpha( 0.5f ), 0.35f );
+			AbilityFx.Burst( WorldPosition + Vector3.Up * 8f, new Color( 0.93f, 0.89f, 0.82f ), 7, 150f, 7f );
+			Sfx.At( Sfx.FootstepLand, WorldPosition, 0.7f );
+
+			// The host's grace starts now, not when the ragdoll began: a long tumble must not
+			// come up already vulnerable.
+			if ( !Networking.IsActive || Networking.IsHost )
+				Scene.Get<PlayerImpacts>()?.Protect( this, PlayerImpacts.Immunity );
 		}
+	}
+
+	/// <summary>
+	/// Owner → everyone: the body has come to rest, get up. The owner decides because its copy is
+	/// the one the root follows; proxies' copies only approximate it.
+	/// </summary>
+	[Rpc.Broadcast]
+	void StandUp()
+	{
+		if ( Rpc.Calling && Rpc.Caller != Network.Owner && !Rpc.Caller.IsHost ) return;
+		EndRagdoll();
 	}
 
 	TimeSince _recoveredAt = 999f;
@@ -617,7 +700,64 @@ public sealed class TntPlayer : Component, Component.INetworkSpawn
 	void UpdateRagdoll()
 	{
 		if ( !IsRagdolled ) return;
-		if ( _ragdollEnds ) EndRagdoll();
+
+		if ( !_ragdollPelvis.IsValid() && _ragdollPhysics.IsValid() )
+		{
+			foreach ( var body in _ragdollPhysics.Bodies )
+			{
+				if ( body.Component.IsValid() && body.Component.GameObject.Name == "pelvis" ) _ragdollPelvis = body.Component;
+			}
+		}
+
+		if ( !_ragdollPelvis.IsValid() ) return;
+
+		var velocity = _ragdollPelvis.Velocity;
+
+		// Hear the body hit the floor: a fast fall that suddenly stops.
+		if ( _ragdollFallSpeed < -220f && velocity.z > _ragdollFallSpeed + 180f && _sinceThud > 0.25f )
+		{
+			var strength = (-_ragdollFallSpeed / 650f).Clamp( 0.3f, 1f );
+			var at = _ragdollPelvis.WorldPosition;
+			Sfx.At( Sfx.BodyHit, at, 0.35f + 0.5f * strength, 0.8f + 0.15f * (1f - strength) );
+			AbilityFx.Burst( at, new Color( 0.93f, 0.89f, 0.82f ), 5, 120f + 100f * strength, 6f );
+			ShakeNearby( at, strength * 0.5f );
+			_sinceThud = 0f;
+		}
+
+		_ragdollFallSpeed = velocity.z;
+
+		if ( velocity.Length > SettledSpeed ) _ragdollStill = 0f;
+
+		if ( IsProxy )
+		{
+			// This copy simulates on its own; pull it gently towards where the owner's body really
+			// is (the synced root follows the owner's pelvis), so getting up doesn't snap across the
+			// floor. A last-resort timeout in case the owner's stand-up never arrives.
+			var drift = WorldPosition - _ragdollPelvis.WorldPosition;
+			if ( drift.Length > 8f )
+			{
+				foreach ( var body in _ragdollPhysics.Bodies )
+				{
+					if ( body.Component.IsValid() ) body.Component.Velocity += drift * (6f * Time.Delta);
+				}
+			}
+
+			if ( _ragdollStarted > _ragdollMax + 1.5f ) EndRagdoll();
+			return;
+		}
+
+		var rested = _ragdollStarted > _ragdollMin && _ragdollStill > 0.2f && HasFloorUnder( _ragdollPelvis.WorldPosition );
+		if ( rested || _ragdollStarted > _ragdollMax ) StandUp();
+	}
+
+	/// <summary>Is there floor right under a resting body? Stops a body caught on a ledge from standing up in mid-air.</summary>
+	bool HasFloorUnder( Vector3 position )
+	{
+		var trace = Scene.Trace.Ray( position + Vector3.Up * 4f, position + Vector3.Down * 40f )
+			.IgnoreGameObjectHierarchy( GameObject )
+			.IgnoreGameObjectHierarchy( _ragdoll )
+			.Run();
+		return trace.Hit;
 	}
 
 	/// <summary>
