@@ -25,7 +25,7 @@
 
 			<div class="title-row">
 				<div class="swirl left"></div>
-				<label class="title">@Ranks.Name( Rp )</label>
+				<label class="title">@Ranks.Name( Rp ).ToUpperInvariant()</label>
 				<div class="swirl right"></div>
 			</div>
 
@@ -36,10 +36,10 @@
 		</div>
 
 		<div class="stats">
-			<div class="stat"><div class="glyph g-runner"></div><label class="value">@P.Rounds</label></div>
-			<div class="stat"><div class="glyph g-trophy"></div><label class="value">@P.Wins</label></div>
-			<div class="stat"><div class="glyph g-impact"></div><label class="value">@P.Knockdowns</label></div>
-			<div class="stat"><div class="glyph g-medal"></div><label class="value">@BestText</label></div>
+			<div class="stat"><div class="glyph g-runner"></div><label class="value">@P.Rounds</label><label class="caption">ROUNDS</label></div>
+			<div class="stat"><div class="glyph g-trophy"></div><label class="value">@P.Wins</label><label class="caption">WINS</label></div>
+			<div class="stat"><div class="glyph g-impact"></div><label class="value">@P.Knockdowns</label><label class="caption">KNOCKDOWNS</label></div>
+			<div class="stat"><div class="glyph g-medal"></div><label class="value">@BestText</label><label class="caption">BEST</label></div>
 		</div>
 
 		<div class="ladder">
@@ -50,7 +50,7 @@
 					<div class="emblem">
 						<div class="art" style="background-image: url(@Ranks.EmblemOfStep( FirstStep( t ) ))"></div>
 					</div>
-					<label class="name">@t.ToString()</label>
+					<label class="name">@t.ToString().ToUpperInvariant()</label>
 					<label class="perk">@Ranks.Perk( t )</label>
 					@if ( (int)t > (int)Ranks.Tier( Rp ) )
 					{

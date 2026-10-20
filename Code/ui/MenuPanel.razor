@@ -18,27 +18,13 @@
 		{
 			<div class="column">
 				<div class="brand">
-					<div class="lockup">
-						<div class="mark">
-							<div class="twinkle t1"></div>
-							<div class="twinkle t2"></div>
-							<div class="logo art"></div>
-						</div>
-						<label class="wordmark">TNT Run</label>
-					</div>
-
-					@* The tower as a row of its eight rooms, top to bottom, ending in the lava — the
-					   menu's diagram of the game, in the same stickers the HUD ladder uses. *@
-					<div class="rooms">
+					<label class="wordmark">TNT RUN</label>
+					<div class="strata">
 						@for ( var floor = 0; floor < Arena.FloorCount; floor++ )
 						{
-							<div class="room f@(floor)" @key=@floor>
-								<div class="art" style="background-image: url(@ArenaGenerator.FloorIcon( floor ))"></div>
-							</div>
+							<div class="stratum f@(floor)" @key=@floor></div>
 						}
-						<div class="room lava">
-							<div class="glyph g-flame"></div>
-						</div>
+						<div class="stratum lava"></div>
 					</div>
 				</div>
 
@@ -56,21 +42,21 @@
 
 						<div class="brick big sky @BusyClass" onclick=@Browse>
 							<div class="glyph g-search"></div>
-							<label class="name">Find a game</label>
+							<label class="name">FIND A GAME</label>
 						</div>
 
 						<div class="row">
-							<div class="brick mint" onclick=@( () => Go( GameUi.MenuPage.Loadout ) )>
+							<div class="brick paper" onclick=@( () => Go( GameUi.MenuPage.Loadout ) )>
 								<div class="glyph g-bolt"></div>
-								<label>Abilities</label>
+								<label>ABILITIES</label>
 							</div>
-							<div class="brick lilac" onclick=@( () => Go( GameUi.MenuPage.Profile ) )>
+							<div class="brick paper" onclick=@( () => Go( GameUi.MenuPage.Profile ) )>
 								<div class="glyph g-trophy"></div>
-								<label>Rank</label>
+								<label>RANK</label>
 							</div>
 							<div class="brick paper" onclick=@( () => Go( GameUi.MenuPage.HowTo ) )>
 								<div class="glyph g-question"></div>
-								<label>Help</label>
+								<label>HELP</label>
 							</div>
 						</div>
 					</div>
@@ -125,7 +111,7 @@
 
 	string HostClass => IsBusy ? "disabled" : "";
 
-	string HostLabel => Networking.IsConnecting ? "Joining…" : IsBusy ? "Starting…" : "Host a game";
+	string HostLabel => Networking.IsConnecting ? "JOINING…" : IsBusy ? "STARTING…" : "HOST A GAME";
 
 	string PlayerName => Connection.Local?.DisplayName ?? "";
 

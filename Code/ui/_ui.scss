@@ -1,9 +1,10 @@
-// Shared design tokens — pastel toy-box arcade.
+// Shared design tokens — v2, "storybook".
 //
-// Direction (KONTEKST.md + Assets/gui reference): cream storybook cards, rounded and chunky, plum
-// ink instead of black, pastel floor colours as the brand. One idea carries the whole UI:
-// everything you press is a toy brick — a solid colour block with a thicker darker bottom edge,
-// like the tiles you run on. Boldness is spent on the title tower and the bricks; text stays calm.
+// Direction (KONTEKST.md + Assets/gui reference): the references are muted and quiet — warm cream
+// pages, sage, terracotta, mustard and dusty blue, small letter-spaced capitals, flat illustrations
+// with no outlines, one small ornament where a title needs one. v1 read the brief as candy-bright
+// toy bricks with thick outlines and was called "AI slop" by the user; this palette and the white
+// glyph set (tinted per context) replace it.
 //
 // Engine facts baked in, verified against this install (see memory notes):
 //   * Gradient stops must be PERCENTAGES. A px stop is rejected, and a rejected mask hides the
@@ -11,19 +12,18 @@
 //   * No clip-path, no transform: skew(), no var(--x). SCSS variables only.
 //   * `font-family` takes a single name. Proven here: Poppins (800 reachable), Roboto, Roboto Mono,
 //     Material Icons. Disproven: Roboto Condensed.
-//   * Pictures are sticker SVGs in Assets/ui (icons, ranks, fx), never icon-font ligatures — see
-//     the art section of _kit.scss.
-//   * A <label> that mixes literal text with an @expression drops the literal — one expression
-//     per label, build strings in C#.
+//   * Casing is written in the markup, not by text-transform.
+//   * Glyphs are white SVGs (Assets/ui/icons) coloured with `background-image-tint`.
 
 // --- Type ---------------------------------------------------------------------------------
 
 $font-title: "Poppins";
 $font-body: "Poppins";
 $font-mono: "Roboto Mono";
-
-// Kept for older stylesheets that still name it.
 $font-display: "Poppins";
+
+// Small spaced capitals carry every heading and label; numbers stay big and plain.
+$caps-spacing: 2px;
 
 // --- Space --------------------------------------------------------------------------------
 
@@ -37,38 +37,58 @@ $s7: 48px;
 
 // --- Colour -------------------------------------------------------------------------------
 
-// Paper: the storybook card.
-$paper: #FFF7E8;
-$paper-deep: #F7E8CC;
-$paper-edge: #E9D3A8;
+// Paper: the storybook page, and the cover it sits on.
+$paper: #F4ECDA;
+$paper-deep: #EADFC8;
+$paper-edge: #D8C7A4;
+$cover: #C98348;
+$cover-deep: #A6662F;
 
-// Ink: plum, never black. Text on paper and the dark "night" surfaces.
-$ink: #3D2E5C;
-$ink-soft: #776A99;
-$ink-faint: rgba(61, 46, 92, 0.42);
-$night: #2B2142;
+// Ink: warm brown-grey, never black.
+$ink: #4A4039;
+$ink-soft: #8A7B6A;
+$ink-faint: rgba(74, 64, 57, 0.4);
 
-// Pastel brick colours, each with the darker edge that makes it a brick.
-$butter: #FFCC61;
-$butter-deep: #E2A635;
-$mint: #7ADB94;
-$mint-deep: #48B067;
-$coral: #FF7A85;
-$coral-deep: #DD5361;
-$sky: #75B8FA;
-$sky-deep: #4C8FD6;
-$lilac: #D18AEB;
-$lilac-deep: #A862C4;
-$peach: #FFA375;
-$peach-deep: #E07C4C;
+// The dark surface behind HUD readouts: slate green, like the references' backdrop.
+$night: #343F3C;
+$night-glass: rgba(52, 63, 60, 0.78);
+$cream: #FFF8EC;
+
+// Accents. Each has a deep variant for edges and pressed states.
+$sage: #7FA77A;
+$sage-deep: #5E8659;
+$terra: #D9845A;
+$terra-deep: #B4643E;
+$mustard: #E3B04F;
+$mustard-deep: #BF8D30;
+$dusty: #7EA3C0;
+$dusty-deep: #5C82A0;
+$plum: #8E7AA6;
+$plum-deep: #6E5B86;
+$rose: #D99A9A;
+$rose-deep: #B87676;
+
+// v1 names, kept so older rules pick up the v2 palette.
+$butter: $mustard;
+$butter-deep: $mustard-deep;
+$mint: $sage;
+$mint-deep: $sage-deep;
+$coral: $terra;
+$coral-deep: $terra-deep;
+$sky: $dusty;
+$sky-deep: $dusty-deep;
+$lilac: $plum;
+$lilac-deep: $plum-deep;
+$peach: #E3A27A;
+$peach-deep: #C27E55;
 
 // Semantic
-$you: $butter;
-$you-deep: $butter-deep;
-$help: $mint;
-$help-deep: $mint-deep;
-$harm: $coral;
-$harm-deep: $coral-deep;
+$you: $mustard;
+$you-deep: $mustard-deep;
+$help: $sage;
+$help-deep: $sage-deep;
+$harm: $terra;
+$harm-deep: $terra-deep;
 
 // Floor identity colours — mirror of Palette.FloorHue (Code/Art/Palette.cs) — change both together.
 $floor0: #A9CF95;
@@ -79,18 +99,18 @@ $floor4: #C99BB0;
 $floor5: #C9A26B;
 $floor6: #8F86AD;
 $floor7: #E07E58;
-$lava: #EB3861;
-$warn: #FF8A4C;
+$lava: #E0624E;
+$warn: #E8894E;
 $paper-shade: #E2D3B8;
 
 // --- Shape & depth ------------------------------------------------------------------------
 
-$radius-card: 28px;
-$radius-brick: 18px;
+$radius-card: 18px;
+$radius-brick: 12px;
 $radius-pill: 999px;
 
-$brick-edge: 7px;
+$brick-edge: 4px;
 
-// A flat offset shadow reads as a toy sitting on a table; a soft one lifts the big cards.
-$drop: 0px 8px 0px rgba(61, 46, 92, 0.22);
-$lift: 0px 18px 44px rgba(43, 33, 66, 0.35);
+// Soft, low shadows: things rest on the page rather than float above it.
+$drop: 0px 3px 0px rgba(74, 64, 57, 0.16);
+$lift: 0px 14px 30px rgba(40, 36, 32, 0.28);

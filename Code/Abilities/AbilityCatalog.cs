@@ -47,7 +47,7 @@ public enum AbilityKind
 	Harm
 }
 
-/// <summary>One row of the catalogue. The icon is a sticker SVG named after the id, in Assets/ui/icons/abilities.</summary>
+/// <summary>One row of the catalogue. The icon is a white glyph SVG named after the id, in Assets/ui/icons/abilities, tinted by the UI.</summary>
 public readonly struct AbilityInfo
 {
 	public readonly AbilityId Id;

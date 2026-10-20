@@ -20,7 +20,7 @@
 	<div class="card picker">
 		<div class="title-row">
 			<div class="swirl left"></div>
-			<label class="title">Abilities</label>
+			<label class="title">ABILITIES</label>
 			<div class="swirl right"></div>
 		</div>
 
@@ -34,7 +34,7 @@
 					<div class="prompt" style="background-image: url(@PromptPath( s ))"></div>
 					<div class="icon"><div class="art" style="background-image: url(@info.Icon)"></div></div>
 					<div class="text">
-						<label class="name">@info.Name</label>
+						<label class="name">@info.Name.ToUpperInvariant()</label>
 						<label class="desc">@info.Description</label>
 					</div>
 					<label class="cd">@CooldownText( info )</label>
@@ -44,7 +44,7 @@
 
 		<div class="shelf-title help">
 			<div class="glyph g-heart"></div>
-			<label>Help</label>
+			<label>HELP</label>
 		</div>
 		<div class="grid">
 			@foreach ( var id in HelpIds )
@@ -52,7 +52,7 @@
 				var a = id;
 				<div class="tile @TileClass( a )" @key=@a onclick=@( () => Choose( a ) )>
 					<div class="icon"><div class="art" style="background-image: url(@AbilityCatalog.Get( a ).Icon)"></div></div>
-					<label class="name">@AbilityCatalog.Get( a ).Name</label>
+					<label class="name">@AbilityCatalog.Get( a ).Name.ToUpperInvariant()</label>
 					@if ( !string.IsNullOrEmpty( Badge( a ) ) )
 					{
 						<div class="badge"><div class="art" style="background-image: url(@Badge( a ))"></div></div>
@@ -63,7 +63,7 @@
 
 		<div class="shelf-title harm">
 			<div class="glyph g-impact"></div>
-			<label>Harm</label>
+			<label>HARM</label>
 		</div>
 		<div class="grid">
 			@foreach ( var id in HarmIds )
@@ -71,7 +71,7 @@
 				var a = id;
 				<div class="tile @TileClass( a )" @key=@a onclick=@( () => Choose( a ) )>
 					<div class="icon"><div class="art" style="background-image: url(@AbilityCatalog.Get( a ).Icon)"></div></div>
-					<label class="name">@AbilityCatalog.Get( a ).Name</label>
+					<label class="name">@AbilityCatalog.Get( a ).Name.ToUpperInvariant()</label>
 					@if ( !string.IsNullOrEmpty( Badge( a ) ) )
 					{
 						<div class="badge"><div class="art" style="background-image: url(@Badge( a ))"></div></div>
@@ -83,11 +83,11 @@
 		<div class="foot">
 			<div class="brick paper" onclick=@Randomise>
 				<div class="glyph g-dice"></div>
-				<label>Random</label>
+				<label>RANDOM</label>
 			</div>
 			<div class="brick mint" onclick=@Done>
 				<div class="glyph g-check"></div>
-				<label>Done</label>
+				<label>DONE</label>
 			</div>
 		</div>
 	</div>

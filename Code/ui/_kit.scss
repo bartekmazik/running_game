@@ -1,61 +1,76 @@
 // Reusable pieces shared by every screen. Import after _ui.scss.
+//
+// v2 "storybook" (see _ui.scss): pages of a book, small spaced capitals, flat white glyphs tinted
+// per context. Depth is quiet — a thin page edge, a low shadow — never a toy brick.
 
-// The storybook card: cream paper with a darker bottom lip, like a thick page.
+// The page: cream with a darker lip, sitting on a terracotta cover like the reference's book.
 .card {
 	flex-direction: column;
 	background-color: $paper;
 	border-radius: $radius-card;
-	border-bottom: 10px solid $paper-edge;
+	border: 2px solid $paper-deep;
+	border-bottom: 8px solid $cover;
 	box-shadow: $lift;
 	padding: $s6;
 	color: $ink;
 }
 
-// A toy brick button. Colour comes from a modifier class; the darker bottom edge is the brick.
+// A button. Colour comes from a modifier class; default is mustard.
 .brick {
 	flex-direction: row;
 	align-items: center;
 	justify-content: center;
 	padding: $s3 $s5;
 	border-radius: $radius-brick;
-	border-bottom: $brick-edge solid $butter-deep;
-	background-color: $butter;
-	color: $ink;
+	border-bottom: $brick-edge solid $mustard-deep;
+	background-color: $mustard;
+	color: $cream;
 	font-family: $font-title;
-	font-weight: 800;
-	font-size: 22px;
+	font-weight: 700;
+	font-size: 17px;
+	letter-spacing: $caps-spacing;
 	cursor: pointer;
 	pointer-events: all;
-	transition: all 0.08s ease-out;
+	transition: all 0.1s ease-out;
 
 	.glyph {
-		width: 34px;
-		height: 34px;
+		width: 26px;
+		height: 26px;
 		margin-right: $s2;
+		background-image-tint: $cream;
 	}
 
 	&:hover {
-		transform: translateY(-2px);
-		border-bottom-width: $brick-edge + 2px;
+		transform: translateY(-1px);
 	}
 
 	&:active {
-		transform: translateY(4px);
+		transform: translateY(2px);
 		border-bottom-width: 2px;
 	}
 
-	&.mint { background-color: $mint; border-bottom-color: $mint-deep; }
-	&.coral { background-color: $coral; border-bottom-color: $coral-deep; }
-	&.sky { background-color: $sky; border-bottom-color: $sky-deep; }
-	&.lilac { background-color: $lilac; border-bottom-color: $lilac-deep; }
+	&.mint { background-color: $sage; border-bottom-color: $sage-deep; }
+	&.coral { background-color: $terra; border-bottom-color: $terra-deep; }
+	&.sky { background-color: $dusty; border-bottom-color: $dusty-deep; }
+	&.lilac { background-color: $plum; border-bottom-color: $plum-deep; }
 	&.peach { background-color: $peach; border-bottom-color: $peach-deep; }
-	&.paper { background-color: $paper-deep; border-bottom-color: $paper-edge; }
+
+	// Quiet button on paper: ink text, no fill colour.
+	&.paper {
+		background-color: $paper-deep;
+		border-bottom-color: $paper-edge;
+		color: $ink;
+
+		.glyph { background-image-tint: $ink; }
+	}
 
 	&.disabled {
-		background-color: #E4DCEB;
-		border-bottom-color: #C9BCD6;
+		background-color: #DCD3C2;
+		border-bottom-color: #C7BCA7;
 		color: $ink-faint;
 		cursor: default;
+
+		.glyph { background-image-tint: $ink-faint; }
 
 		&:hover, &:active {
 			transform: none;
@@ -74,7 +89,7 @@
 	color: $ink;
 	font-family: $font-title;
 	font-weight: 700;
-	font-size: 15px;
+	font-size: 14px;
 }
 
 // A Kenney key/mouse prompt, drawn from Assets/ui/kenney/prompts.
@@ -88,9 +103,9 @@
 
 // --- Art --------------------------------------------------------------------------------
 //
-// Every picture in the UI is a sticker SVG from Assets/ui (see tools/ui-art/
-// art-guide.md): one plum outline weight, flat pastel fills, a drop shadow baked in. They are shown
-// as background images on sized boxes, never as font glyphs, so the whole UI shares one hand.
+// Glyphs and ability icons are white silhouettes in Assets/ui/icons (tools/ui-art/glyphs.py),
+// coloured where they are used with background-image-tint. Rank emblems and medals are full-colour
+// art in Assets/ui/ranks (tools/ui-art/ranks.py).
 
 // Any box showing one picture, sized by its context.
 .art {
@@ -100,14 +115,15 @@
 	flex-shrink: 0;
 }
 
-// UI glyphs: <div class="glyph g-play"></div>. Sized by whoever holds them.
+// UI glyphs: <div class="glyph g-play"></div>. Ink by default; containers retint.
 .glyph {
-	width: 32px;
-	height: 32px;
+	width: 28px;
+	height: 28px;
 	flex-shrink: 0;
 	background-size: contain;
 	background-repeat: no-repeat;
 	background-position: center;
+	background-image-tint: $ink;
 
 	&.g-back { background-image: url("/ui/icons/glyphs/back.svg"); }
 	&.g-bolt { background-image: url("/ui/icons/glyphs/bolt.svg"); }
@@ -137,54 +153,36 @@
 	&.g-trophy { background-image: url("/ui/icons/glyphs/trophy.svg"); }
 }
 
-// A card title between two storybook flourishes, like the "~ Level up! ~" card in the reference.
+// A card title as in the references: small spaced capitals between two tiny sparkles.
+// The markup keeps its old swirl divs; they draw as sparkles now.
 .title-row {
 	flex-direction: row;
 	align-items: center;
 	justify-content: center;
 
 	.swirl {
-		width: 112px;
-		height: 28px;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		background-image: url("/ui/icons/glyphs/sparkle.svg");
 		background-size: contain;
 		background-repeat: no-repeat;
-		background-position: center;
-		flex-shrink: 0;
-
-		&.left { background-image: url("/ui/fx/swirl-left.svg"); }
-		&.right { background-image: url("/ui/fx/swirl-right.svg"); }
+		background-image-tint: $mustard;
 	}
 
 	.title {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 44px;
-		color: $ink;
-		margin: 0px $s4;
+		font-weight: 700;
+		font-size: 22px;
+		letter-spacing: 3px;
+		color: $ink-soft;
+		margin: 0px $s3;
 	}
 }
 
-// Slow spinning rays behind whatever deserves a moment: your rank, the winner.
-.sunburst {
-	position: absolute;
-	background-image: url("/ui/fx/sunburst.svg");
-	background-size: contain;
-	background-repeat: no-repeat;
-	background-position: center;
-	animation: spin 14s linear infinite;
-	pointer-events: none;
-}
-
-// A twinkling star that floats over a card edge.
-.twinkle {
-	position: absolute;
-	width: 34px;
-	height: 34px;
-	background-image: url("/ui/fx/sparkle.svg");
-	background-size: contain;
-	background-repeat: no-repeat;
-	animation: twinkle 2.4s ease-in-out infinite;
-	pointer-events: none;
+// v1 ornaments, retired: kept as no-ops so markup that still names them draws nothing.
+.sunburst, .twinkle {
+	display: none;
 }
 
 @keyframes spin {
@@ -192,13 +190,7 @@
 	to { transform: rotate(360deg); }
 }
 
-@keyframes twinkle {
-	0% { opacity: 0.2; transform: scale(0.6) rotate(0deg); }
-	50% { opacity: 1; transform: scale(1.1) rotate(20deg); }
-	100% { opacity: 0.2; transform: scale(0.6) rotate(0deg); }
-}
-
 @keyframes bob {
 	from { transform: translateY(0px); }
-	to { transform: translateY(-10px); }
+	to { transform: translateY(-4px); }
 }

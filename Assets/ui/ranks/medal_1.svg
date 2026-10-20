@@ -1,20 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256">
-<defs>
-<linearGradient id="gold-metal" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#FFF3B0"/><stop offset="0.45" stop-color="#FFC542"/><stop offset="1" stop-color="#C7841A"/></linearGradient>
-<linearGradient id="gold-face" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#8A5414"/><stop offset="1" stop-color="#55320C"/></linearGradient>
-<linearGradient id="gold-sym" x1="0" y1="0" x2="1" y2="1">
-<stop offset="0" stop-color="#FFFFFF"/><stop offset="0.35" stop-color="#FFE27A"/><stop offset="1" stop-color="#FFC542"/></linearGradient>
-<radialGradient id="gold-glow" cx="0.5" cy="0.5" r="0.5">
-<stop offset="0" stop-color="#FFF3B0" stop-opacity="0.9"/><stop offset="0.6" stop-color="#FFC542" stop-opacity="0.35"/><stop offset="1" stop-color="#FFC542" stop-opacity="0"/></radialGradient>
-</defs>
-<polygon points="70,4 112,4 138,104 100,112" fill="#75B8FA" stroke="#2B2142" stroke-width="7" stroke-linejoin="round"/>
-<polygon points="186,4 144,4 118,104 156,112" fill="#FF7A85" stroke="#2B2142" stroke-width="7" stroke-linejoin="round"/>
-<path d="M128 64 Q136.8 60.8 143.6 71.5 Q154 64.3 160.9 70.5 Q170.2 71 172.4 83.5 Q184.8 80.7 188.8 89.2 Q197.3 93.2 194.5 105.6 Q207 107.8 207.5 117.1 Q213.7 124 206.5 134.4 Q217.2 141.2 214 150 Q217.2 158.8 206.5 165.6 Q213.7 176 207.5 182.9 Q207 192.2 194.5 194.4 Q197.3 206.8 188.8 210.8 Q184.8 219.3 172.4 216.5 Q170.2 229 160.9 229.5 Q154 235.7 143.6 228.5 Q136.8 239.2 128 236 Q119.2 239.2 112.4 228.5 Q102 235.7 95.1 229.5 Q85.8 229 83.6 216.5 Q71.2 219.3 67.2 210.8 Q58.7 206.8 61.5 194.4 Q49 192.2 48.5 182.9 Q42.3 176 49.5 165.6 Q38.8 158.8 42 150 Q38.8 141.2 49.5 134.4 Q42.3 124 48.5 117.1 Q49 107.8 61.5 105.6 Q58.7 93.2 67.2 89.2 Q71.2 80.7 83.6 83.5 Q85.8 71 95.1 70.5 Q102 64.3 112.4 71.5 Q119.2 60.8 128 64 Z" transform="translate(0 7)" fill="#2B2142" fill-opacity="0.3"/>
-<path d="M128 64 Q136.8 60.8 143.6 71.5 Q154 64.3 160.9 70.5 Q170.2 71 172.4 83.5 Q184.8 80.7 188.8 89.2 Q197.3 93.2 194.5 105.6 Q207 107.8 207.5 117.1 Q213.7 124 206.5 134.4 Q217.2 141.2 214 150 Q217.2 158.8 206.5 165.6 Q213.7 176 207.5 182.9 Q207 192.2 194.5 194.4 Q197.3 206.8 188.8 210.8 Q184.8 219.3 172.4 216.5 Q170.2 229 160.9 229.5 Q154 235.7 143.6 228.5 Q136.8 239.2 128 236 Q119.2 239.2 112.4 228.5 Q102 235.7 95.1 229.5 Q85.8 229 83.6 216.5 Q71.2 219.3 67.2 210.8 Q58.7 206.8 61.5 194.4 Q49 192.2 48.5 182.9 Q42.3 176 49.5 165.6 Q38.8 158.8 42 150 Q38.8 141.2 49.5 134.4 Q42.3 124 48.5 117.1 Q49 107.8 61.5 105.6 Q58.7 93.2 67.2 89.2 Q71.2 80.7 83.6 83.5 Q85.8 71 95.1 70.5 Q102 64.3 112.4 71.5 Q119.2 60.8 128 64 Z" fill="url(#gold-metal)" stroke="#2B2142" stroke-width="8" stroke-linejoin="round"/>
-<circle cx="128" cy="154" r="62" fill="#FFF3B0" fill-opacity="0.55"/>
-<circle cx="128" cy="150" r="62" fill="url(#gold-metal)" stroke="#2B2142" stroke-width="6"/>
-<path d="M-10 -22 L4 -32 V32" transform="translate(128 152) scale(1.35)" fill="none" stroke="#2B2142" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M74 120 Q88 88 124 82" fill="none" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="7" stroke-linecap="round"/>
+<defs><linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E5BE6A"/><stop offset="1" stop-color="#A87C2A"/></linearGradient></defs>
+<polygon points="84,10 120,10 140,96 108,104" fill="#7EA3C0"/>
+<polygon points="172,10 136,10 116,96 148,104" fill="#D9845A"/>
+<circle cx="128" cy="160" r="78" fill="#2E2A26" fill-opacity="0.16" transform="translate(0 6)"/>
+<circle cx="128" cy="160" r="78" fill="url(#m1)"/>
+<circle cx="128" cy="160" r="62" fill="none" stroke="#E5BE6A" stroke-width="4" stroke-opacity="0.8"/>
+<path d="M-8 -20 L4 -28 V28" transform="translate(128 160) scale(1.4)" fill="none" stroke="#FFF8EC" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

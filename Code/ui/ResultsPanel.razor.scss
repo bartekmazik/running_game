@@ -7,88 +7,90 @@ ResultsPanel {
 	height: 100%;
 	align-items: center;
 	justify-content: center;
-	background-color: rgba(43, 33, 66, 0.35);
+	background-color: rgba(40, 46, 44, 0.4);
 	pointer-events: all;
 	font-family: $font-body;
 }
 
+@mixin caps {
+	font-family: $font-title;
+	font-weight: 700;
+	letter-spacing: $caps-spacing;
+}
+
 .results {
 	position: relative;
-	width: 860px;
-	padding: $s6 $s7;
+	width: 760px;
+	padding: $s6 $s7 $s5 $s7;
 	align-items: center;
 	animation: card-in 0.3s ease-out both;
 }
 
 @keyframes card-in {
-	from { opacity: 0; transform: translateY(40px) scale(0.96); }
-	to { opacity: 1; transform: translateY(0px) scale(1); }
+	from { opacity: 0; transform: translateY(24px); }
+	to { opacity: 1; transform: translateY(0px); }
 }
 
-// --- Rank up -------------------------------------------------------------------------------
+// --- Rank up pill (after the moment has passed) ---------------------------------------------
 
 .rankup {
 	position: absolute;
-	top: -86px;
+	top: -30px;
 	flex-direction: row;
 	align-items: center;
-	padding: $s3 $s6 $s3 $s3;
-	border-radius: $radius-pill;
-	background-color: $butter;
-	border-bottom: 8px solid $butter-deep;
-	box-shadow: $lift;
-	animation: rank-in 0.6s ease-out both;
+	padding: 4px $s4 4px 4px;
+	border-radius: 14px;
+	background-color: $paper;
+	border-bottom: 4px solid $paper-edge;
+	box-shadow: $drop;
 
 	.emblem {
-		width: 104px;
-		height: 104px;
-		margin: -18px $s3 -18px -8px;
-	}
-
-	.text { flex-direction: column; }
-
-	.title {
-		font-family: $font-title;
-		font-weight: 800;
-		font-size: 40px;
-		line-height: 1;
-		color: $ink;
+		width: 44px;
+		height: 44px;
+		margin-right: $s2;
 	}
 
 	.to {
-		font-size: 18px;
+		@include caps;
+		font-size: 13px;
 		color: $ink;
 	}
-}
-
-@keyframes rank-in {
-	0% { opacity: 0; transform: translateY(-30px) scale(0.6); }
-	60% { opacity: 1; transform: translateY(0px) scale(1.08); }
-	100% { opacity: 1; transform: translateY(0px) scale(1); }
 }
 
 // --- Verdict -------------------------------------------------------------------------------
 
-.title-row .verdict {
-	font-size: 60px;
-	line-height: 1.05;
+.title-row .title {
+	font-size: 14px;
+	letter-spacing: 4px;
+}
+
+.verdict {
+	margin-top: $s2;
+	font-family: $font-title;
+	font-weight: 800;
+	font-size: 40px;
+	letter-spacing: 4px;
+	line-height: 1.1;
+	color: $ink;
 }
 
 .meta {
 	flex-direction: row;
 	align-items: center;
-	margin-bottom: 64px;
+	margin-top: $s2;
+	margin-bottom: $s6;
 
 	.glyph {
-		width: 26px;
-		height: 26px;
+		width: 18px;
+		height: 18px;
 		margin-right: 6px;
+		background-image-tint: $ink-soft;
 	}
 
 	label {
 		font-family: $font-title;
 		font-weight: 700;
-		font-size: 18px;
+		font-size: 15px;
 		color: $ink-soft;
 	}
 }
@@ -104,25 +106,16 @@ ResultsPanel {
 
 .step {
 	position: relative;
-	width: 210px;
-	margin: 0px $s2;
+	width: 190px;
+	margin: 0px 6px;
 	flex-direction: column;
 	align-items: center;
-	animation: step-in 0.5s ease-out both;
-
-	// Rays behind the winner only, centred on the medal.
-	.sunburst {
-		top: -90px;
-		left: -15px;
-		width: 240px;
-		height: 240px;
-		opacity: 0.85;
-	}
+	animation: step-in 0.45s ease-out both;
 
 	.medal {
-		width: 84px;
-		height: 84px;
-		margin-bottom: -18px;
+		width: 64px;
+		height: 64px;
+		margin-bottom: $s1;
 
 		.art {
 			width: 100%;
@@ -133,73 +126,56 @@ ResultsPanel {
 	.who {
 		flex-direction: row;
 		align-items: center;
-		margin-top: $s1;
 	}
 
 	.emblem {
-		width: 40px;
-		height: 40px;
-		margin-right: 2px;
+		width: 26px;
+		height: 26px;
+		margin-right: 6px;
 	}
 
 	.name {
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 20px;
+		font-weight: 700;
+		font-size: 16px;
 		color: $ink;
 	}
 
 	.pts {
-		font-size: 15px;
+		@include caps;
+		font-size: 11px;
 		color: $ink-soft;
-		margin-bottom: $s2;
+		margin: 2px 0px $s2 0px;
 	}
 
 	.block {
 		width: 100%;
-		justify-content: center;
-		align-items: flex-start;
-		padding-top: $s2;
-		border-radius: 18px 18px 6px 6px;
-		border-bottom: 8px solid rgba(61, 46, 92, 0.18);
-
-		label {
-			font-family: $font-title;
-			font-weight: 800;
-			font-size: 34px;
-			color: $ink;
-		}
+		border-radius: 10px 10px 4px 4px;
+		background-color: $paper-deep;
+		border-top: 6px solid $paper-edge;
 	}
 
-	&.p1 .block { height: 120px; background-color: $butter; }
-	&.p2 .block { height: 86px; background-color: $sky; }
-	&.p3 .block { height: 62px; background-color: $peach; }
+	&.p1 .block { height: 72px; border-top-color: #C99A3E; }
+	&.p2 .block { height: 50px; border-top-color: #8796A6; }
+	&.p3 .block { height: 34px; border-top-color: #A86D4A; }
 
-	// Third rises first, the winner last and biggest.
-	&.p3 { animation-delay: 0.15s; }
-	&.p2 { animation-delay: 0.3s; }
+	&.p3 { animation-delay: 0.1s; }
+	&.p2 { animation-delay: 0.2s; }
 	&.p1 {
-		animation-delay: 0.45s;
+		animation-delay: 0.3s;
 
 		.medal {
-			width: 104px;
-			height: 104px;
-			animation: bob 1.3s ease-in-out infinite alternate;
+			width: 80px;
+			height: 80px;
 		}
 	}
 
-	&.mine .name {
-		padding: 0px $s3;
-		border-radius: $radius-pill;
-		background-color: $ink;
-		color: $paper;
-	}
+	&.mine .name { color: $terra-deep; }
 }
 
 @keyframes step-in {
-	0% { opacity: 0; transform: translateY(40px); }
-	70% { opacity: 1; transform: translateY(-6px); }
-	100% { opacity: 1; transform: translateY(0px); }
+	from { opacity: 0; transform: translateY(20px); }
+	to { opacity: 1; transform: translateY(0px); }
 }
 
 // --- The rest ------------------------------------------------------------------------------
@@ -213,49 +189,60 @@ ResultsPanel {
 .row {
 	flex-direction: row;
 	align-items: center;
-	padding: $s1 $s4;
-	margin-bottom: 6px;
-	border-radius: 14px;
+	padding: 5px $s3;
+	margin-bottom: 4px;
+	border-radius: 10px;
 	background-color: $paper-deep;
 
 	.place {
-		width: 50px;
+		width: 40px;
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 18px;
+		font-weight: 700;
+		font-size: 14px;
 		color: $ink-soft;
 	}
 
 	.emblem {
-		width: 40px;
-		height: 40px;
-		margin: -4px $s2 -4px 0px;
+		width: 24px;
+		height: 24px;
+		margin-right: $s2;
 	}
 
 	.name {
 		flex-grow: 1;
 		font-family: $font-title;
 		font-weight: 700;
-		font-size: 17px;
+		font-size: 15px;
 		color: $ink;
 	}
 
 	.kd {
-		font-size: 14px;
-		color: $ink-soft;
+		flex-direction: row;
+		align-items: center;
 		margin-right: $s5;
+
+		.glyph {
+			width: 16px;
+			height: 16px;
+			margin-right: 4px;
+			background-image-tint: $ink-soft;
+		}
+
+		label {
+			font-family: $font-title;
+			font-weight: 700;
+			font-size: 14px;
+			color: $ink-soft;
+		}
 	}
 
 	.pts {
-		font-family: $font-title;
-		font-weight: 800;
-		font-size: 17px;
+		@include caps;
+		font-size: 13px;
 		color: $ink;
 	}
 
-	&.mine {
-		background-color: $butter;
-	}
+	&.mine { background-color: #F1DDB2; }
 }
 
 // --- Your rank -----------------------------------------------------------------------------
@@ -264,15 +251,15 @@ ResultsPanel {
 	width: 100%;
 	flex-direction: row;
 	align-items: center;
-	padding: $s3 $s4;
+	padding: $s2 $s4;
 	margin-bottom: $s4;
-	border-radius: 20px;
+	border-radius: 14px;
 	background-color: $night;
 
 	.emblem {
-		width: 76px;
-		height: 76px;
-		margin: -14px $s3 -14px -6px;
+		width: 48px;
+		height: 48px;
+		margin-right: $s3;
 	}
 
 	.mid {
@@ -281,23 +268,21 @@ ResultsPanel {
 	}
 
 	.rank {
-		font-family: $font-title;
-		font-weight: 800;
-		font-size: 20px;
-		color: $paper;
-		margin-bottom: 4px;
+		@include caps;
+		font-size: 13px;
+		color: $cream;
+		margin-bottom: 6px;
 	}
 
 	.bar {
-		height: 14px;
-		border-radius: 7px;
-		background-color: rgba(255, 247, 232, 0.18);
+		height: 6px;
+		border-radius: 3px;
+		background-color: rgba(255, 248, 236, 0.15);
 		overflow: hidden;
 
 		.fill {
 			height: 100%;
-			border-radius: 7px;
-			background-color: $coral;
+			border-radius: 3px;
 		}
 	}
 
@@ -305,18 +290,17 @@ ResultsPanel {
 		margin-left: $s5;
 		white-space: nowrap;
 		flex-shrink: 0;
-		padding: $s1 $s4;
-		border-radius: $radius-pill;
+		padding: 3px $s3;
+		border-radius: 8px;
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 24px;
-		color: $ink;
+		font-weight: 700;
+		font-size: 16px;
+		color: $cream;
 
-		&.up { background-color: $mint; }
-		&.down { background-color: $coral; }
+		&.up { background-color: $sage; }
+		&.down { background-color: $terra; }
 	}
 }
-
 
 // --- Foot ----------------------------------------------------------------------------------
 
@@ -331,26 +315,31 @@ ResultsPanel {
 		align-items: center;
 
 		.glyph {
-			width: 30px;
-			height: 30px;
+			width: 20px;
+			height: 20px;
 			margin-right: 6px;
+			background-image-tint: $ink-soft;
 		}
 
 		label {
 			font-family: $font-title;
-			font-weight: 800;
-			font-size: 22px;
+			font-weight: 700;
+			font-size: 18px;
 			color: $ink-soft;
 		}
 	}
 
 	.brick {
-		margin-left: $s3;
-		min-width: 160px;
+		margin-left: $s2;
+		min-width: 150px;
+		font-size: 14px;
 	}
 }
 
 // --- Rank-up moment ------------------------------------------------------------------------
+//
+// The reference's "Level up!" card: a page with the new emblem standing on its top edge, the
+// title in spaced capitals between two sparkles, the rank's name under it.
 
 .celebrate {
 	position: absolute;
@@ -358,120 +347,54 @@ ResultsPanel {
 	top: 0px;
 	right: 0px;
 	bottom: 0px;
-	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	background-color: rgba(43, 33, 66, 0.9);
-	backdrop-filter: blur(8px);
+	background-color: rgba(40, 46, 44, 0.6);
 	pointer-events: all;
 	cursor: pointer;
-	animation: fade-in 0.3s ease-out both;
+	animation: fade-in 0.25s ease-out both;
 
-	.burst {
+	.levelup {
 		position: relative;
-		width: 360px;
-		height: 360px;
+		width: 460px;
+		flex-direction: column;
 		align-items: center;
-		justify-content: center;
+		padding: 104px $s6 $s6 $s6;
+		background-color: $paper;
+		border-radius: $radius-card;
+		border: 2px solid $paper-deep;
+		border-bottom: 8px solid $cover;
+		box-shadow: $lift;
+		animation: card-rise 0.45s ease-out both;
+	}
 
-		.sunburst {
-			left: -170px;
-			top: -170px;
-			width: 700px;
-			height: 700px;
-			animation: spin 10s linear infinite;
-		}
+	.badge {
+		position: absolute;
+		top: -96px;
+		width: 190px;
+		height: 190px;
+		animation: badge-drop 0.6s ease-out both;
+		animation-delay: 0.15s;
 
-		.stamp {
-			width: 360px;
-			height: 360px;
-			animation: rank-stamp 0.9s ease-out both;
-
-			.emblem {
-				width: 100%;
-				height: 100%;
-			}
+		.art {
+			width: 100%;
+			height: 100%;
 		}
 	}
 
-	.ribbon {
-		width: 620px;
-		height: 155px;
-		margin-top: -36px;
-		align-items: center;
-		justify-content: center;
-		background-image: url("/ui/fx/ribbon.svg");
-		background-size: contain;
-		background-repeat: no-repeat;
-		background-position: center;
-		animation: ribbon-in 0.6s ease-out both;
-		animation-delay: 0.45s;
-
-		.title {
-			margin-top: -14px;
-			font-family: $font-title;
-			font-weight: 800;
-			font-size: 52px;
-			color: $ink;
-		}
+	.title-row .title {
+		font-size: 30px;
+		letter-spacing: 5px;
+		color: $ink;
 	}
 
 	.to {
 		margin-top: $s2;
 		font-family: $font-title;
-		font-weight: 800;
-		font-size: 30px;
-		color: $paper;
-		text-shadow: 0px 4px 0px $night;
-		animation: fade-in 0.4s ease-out both;
-		animation-delay: 0.8s;
-	}
-
-	// Paper confetti: column and size come inline per piece, timing from one of seven lanes.
-	.bit {
-		position: absolute;
-		top: 0px;
-
-		&.a { background-image: url("/ui/fx/confetti-a.svg"); }
-		&.b { background-image: url("/ui/fx/confetti-b.svg"); }
-		&.c { background-image: url("/ui/fx/confetti-c.svg"); }
-
-		&.p0 { left: 1.5%; width: 34px; height: 34px; }
-		&.p1 { left: 38.5%; width: 47px; height: 47px; }
-		&.p2 { left: 75.5%; width: 34px; height: 34px; }
-		&.p3 { left: 15.5%; width: 47px; height: 47px; }
-		&.p4 { left: 52.5%; width: 34px; height: 34px; }
-		&.p5 { left: 89.5%; width: 47px; height: 47px; }
-		&.p6 { left: 29.5%; width: 34px; height: 34px; }
-		&.p7 { left: 66.5%; width: 47px; height: 47px; }
-		&.p8 { left: 6.5%; width: 34px; height: 34px; }
-		&.p9 { left: 43.5%; width: 47px; height: 47px; }
-		&.p10 { left: 80.5%; width: 34px; height: 34px; }
-		&.p11 { left: 20.5%; width: 47px; height: 47px; }
-		&.p12 { left: 57.5%; width: 34px; height: 34px; }
-		&.p13 { left: 94.5%; width: 47px; height: 47px; }
-		&.p14 { left: 34.5%; width: 34px; height: 34px; }
-		&.p15 { left: 71.5%; width: 47px; height: 47px; }
-		&.p16 { left: 11.5%; width: 34px; height: 34px; }
-		&.p17 { left: 48.5%; width: 47px; height: 47px; }
-		&.p18 { left: 85.5%; width: 34px; height: 34px; }
-		&.p19 { left: 25.5%; width: 47px; height: 47px; }
-		&.p20 { left: 62.5%; width: 34px; height: 34px; }
-		&.p21 { left: 2.5%; width: 47px; height: 47px; }
-		&.p22 { left: 39.5%; width: 34px; height: 34px; }
-		&.p23 { left: 76.5%; width: 47px; height: 47px; }
-		&.p24 { left: 16.5%; width: 34px; height: 34px; }
-		&.p25 { left: 53.5%; width: 47px; height: 47px; }
-		&.p26 { left: 90.5%; width: 34px; height: 34px; }
-		&.p27 { left: 30.5%; width: 47px; height: 47px; }
-
-		&.k0 { animation: confetti-fall 2.6s linear infinite; animation-delay: 0.0s; }
-		&.k1 { animation: confetti-fall 3.1s linear infinite; animation-delay: 0.35s; }
-		&.k2 { animation: confetti-fall 2.8s linear infinite; animation-delay: 0.7s; }
-		&.k3 { animation: confetti-fall 3.4s linear infinite; animation-delay: 1.05s; }
-		&.k4 { animation: confetti-fall 3.0s linear infinite; animation-delay: 0.2s; }
-		&.k5 { animation: confetti-fall 2.7s linear infinite; animation-delay: 0.55s; }
-		&.k6 { animation: confetti-fall 3.2s linear infinite; animation-delay: 0.9s; }
+		font-weight: 700;
+		font-size: 18px;
+		letter-spacing: $caps-spacing;
+		color: $ink-soft;
 	}
 }
 
@@ -480,20 +403,13 @@ ResultsPanel {
 	to { opacity: 1; }
 }
 
-@keyframes rank-stamp {
-	0% { opacity: 0; transform: scale(2.2) rotate(-25deg); }
-	55% { opacity: 1; transform: scale(0.92) rotate(4deg); }
-	75% { transform: scale(1.06) rotate(-2deg); }
-	100% { opacity: 1; transform: scale(1) rotate(0deg); }
+@keyframes card-rise {
+	from { opacity: 0; transform: translateY(24px); }
+	to { opacity: 1; transform: translateY(0px); }
 }
 
-@keyframes ribbon-in {
-	0% { opacity: 0; transform: scale(0.4); }
-	70% { opacity: 1; transform: scale(1.08); }
-	100% { opacity: 1; transform: scale(1); }
-}
-
-@keyframes confetti-fall {
-	0% { transform: translateY(-90px) rotate(0deg); opacity: 1; }
-	100% { transform: translateY(1300px) rotate(540deg); opacity: 0.6; }
+@keyframes badge-drop {
+	0% { opacity: 0; transform: translateY(-30px) scale(0.85); }
+	70% { opacity: 1; transform: translateY(4px) scale(1.02); }
+	100% { opacity: 1; transform: translateY(0px) scale(1); }
 }

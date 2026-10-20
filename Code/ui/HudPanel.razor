@@ -70,9 +70,7 @@
 						<div class="you glyph g-runner"></div>
 					}
 					<div class="bar">
-						<div class="room">
-							<div class="art" style="background-image: url(@ArenaGenerator.FloorIcon( index ))"></div>
-						</div>
+						<label class="num">@(index + 1)</label>
 					</div>
 				</div>
 			}
@@ -87,7 +85,7 @@
 					{
 						<div class="status @( PlayerStatus.IsDebuff( status ) ? "bad" : "good" )" @key=@status>
 							<div class="art" style="background-image: url(@PlayerStatus.Icon( status ))"></div>
-							<label class="what">@PlayerStatus.Label( status )</label>
+							<label class="what">@PlayerStatus.Label( status ).ToUpperInvariant()</label>
 							<label class="time">@StatusTime( status )</label>
 						</div>
 					}
@@ -131,8 +129,7 @@
 		@if ( ShowGo )
 		{
 			<div class="moment go">
-				<div class="sunburst"></div>
-				<label class="word">Run!</label>
+				<label class="word">RUN!</label>
 			</div>
 		}
 
@@ -140,7 +137,7 @@
 		{
 			<div class="moment out">
 				<div class="glyph g-flame"></div>
-				<label class="word">Out!</label>
+				<label class="word">OUT!</label>
 				<label class="sub">@OutLine</label>
 			</div>
 		}
@@ -149,7 +146,7 @@
 		{
 			<div class="floor-toast f@(_toastFloor)">
 				<div class="badge">
-					<div class="art" style="background-image: url(@ArenaGenerator.FloorIcon( _toastFloor ))"></div>
+					<label class="num">@(_toastFloor + 1)</label>
 				</div>
 				<div class="text">
 					<label class="number">@ToastNumber</label>
@@ -258,7 +255,7 @@
 		&& Round?.State == RoundManager.RoundState.Playing
 		&& _sinceDeath < EliminatedCardTime;
 
-	string OutLine => _deepest <= 0 ? "Straight into the lava" : $"You made it to floor {_deepest + 1}";
+	string OutLine => _deepest <= 0 ? "STRAIGHT INTO THE LAVA" : $"REACHED FLOOR {_deepest + 1}";
 
 	bool IsSpectating => IsEliminated
 		&& Round?.State == RoundManager.RoundState.Playing
@@ -321,8 +318,8 @@
 
 			return round.State switch
 			{
-				RoundManager.RoundState.Waiting when round.IsCountingDown => "Get ready",
-				RoundManager.RoundState.Waiting => "Warm-up",
+				RoundManager.RoundState.Waiting when round.IsCountingDown => "GET READY",
+				RoundManager.RoundState.Waiting => "WARM-UP",
 				RoundManager.RoundState.Playing => "",
 				_ => ""
 			};
@@ -350,7 +347,7 @@
 
 	bool ShowFloorToast => _toastFloor >= 0 && _sinceToast < FloorToastTime && !IsEliminated;
 
-	string ToastNumber => $"Floor {_toastFloor + 1}";
+	string ToastNumber => "FLOOR";
 
 	string ToastRoom => Scene.Get<ArenaGenerator>()?.FloorName( _toastFloor ) ?? "";
 
